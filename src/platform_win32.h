@@ -165,53 +165,14 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SetForegroundWindow(TargetWindow);
 	Sleep(50);
 
-	HGLOBAL hOld = nullptr;
-	if (OpenClipboard(nullptr))
-	{
-		HANDLE hClip = GetClipboardData(CF_UNICODETEXT);
-		if (hClip)
-		{
-			SIZE_T OldSize = GlobalSize(hClip);
-			if (OldSize > 0)
-			{
-				void *pOldData = GlobalLock(hClip);
-				if (pOldData)
-				{
-					hOld = GlobalAlloc(GMEM_MOVEABLE, OldSize);
-					if (hOld)
-					{
-						void *pCopy = GlobalLock(hOld);
-						if (pCopy)
-						{
-							memcpy(pCopy, pOldData, OldSize);
-							GlobalUnlock(hOld);
-						}
-						else
-						{
-							GlobalFree(hOld);
-							hOld = nullptr;
-						}
-					}
-					GlobalUnlock(hClip);
-				}
-			}
-		}
-		CloseClipboard();
-	}
-
 	size_t ByteSize = (Wide.size() + 1) * sizeof(wchar_t);
 	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, ByteSize);
-	if (!hMem)
-	{
-		if (hOld) GlobalFree(hOld);
-		return;
-	}
+	if (!hMem) return;
 
 	wchar_t *pMem = static_cast<wchar_t*>(GlobalLock(hMem));
 	if (!pMem)
 	{
 		GlobalFree(hMem);
-		if (hOld) GlobalFree(hOld);
 		return;
 	}
 	memcpy(pMem, Wide.c_str(), ByteSize);
@@ -220,7 +181,6 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	if (!OpenClipboard(nullptr))
 	{
 		GlobalFree(hMem);
-		if (hOld) GlobalFree(hOld);
 		return;
 	}
 	EmptyClipboard();
@@ -239,18 +199,6 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	Inputs[3].ki.wVk     = VK_CONTROL;
 	Inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 	SendInput(4, Inputs, sizeof(INPUT));
-	Sleep(100);
-
-	if (OpenClipboard(nullptr))
-	{
-		EmptyClipboard();
-		if (hOld) SetClipboardData(CF_UNICODETEXT, hOld);
-		CloseClipboard();
-	}
-	else if (hOld)
-	{
-		GlobalFree(hOld);
-	}
 }
 
 inline
