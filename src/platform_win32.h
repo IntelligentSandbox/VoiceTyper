@@ -165,40 +165,25 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SetForegroundWindow(TargetWindow);
 	Sleep(50);
 
-	size_t ByteSize = (Wide.size() + 1) * sizeof(wchar_t);
-	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, ByteSize);
-	if (!hMem) return;
+	std::vector<INPUT> Inputs;
+	Inputs.reserve(Wide.size() * 2);
 
-	wchar_t *pMem = static_cast<wchar_t*>(GlobalLock(hMem));
-	if (!pMem)
+	for (wchar_t Ch : Wide)
 	{
-		GlobalFree(hMem);
-		return;
-	}
-	memcpy(pMem, Wide.c_str(), ByteSize);
-	GlobalUnlock(hMem);
+		INPUT Down = {};
+		Down.type           = INPUT_KEYBOARD;
+		Down.ki.wScan       = Ch;
+		Down.ki.dwFlags     = KEYEVENTF_UNICODE;
+		Inputs.push_back(Down);
 
-	if (!OpenClipboard(nullptr))
-	{
-		GlobalFree(hMem);
-		return;
+		INPUT Up = {};
+		Up.type           = INPUT_KEYBOARD;
+		Up.ki.wScan       = Ch;
+		Up.ki.dwFlags     = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+		Inputs.push_back(Up);
 	}
-	EmptyClipboard();
-	SetClipboardData(CF_UNICODETEXT, hMem);
-	CloseClipboard();
 
-	INPUT Inputs[4] = {};
-	Inputs[0].type       = INPUT_KEYBOARD;
-	Inputs[0].ki.wVk     = VK_CONTROL;
-	Inputs[1].type       = INPUT_KEYBOARD;
-	Inputs[1].ki.wVk     = 'V';
-	Inputs[2].type       = INPUT_KEYBOARD;
-	Inputs[2].ki.wVk     = 'V';
-	Inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-	Inputs[3].type       = INPUT_KEYBOARD;
-	Inputs[3].ki.wVk     = VK_CONTROL;
-	Inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-	SendInput(4, Inputs, sizeof(INPUT));
+	SendInput((UINT)Inputs.size(), Inputs.data(), sizeof(INPUT));
 }
 
 inline

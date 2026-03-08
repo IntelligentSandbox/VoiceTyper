@@ -3,7 +3,8 @@
     "allow": [
       "Bash(dir E:\\\\repos\\\\voice-typer:*)",
       "Bash(cmd:*)",
-      "Bash(cmake:*)"
+      "Bash(cmake:*)",
+      "Bash(E:/repos/voice-typer/build.bat:*)"
     ]
   }
 }
