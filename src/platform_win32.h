@@ -165,20 +165,6 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SetForegroundWindow(TargetWindow);
 	Sleep(50);
 
-	DWORD TargetThreadId = GetWindowThreadProcessId(TargetWindow, nullptr);
-	DWORD OurThreadId    = GetCurrentThreadId();
-
-	HWND FocusedChild = TargetWindow;
-	if (TargetThreadId != OurThreadId)
-	{
-		if (AttachThreadInput(OurThreadId, TargetThreadId, TRUE))
-		{
-			HWND hFocus = GetFocus();
-			if (hFocus) FocusedChild = hFocus;
-			AttachThreadInput(OurThreadId, TargetThreadId, FALSE);
-		}
-	}
-
 	HGLOBAL hOld = nullptr;
 	if (OpenClipboard(nullptr))
 	{
@@ -241,16 +227,30 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SetClipboardData(CF_UNICODETEXT, hMem);
 	CloseClipboard();
 
-	SendMessage(FocusedChild, WM_PASTE, 0, 0);
+	INPUT Inputs[4] = {};
+	Inputs[0].type       = INPUT_KEYBOARD;
+	Inputs[0].ki.wVk     = VK_CONTROL;
+	Inputs[1].type       = INPUT_KEYBOARD;
+	Inputs[1].ki.wVk     = 'V';
+	Inputs[2].type       = INPUT_KEYBOARD;
+	Inputs[2].ki.wVk     = 'V';
+	Inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+	Inputs[3].type       = INPUT_KEYBOARD;
+	Inputs[3].ki.wVk     = VK_CONTROL;
+	Inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+	SendInput(4, Inputs, sizeof(INPUT));
+	Sleep(100);
 
-	if (!OpenClipboard(nullptr))
+	if (OpenClipboard(nullptr))
 	{
-		if (hOld) GlobalFree(hOld);
-		return;
+		EmptyClipboard();
+		if (hOld) SetClipboardData(CF_UNICODETEXT, hOld);
+		CloseClipboard();
 	}
-	EmptyClipboard();
-	if (hOld) SetClipboardData(CF_UNICODETEXT, hOld);
-	CloseClipboard();
+	else if (hOld)
+	{
+		GlobalFree(hOld);
+	}
 }
 
 inline

@@ -23,7 +23,8 @@ The application's primary responsibility is facilitating user control of:
 Always ensure changes pass **both** release and debug builds before considering work complete.
 Build the project in release mode `build.bat` and in debug mode `build.bat debug`.
 You are ALWAYS running from the project root. NEVER use cd before build commands.
-After completing each task, commit changes with: `git add -A && git commit -m "<brief description of what was done>"`
+After completing each task, commit with: `git add -A && git commit -m "<title>" -m "<body>"`
+Use multiple -m flags for multiline messages. Never use heredocs or command substitution in git commands.
 
 ## Coding Guidelines
 
