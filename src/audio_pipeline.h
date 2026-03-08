@@ -252,14 +252,16 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 
 	if (!Transcription.empty())
 	{
+		HWND TargetWindow = GetForegroundWindow();
+		if (TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
 		#ifdef DEBUG
 			printf("[transcription] %s\n", Transcription.c_str());
 		#else
-			if (!AppState->FocusedWindow)
+			if (!TargetWindow)
 				printf("[transcription] %s\n", Transcription.c_str());
 		#endif
 		#ifdef _WIN32
-			inject_text_to_window(AppState->FocusedWindow, Transcription.c_str());
+			inject_text_to_window(TargetWindow, Transcription.c_str());
 		#endif
 	}
 }
@@ -355,7 +357,6 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		[AppState]()
 		{
 			AppState->IsRecording = false;
-			AppState->FocusedWindow = nullptr;
 			AppState->RecordButton->setEnabled(true);
 			AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREEN);
 			AppState->RecordButton->setText(record_button_idle_label(AppState));

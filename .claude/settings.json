@@ -1,0 +1,46 @@
+{
+	"$schema": "https://json.schemastore.org/claude-code-settings.json",
+	"permissions": {
+		"allow": [
+			"Read(**)",
+			"Write(**)",
+			"Edit(**)",
+			"Bash(build.bat)",
+			"Bash(build.bat debug)",
+			"Bash(./build.bat)",
+			"Bash(./build.bat debug)",
+			"Bash(ls *)",
+			"Bash(ls)",
+			"Bash(cp *)",
+			"Bash(mv *)",
+			"Bash(mkdir *)",
+			"Bash(cat *)",
+			"Bash(git add *)",
+			"Bash(git commit *)",
+			"Bash(git status)",
+			"Bash(git diff *)",
+			"Bash(git log *)"
+		],
+		"deny": [
+			"Bash(curl *)",
+			"Bash(wget *)",
+			"Bash(ssh *)",
+			"Bash(scp *)",
+			"Bash(ftp *)",
+			"Bash(rm *)",
+			"Bash(del *)",
+			"Bash(rd *)",
+			"Bash(rmdir *)",
+			"Bash(reg *)",
+			"Bash(regedit *)",
+			"Bash(net *)",
+			"Bash(netsh *)",
+			"Bash(powershell *)",
+			"Bash(pwsh *)",
+			"Bash(wmic *)",
+			"Bash(taskkill *)",
+			"Bash(sc *)",
+			"Bash(bcdedit *)"
+		]
+	}
+}

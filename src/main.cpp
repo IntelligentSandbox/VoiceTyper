@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
 	AppState.IsRecording   = false;
 	AppState.IsStreaming   = false;
 	AppState.CaptureRunning = false;
-	AppState.FocusedWindow = nullptr;
+	AppState.OwnWindow = nullptr;
 	AppState.SettingsButton = nullptr;
 	AppState.IsSettingsDialogOpen = false;
 	AppState.PlayRecordSound = false;
@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
 	init_ui(&AppState);
 
 	QtMainWindow.show();
+	AppState.OwnWindow = (HWND)QtMainWindow.winId();
 	int exitCode = QtApp.exec();
 
 	stop_hotkey_listener();

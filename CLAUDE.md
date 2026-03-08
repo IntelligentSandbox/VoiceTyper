@@ -2,8 +2,9 @@
 
 ## Environment
 
-You are running on **Windows**. Always use **CMD prompt** commands (not bash, PowerShell, or Linux shell commands).
-Examples: use `dir` not `ls`, use `copy` not `cp`, use backslashes for paths, use `set` not `export`.
+You are running on **Windows**, but the shell is Unix-like (Git Bash / MSYS2) — not cmd.exe.
+Use Unix commands and forward slashes for paths: `ls`, `cp`, `mv`, `E:/repos/project`.
+You are ALWAYS running from the project root. NEVER use cd before build commands.
 
 ## Project Overview
 
@@ -15,12 +16,14 @@ The application's primary responsibility is facilitating user control of:
 
 	audio input -> Whisper.cpp model -> insert text into focused text input field (if available)
 
-## Build Commands
-
 	build.bat          - release build
 	build.bat debug    - debug build
 
+## Workflow
 Always ensure changes pass **both** release and debug builds before considering work complete.
+Build the project in release mode `build.bat` and in debug mode `build.bat debug`.
+You are ALWAYS running from the project root. NEVER use cd before build commands.
+After completing each task, commit changes with: `git add -A && git commit -m "<brief description of what was done>"`
 
 ## Coding Guidelines
 

@@ -114,8 +114,8 @@ struct GlobalState
 	// Inference threading
 	int WhisperThreadCount;
 
-	// Text injection target: captured when a pipeline starts, null if our own window was focused
-	HWND FocusedWindow;
+	// Our own main window handle — used to exclude self when doing just-in-time target lookup.
+	HWND OwnWindow;
 
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;

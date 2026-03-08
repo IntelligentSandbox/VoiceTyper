@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir E:\\\\repos\\\\voice-typer:*)",
+      "Bash(cmd:*)",
+      "Bash(cmake:*)"
+    ]
+  }
+}

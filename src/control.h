@@ -111,15 +111,10 @@ toggle_recording(GlobalState *AppState)
 
 	if (AppState->IsRecording)
 	{
-		HWND Foreground = GetForegroundWindow();
-		HWND OwnWindow  = (HWND)AppState->QtMainWindow->winId();
-		AppState->FocusedWindow = (Foreground != OwnWindow) ? Foreground : nullptr;
-
 		bool Started = start_record_pipeline(AppState);
 		if (!Started)
 		{
 			AppState->IsRecording = false;
-			AppState->FocusedWindow = nullptr;
 			#ifdef DEBUG
 				printf("[control] toggle_recording: failed to start record pipeline\n");
 			#endif
@@ -172,15 +167,10 @@ toggle_streaming(GlobalState *AppState)
 
 	if (AppState->IsStreaming)
 	{
-		HWND Foreground = GetForegroundWindow();
-		HWND OwnWindow  = (HWND)AppState->QtMainWindow->winId();
-		AppState->FocusedWindow = (Foreground != OwnWindow) ? Foreground : nullptr;
-
 		bool Started = start_streaming_pipeline(AppState);
 		if (!Started)
 		{
 			AppState->IsStreaming = false;
-			AppState->FocusedWindow = nullptr;
 			#ifdef DEBUG
 				printf("[control] toggle_streaming: failed to start streaming pipeline\n");
 			#endif
@@ -194,7 +184,6 @@ toggle_streaming(GlobalState *AppState)
 	else
 	{
 		stop_streaming_pipeline(AppState);
-		AppState->FocusedWindow = nullptr;
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
 		AppState->StreamButton->setText(stream_button_idle_label(AppState));
 		AppState->RecordButton->setEnabled(true);

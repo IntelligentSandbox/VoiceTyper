@@ -162,62 +162,6 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	std::wstring Wide(WideLen - 1, L'\0');
 	MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, &Wide[0], WideLen);
 
-	if (!OpenClipboard(nullptr)) return;
-
-	HGLOBAL hOld = nullptr;
-	HANDLE hClip = GetClipboardData(CF_UNICODETEXT);
-	if (hClip)
-	{
-		SIZE_T OldSize = GlobalSize(hClip);
-		if (OldSize > 0)
-		{
-			void *pOldData = GlobalLock(hClip);
-			if (pOldData)
-			{
-				hOld = GlobalAlloc(GMEM_MOVEABLE, OldSize);
-				if (hOld)
-				{
-					void *pCopy = GlobalLock(hOld);
-					if (pCopy)
-					{
-						memcpy(pCopy, pOldData, OldSize);
-						GlobalUnlock(hOld);
-					}
-					else
-					{
-						GlobalFree(hOld);
-						hOld = nullptr;
-					}
-				}
-				GlobalUnlock(hClip);
-			}
-		}
-	}
-
-	size_t ByteSize = (Wide.size() + 1) * sizeof(wchar_t);
-	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, ByteSize);
-	if (!hMem)
-	{
-		CloseClipboard();
-		if (hOld) GlobalFree(hOld);
-		return;
-	}
-
-	wchar_t *pMem = static_cast<wchar_t*>(GlobalLock(hMem));
-	if (!pMem)
-	{
-		GlobalFree(hMem);
-		CloseClipboard();
-		if (hOld) GlobalFree(hOld);
-		return;
-	}
-	memcpy(pMem, Wide.c_str(), ByteSize);
-	GlobalUnlock(hMem);
-
-	EmptyClipboard();
-	SetClipboardData(CF_UNICODETEXT, hMem);
-	CloseClipboard();
-
 	SetForegroundWindow(TargetWindow);
 	Sleep(50);
 
@@ -234,6 +178,68 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 			AttachThreadInput(OurThreadId, TargetThreadId, FALSE);
 		}
 	}
+
+	HGLOBAL hOld = nullptr;
+	if (OpenClipboard(nullptr))
+	{
+		HANDLE hClip = GetClipboardData(CF_UNICODETEXT);
+		if (hClip)
+		{
+			SIZE_T OldSize = GlobalSize(hClip);
+			if (OldSize > 0)
+			{
+				void *pOldData = GlobalLock(hClip);
+				if (pOldData)
+				{
+					hOld = GlobalAlloc(GMEM_MOVEABLE, OldSize);
+					if (hOld)
+					{
+						void *pCopy = GlobalLock(hOld);
+						if (pCopy)
+						{
+							memcpy(pCopy, pOldData, OldSize);
+							GlobalUnlock(hOld);
+						}
+						else
+						{
+							GlobalFree(hOld);
+							hOld = nullptr;
+						}
+					}
+					GlobalUnlock(hClip);
+				}
+			}
+		}
+		CloseClipboard();
+	}
+
+	size_t ByteSize = (Wide.size() + 1) * sizeof(wchar_t);
+	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, ByteSize);
+	if (!hMem)
+	{
+		if (hOld) GlobalFree(hOld);
+		return;
+	}
+
+	wchar_t *pMem = static_cast<wchar_t*>(GlobalLock(hMem));
+	if (!pMem)
+	{
+		GlobalFree(hMem);
+		if (hOld) GlobalFree(hOld);
+		return;
+	}
+	memcpy(pMem, Wide.c_str(), ByteSize);
+	GlobalUnlock(hMem);
+
+	if (!OpenClipboard(nullptr))
+	{
+		GlobalFree(hMem);
+		if (hOld) GlobalFree(hOld);
+		return;
+	}
+	EmptyClipboard();
+	SetClipboardData(CF_UNICODETEXT, hMem);
+	CloseClipboard();
 
 	SendMessage(FocusedChild, WM_PASTE, 0, 0);
 
