@@ -329,15 +329,28 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
 	run_wavein_capture(AppState, DeviceIndex);
 
+	bool Cancelled = AppState->CancelRequested.load();
+	AppState->CancelRequested.store(false);
+
 	// Capture has stopped — drain whatever is in the buffer and transcribe once.
 	std::vector<float> Chunk;
 	{
 		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-		Chunk = std::move(AppState->AudioAccumBuffer);
-		AppState->AudioAccumBuffer.clear();
+		if (Cancelled)
+		{
+			AppState->AudioAccumBuffer.clear();
+			#ifdef DEBUG
+				printf("[audio_pipeline] Record: cancelled, discarding audio\n");
+			#endif
+		}
+		else
+		{
+			Chunk = std::move(AppState->AudioAccumBuffer);
+			AppState->AudioAccumBuffer.clear();
+		}
 	}
 
-	if (!Chunk.empty())
+	if (!Cancelled && !Chunk.empty())
 	{
 		whisper_full_params Params = make_whisper_params(AppState);
 		Params.single_segment      = false;
@@ -347,7 +360,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		#endif
 		run_whisper_on_chunk(AppState, Params, Chunk);
 	}
-	else
+	else if (!Cancelled)
 	{
 		#ifdef DEBUG
 			printf("[audio_pipeline] Record: no audio captured\n");
@@ -363,6 +376,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 			AppState->RecordButton->setEnabled(true);
 			AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREEN);
 			AppState->RecordButton->setText(record_button_idle_label(AppState));
+			AppState->CancelRecordButton->setEnabled(false);
 			AppState->StreamButton->setEnabled(true);
 			AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
 		},

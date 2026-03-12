@@ -77,6 +77,7 @@ struct GlobalState
 	QApplication *QtApp;
 	QWidget *QtMainWindow;
 	QPushButton *RecordButton;
+	QPushButton *CancelRecordButton;
 	QPushButton *StreamButton;
 	QPushButton *LoadModelButton;
 	QPushButton *SettingsButton;
@@ -108,6 +109,7 @@ struct GlobalState
 
 	// Audio capture pipeline
 	std::atomic<bool> CaptureRunning;
+	std::atomic<bool> CancelRequested;
 	std::thread CaptureThread;
 	std::mutex AudioBufferMutex;
 	std::vector<float> AudioAccumBuffer;

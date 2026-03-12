@@ -340,6 +340,14 @@ init_main_window(GlobalState *AppState)
 	GridLayout->addWidget(RecordButton, Row++, 0);
 	AppState->RecordButton = RecordButton;
 
+	// Cancel Record Button
+	QPushButton *CancelRecordButton = new QPushButton(MainWindow);
+	CancelRecordButton->setText("Cancel");
+	CancelRecordButton->setMinimumHeight(40);
+	CancelRecordButton->setEnabled(false);
+	GridLayout->addWidget(CancelRecordButton, Row++, 0);
+	AppState->CancelRecordButton = CancelRecordButton;
+
 	// Stream Button
 	QPushButton *StreamButton = new QPushButton(MainWindow);
 	StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
@@ -418,6 +426,11 @@ init_main_window(GlobalState *AppState)
 	QObject::connect(RecordButton, &QPushButton::clicked, [AppState]()
 	{
 		toggle_recording(AppState);
+	});
+
+	QObject::connect(CancelRecordButton, &QPushButton::clicked, [AppState]()
+	{
+		cancel_recording(AppState);
 	});
 
 	QObject::connect(StreamButton, &QPushButton::clicked, [AppState]()

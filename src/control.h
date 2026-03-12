@@ -124,23 +124,43 @@ toggle_recording(GlobalState *AppState)
 
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_RED);
 		AppState->RecordButton->setText(QString("Stop (%1)").arg(AppState->RecordHotkey.to_label()));
+		AppState->CancelRecordButton->setEnabled(true);
 		AppState->StreamButton->setEnabled(false);
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREY);
 	}
 	else
 	{
-		// Non-blocking: signal capture to stop. The pipeline thread will
-		// finish transcription in the background and restore both buttons.
 		if (AppState->PlayRecordSound) play_stop_recording_sound();
 		signal_record_stop(AppState);
 		AppState->RecordButton->setEnabled(false);
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
 		AppState->RecordButton->setText("Transcribing...");
+		AppState->CancelRecordButton->setEnabled(false);
 	}
 
 	#ifdef DEBUG
 		qDebug() << "Recording toggled to:" << AppState->IsRecording;
 	#endif
+}
+
+inline
+void
+cancel_recording(GlobalState *AppState)
+{
+	if (!AppState->IsRecording) return;
+
+	#ifdef DEBUG
+		printf("[control] cancel_recording: cancelling\n");
+	#endif
+
+	AppState->CancelRequested.store(true);
+	signal_record_stop(AppState);
+
+	AppState->IsRecording = false;
+	AppState->RecordButton->setEnabled(false);
+	AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
+	AppState->RecordButton->setText("Cancelled");
+	AppState->CancelRecordButton->setEnabled(false);
 }
 
 inline
