@@ -187,22 +187,6 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 }
 
 inline
-bool
-is_console_window(HWND Window)
-{
-	if (!Window) return false;
-
-	wchar_t ClassName[256] = {};
-	int Len = GetClassNameW(Window, ClassName, 256);
-	if (Len <= 0) return false;
-
-	if (wcscmp(ClassName, L"ConsoleWindowClass") == 0) return true;
-	if (wcscmp(ClassName, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0) return true;
-
-	return false;
-}
-
-inline
 void
 paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
 {
@@ -230,50 +214,30 @@ paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SetForegroundWindow(TargetWindow);
 	Sleep(50);
 
-	bool IsConsole = is_console_window(TargetWindow);
+	INPUT Inputs[6] = {};
 
-	std::vector<INPUT> Inputs;
+	Inputs[0].type = INPUT_KEYBOARD;
+	Inputs[0].ki.wVk = VK_CONTROL;
 
-	INPUT CtrlDown = {};
-	CtrlDown.type = INPUT_KEYBOARD;
-	CtrlDown.ki.wVk = VK_CONTROL;
-	Inputs.push_back(CtrlDown);
+	Inputs[1].type = INPUT_KEYBOARD;
+	Inputs[1].ki.wVk = VK_SHIFT;
 
-	if (IsConsole)
-	{
-		INPUT ShiftDown = {};
-		ShiftDown.type = INPUT_KEYBOARD;
-		ShiftDown.ki.wVk = VK_SHIFT;
-		Inputs.push_back(ShiftDown);
-	}
+	Inputs[2].type = INPUT_KEYBOARD;
+	Inputs[2].ki.wVk = 'V';
 
-	INPUT VDown = {};
-	VDown.type = INPUT_KEYBOARD;
-	VDown.ki.wVk = 'V';
-	Inputs.push_back(VDown);
+	Inputs[3].type = INPUT_KEYBOARD;
+	Inputs[3].ki.wVk = 'V';
+	Inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 
-	INPUT VUp = {};
-	VUp.type = INPUT_KEYBOARD;
-	VUp.ki.wVk = 'V';
-	VUp.ki.dwFlags = KEYEVENTF_KEYUP;
-	Inputs.push_back(VUp);
+	Inputs[4].type = INPUT_KEYBOARD;
+	Inputs[4].ki.wVk = VK_SHIFT;
+	Inputs[4].ki.dwFlags = KEYEVENTF_KEYUP;
 
-	if (IsConsole)
-	{
-		INPUT ShiftUp = {};
-		ShiftUp.type = INPUT_KEYBOARD;
-		ShiftUp.ki.wVk = VK_SHIFT;
-		ShiftUp.ki.dwFlags = KEYEVENTF_KEYUP;
-		Inputs.push_back(ShiftUp);
-	}
+	Inputs[5].type = INPUT_KEYBOARD;
+	Inputs[5].ki.wVk = VK_CONTROL;
+	Inputs[5].ki.dwFlags = KEYEVENTF_KEYUP;
 
-	INPUT CtrlUp = {};
-	CtrlUp.type = INPUT_KEYBOARD;
-	CtrlUp.ki.wVk = VK_CONTROL;
-	CtrlUp.ki.dwFlags = KEYEVENTF_KEYUP;
-	Inputs.push_back(CtrlUp);
-
-	SendInput((UINT)Inputs.size(), Inputs.data(), sizeof(INPUT));
+	SendInput(6, Inputs, sizeof(INPUT));
 }
 
 inline
