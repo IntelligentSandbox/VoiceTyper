@@ -91,6 +91,7 @@ struct GlobalState
 	bool IsStreaming;
 	bool IsSettingsDialogOpen;
 	bool PlayRecordSound;
+	bool UseCharByCharInjection;
 
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;

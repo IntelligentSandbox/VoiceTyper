@@ -259,6 +259,12 @@ query_hotkey_settings(GlobalState *AppState)
 		AppState->PlayRecordSound = SoundEnabled;
 	}
 
+	bool CharByChar = false;
+	if (load_bool_setting("use_char_by_char_injection", &CharByChar))
+	{
+		AppState->UseCharByCharInjection = CharByChar;
+	}
+
 	#ifdef DEBUG
 		printf("[system] Record hotkey:     %s\n", AppState->RecordHotkey.to_label().toUtf8().constData());
 		printf("[system] Stream hotkey:     %s\n", AppState->StreamHotkey.to_label().toUtf8().constData());

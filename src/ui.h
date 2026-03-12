@@ -122,14 +122,16 @@ struct SettingsWindowState
 	// Temporary hotkey configs (committed on Save)
 	HotkeyConfig TempHotkeys[3];
 
-	// Temporary sound setting (committed on Save)
+	// Temporary settings (committed on Save)
 	bool TempPlayRecordSound;
+	bool TempUseCharByCharInjection;
 
 	// Pointers back into the dialog so callbacks can refresh UI
 	QLabel     *CurrentLabel;
 	QLineEdit  *CaptureEdit;
 	QPushButton *ActionButtons[3];
 	QCheckBox  *SoundCheckBox;
+	QCheckBox  *CharByCharCheckBox;
 };
 
 inline
@@ -173,6 +175,10 @@ open_settings_window(GlobalState *AppState)
 	QCheckBox *SoundCheckBox = new QCheckBox("Play sound when starting/stopping recording", Dialog);
 	Layout->addWidget(SoundCheckBox, Row++, 0, 1, 3);
 
+	// Text injection method checkbox
+	QCheckBox *CharByCharCheckBox = new QCheckBox("Use character-by-character text injection (instead of paste)", Dialog);
+	Layout->addWidget(CharByCharCheckBox, Row++, 0, 1, 3);
+
 	// Heading
 	QLabel *Heading = new QLabel("Keyboard Shortcuts", Dialog);
 	QFont HeadingFont = Heading->font();
@@ -204,15 +210,18 @@ open_settings_window(GlobalState *AppState)
 	S.ActionButtons[0] = RecordBtn;
 	S.ActionButtons[1] = StreamBtn;
 	S.ActionButtons[2] = LoadModelBtn;
-	S.SoundCheckBox    = SoundCheckBox;
+	S.SoundCheckBox      = SoundCheckBox;
+	S.CharByCharCheckBox = CharByCharCheckBox;
 
 	// Copy current hotkeys to temp storage
 	S.TempHotkeys[0] = AppState->RecordHotkey;
 	S.TempHotkeys[1] = AppState->StreamHotkey;
 	S.TempHotkeys[2] = AppState->LoadModelHotkey;
-	S.TempPlayRecordSound = AppState->PlayRecordSound;
+	S.TempPlayRecordSound         = AppState->PlayRecordSound;
+	S.TempUseCharByCharInjection  = AppState->UseCharByCharInjection;
 
 	SoundCheckBox->setChecked(S.TempPlayRecordSound);
+	CharByCharCheckBox->setChecked(S.TempUseCharByCharInjection);
 
 	// Hotkey capture box — filter writes into S.Capture
 	QLineEdit *CaptureEdit = nullptr;
@@ -294,6 +303,9 @@ open_settings_window(GlobalState *AppState)
 
 		AppState->PlayRecordSound = S.SoundCheckBox->isChecked();
 		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
+
+		AppState->UseCharByCharInjection = S.CharByCharCheckBox->isChecked();
+		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
 
 		AppState->RecordButton->setText(record_button_idle_label(AppState));
 		AppState->StreamButton->setText(stream_button_idle_label(AppState));

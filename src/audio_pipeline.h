@@ -261,7 +261,10 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 				printf("[transcription] %s\n", Transcription.c_str());
 		#endif
 		#ifdef _WIN32
-			inject_text_to_window(TargetWindow, Transcription.c_str());
+			if (AppState->UseCharByCharInjection)
+				inject_text_to_window(TargetWindow, Transcription.c_str());
+			else
+				paste_text_to_window(TargetWindow, Transcription.c_str());
 		#endif
 	}
 }

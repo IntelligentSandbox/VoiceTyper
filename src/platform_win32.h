@@ -187,6 +187,96 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 }
 
 inline
+bool
+is_console_window(HWND Window)
+{
+	if (!Window) return false;
+
+	wchar_t ClassName[256] = {};
+	int Len = GetClassNameW(Window, ClassName, 256);
+	if (Len <= 0) return false;
+
+	if (wcscmp(ClassName, L"ConsoleWindowClass") == 0) return true;
+	if (wcscmp(ClassName, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0) return true;
+
+	return false;
+}
+
+inline
+void
+paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
+{
+	if (!TargetWindow || !Utf8Text || Utf8Text[0] == '\0') return;
+
+	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
+	if (WideLen <= 1) return;
+
+	if (!OpenClipboard(nullptr)) return;
+	EmptyClipboard();
+
+	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, WideLen * sizeof(wchar_t));
+	if (!hMem)
+	{
+		CloseClipboard();
+		return;
+	}
+
+	wchar_t *pMem = (wchar_t *)GlobalLock(hMem);
+	MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, pMem, WideLen);
+	GlobalUnlock(hMem);
+	SetClipboardData(CF_UNICODETEXT, hMem);
+	CloseClipboard();
+
+	SetForegroundWindow(TargetWindow);
+	Sleep(50);
+
+	bool IsConsole = is_console_window(TargetWindow);
+
+	std::vector<INPUT> Inputs;
+
+	INPUT CtrlDown = {};
+	CtrlDown.type = INPUT_KEYBOARD;
+	CtrlDown.ki.wVk = VK_CONTROL;
+	Inputs.push_back(CtrlDown);
+
+	if (IsConsole)
+	{
+		INPUT ShiftDown = {};
+		ShiftDown.type = INPUT_KEYBOARD;
+		ShiftDown.ki.wVk = VK_SHIFT;
+		Inputs.push_back(ShiftDown);
+	}
+
+	INPUT VDown = {};
+	VDown.type = INPUT_KEYBOARD;
+	VDown.ki.wVk = 'V';
+	Inputs.push_back(VDown);
+
+	INPUT VUp = {};
+	VUp.type = INPUT_KEYBOARD;
+	VUp.ki.wVk = 'V';
+	VUp.ki.dwFlags = KEYEVENTF_KEYUP;
+	Inputs.push_back(VUp);
+
+	if (IsConsole)
+	{
+		INPUT ShiftUp = {};
+		ShiftUp.type = INPUT_KEYBOARD;
+		ShiftUp.ki.wVk = VK_SHIFT;
+		ShiftUp.ki.dwFlags = KEYEVENTF_KEYUP;
+		Inputs.push_back(ShiftUp);
+	}
+
+	INPUT CtrlUp = {};
+	CtrlUp.type = INPUT_KEYBOARD;
+	CtrlUp.ki.wVk = VK_CONTROL;
+	CtrlUp.ki.dwFlags = KEYEVENTF_KEYUP;
+	Inputs.push_back(CtrlUp);
+
+	SendInput((UINT)Inputs.size(), Inputs.data(), sizeof(INPUT));
+}
+
+inline
 int
 query_logical_processor_count()
 {
