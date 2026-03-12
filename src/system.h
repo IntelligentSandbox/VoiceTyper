@@ -108,9 +108,10 @@ inline
 void
 hotkey_thread_func(GlobalState *AppState)
 {
-	bool RecordKeyWasDown    = false;
-	bool StreamKeyWasDown    = false;
-	bool LoadModelKeyWasDown = false;
+	bool RecordKeyWasDown       = false;
+	bool CancelRecordKeyWasDown = false;
+	bool StreamKeyWasDown       = false;
+	bool LoadModelKeyWasDown    = false;
 
 	while (HotkeyThreadRunning)
 	{
@@ -122,15 +123,24 @@ hotkey_thread_func(GlobalState *AppState)
 				continue;
 			}
 
-			bool RecordKeyIsDown    = is_hotkey_down(AppState->RecordHotkey);
-			bool StreamKeyIsDown    = is_hotkey_down(AppState->StreamHotkey);
-			bool LoadModelKeyIsDown = is_hotkey_down(AppState->LoadModelHotkey);
+			bool RecordKeyIsDown       = is_hotkey_down(AppState->RecordHotkey);
+			bool CancelRecordKeyIsDown = is_hotkey_down(AppState->CancelRecordHotkey);
+			bool StreamKeyIsDown       = is_hotkey_down(AppState->StreamHotkey);
+			bool LoadModelKeyIsDown    = is_hotkey_down(AppState->LoadModelHotkey);
 
 			if (RecordKeyIsDown && !RecordKeyWasDown)
 			{
 				QMetaObject::invokeMethod(
 					AppState->QtApp,
 					[AppState]() { toggle_recording(AppState); },
+					Qt::QueuedConnection);
+			}
+
+			if (CancelRecordKeyIsDown && !CancelRecordKeyWasDown)
+			{
+				QMetaObject::invokeMethod(
+					AppState->QtApp,
+					[AppState]() { cancel_recording(AppState); },
 					Qt::QueuedConnection);
 			}
 
@@ -150,9 +160,10 @@ hotkey_thread_func(GlobalState *AppState)
 					Qt::QueuedConnection);
 			}
 
-			RecordKeyWasDown    = RecordKeyIsDown;
-			StreamKeyWasDown    = StreamKeyIsDown;
-			LoadModelKeyWasDown = LoadModelKeyIsDown;
+			RecordKeyWasDown       = RecordKeyIsDown;
+			CancelRecordKeyWasDown = CancelRecordKeyIsDown;
+			StreamKeyWasDown       = StreamKeyIsDown;
+			LoadModelKeyWasDown    = LoadModelKeyIsDown;
 			Sleep(1);
 		#endif
 	}
@@ -229,9 +240,10 @@ inline
 void
 query_hotkey_settings(GlobalState *AppState)
 {
-	AppState->RecordHotkey    = default_record_hotkey();
-	AppState->StreamHotkey    = default_stream_hotkey();
-	AppState->LoadModelHotkey = default_load_model_hotkey();
+	AppState->RecordHotkey       = default_record_hotkey();
+	AppState->CancelRecordHotkey = default_cancel_record_hotkey();
+	AppState->StreamHotkey       = default_stream_hotkey();
+	AppState->LoadModelHotkey    = default_load_model_hotkey();
 
 	int Modifiers = 0, Key = 0;
 
@@ -239,6 +251,12 @@ query_hotkey_settings(GlobalState *AppState)
 	{
 		AppState->RecordHotkey.Modifiers = Qt::KeyboardModifiers(Modifiers);
 		AppState->RecordHotkey.Key       = Qt::Key(Key);
+	}
+
+	if (load_hotkey_setting("cancel_record_hotkey", &Modifiers, &Key))
+	{
+		AppState->CancelRecordHotkey.Modifiers = Qt::KeyboardModifiers(Modifiers);
+		AppState->CancelRecordHotkey.Key       = Qt::Key(Key);
 	}
 
 	if (load_hotkey_setting("stream_hotkey", &Modifiers, &Key))

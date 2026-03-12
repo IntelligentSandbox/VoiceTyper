@@ -50,6 +50,14 @@ inline HotkeyConfig default_record_hotkey()
 	return H;
 }
 
+inline HotkeyConfig default_cancel_record_hotkey()
+{
+	HotkeyConfig H;
+	H.Modifiers = Qt::AltModifier;
+	H.Key       = Qt::Key_F3;
+	return H;
+}
+
 inline HotkeyConfig default_stream_hotkey()
 {
 	HotkeyConfig H;
@@ -84,6 +92,7 @@ struct GlobalState
 
 	// Hotkeys
 	HotkeyConfig RecordHotkey;
+	HotkeyConfig CancelRecordHotkey;
 	HotkeyConfig StreamHotkey;
 	HotkeyConfig LoadModelHotkey;
 
@@ -131,6 +140,11 @@ struct GlobalState
 inline QString record_button_idle_label(GlobalState *AppState)
 {
 	return QString("Record (%1)").arg(AppState->RecordHotkey.to_label());
+}
+
+inline QString cancel_record_button_idle_label(GlobalState *AppState)
+{
+	return QString("Cancel (%1)").arg(AppState->CancelRecordHotkey.to_label());
 }
 
 inline QString stream_button_idle_label(GlobalState *AppState)
