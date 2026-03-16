@@ -28,7 +28,7 @@ Tasks are worked top to bottom. Each task is committed individually.
       loaded (`WhisperState.IsLoaded`), unload it and reload it so it picks up the new device setting.
       This handles the case where a user switches from CPU to GPU (or vice versa) while a model is loaded.
 
-- [ ] Persist and restore inference device setting
+- [x] Persist and restore inference device setting
       Using the existing settings infrastructure in `platform_win32.h`, save and load the selected inference
       device preference (store the device name string, not the index, since indices may change across restarts).
       On startup, match the saved device name against discovered devices and restore the selection.
