@@ -1,7 +1,10 @@
 #pragma once
 
+#include "state.h"
+
 #include <vector>
 #include <string>
+#include <cstring>
 
 #include <windows.h>
 #include <mmsystem.h>
@@ -12,30 +15,12 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "propsys.lib")
 
-#include "qt.h"
-
-#define MAX_AUDIO_DEVICE_NAME_LENGTH 512
-
-struct AudioInputDeviceInfo
-{
-	int Index;
-	std::string Id;
-	std::string Name;
-	bool IsDefault;
-};
-
 struct AudioCaptureDevice
 {
 	HWAVEIN Handle;
 	int DeviceIndex;
 	bool IsCapturing;
 };
-
-#define AUDIO_CAPTURE_SAMPLE_RATE       16000
-#define AUDIO_CAPTURE_CHANNELS          1
-#define AUDIO_CAPTURE_BITS_PER_SAMPLE   16
-#define AUDIO_CAPTURE_BUFFER_MS         100
-#define AUDIO_CAPTURE_BUFFER_COUNT      8
 
 inline
 std::vector<AudioInputDeviceInfo>
@@ -418,4 +403,144 @@ void
 play_cancel_recording_sound()
 {
     Beep(400, 300);
+}
+
+// ---------------------------------------------------------------------------
+// Win32 audio capture internals
+// ---------------------------------------------------------------------------
+
+struct WaveInBuffer
+{
+	WAVEHDR Header;
+	std::vector<int16_t> Data;
+};
+
+struct AudioPipelineContext
+{
+	HWAVEIN WaveInHandle;
+	HANDLE  ReadyEvent;
+	std::vector<WaveInBuffer> Buffers;
+	std::atomic<bool> *Running;
+};
+
+static void CALLBACK
+wavein_proc(
+	HWAVEIN   hWaveIn,
+	UINT      uMsg,
+	DWORD_PTR dwInstance,
+	DWORD_PTR dwParam1,
+	DWORD_PTR dwParam2)
+{
+	if (uMsg != WIM_DATA) return;
+
+	AudioPipelineContext *Ctx = reinterpret_cast<AudioPipelineContext*>(dwInstance);
+	SetEvent(Ctx->ReadyEvent);
+}
+
+// Win32 implementation of platform audio capture.
+// Opens the WaveIn device, queues buffers, starts capture, and pumps completed
+// buffers into AppState->AudioAccumBuffer until CaptureRunning goes false.
+// Caller is responsible for setting CaptureRunning before calling.
+static bool
+run_platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+{
+	const int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
+
+	AudioPipelineContext PipeCtx = {};
+	PipeCtx.Running = &AppState->CaptureRunning;
+
+	PipeCtx.ReadyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+	if (!PipeCtx.ReadyEvent)
+	{
+		printf("[audio_pipeline] ERROR: Failed to create ready event\n");
+		return false;
+	}
+
+	WAVEFORMATEX Format       = {};
+	Format.wFormatTag         = WAVE_FORMAT_PCM;
+	Format.nChannels          = AUDIO_CAPTURE_CHANNELS;
+	Format.nSamplesPerSec     = AUDIO_CAPTURE_SAMPLE_RATE;
+	Format.wBitsPerSample     = AUDIO_CAPTURE_BITS_PER_SAMPLE;
+	Format.nBlockAlign        = (Format.nChannels * Format.wBitsPerSample) / 8;
+	Format.nAvgBytesPerSec    = Format.nSamplesPerSec * Format.nBlockAlign;
+	Format.cbSize             = 0;
+
+	MMRESULT Res = waveInOpen(
+		&PipeCtx.WaveInHandle,
+		(UINT)DeviceIndex,
+		&Format,
+		(DWORD_PTR)wavein_proc,
+		(DWORD_PTR)&PipeCtx,
+		CALLBACK_FUNCTION);
+
+	if (Res != MMSYSERR_NOERROR)
+	{
+		printf("[audio_pipeline] ERROR: waveInOpen failed (mmresult=%u)\n", Res);
+		CloseHandle(PipeCtx.ReadyEvent);
+		return false;
+	}
+
+	PipeCtx.Buffers.resize(AUDIO_CAPTURE_BUFFER_COUNT);
+	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
+	{
+		WaveInBuffer &Buf         = PipeCtx.Buffers[i];
+		Buf.Data.resize(SamplesPerBuffer);
+		memset(&Buf.Header, 0, sizeof(WAVEHDR));
+		Buf.Header.lpData         = reinterpret_cast<LPSTR>(Buf.Data.data());
+		Buf.Header.dwBufferLength = (DWORD)(SamplesPerBuffer * sizeof(int16_t));
+
+		waveInPrepareHeader(PipeCtx.WaveInHandle, &Buf.Header, sizeof(WAVEHDR));
+		waveInAddBuffer(PipeCtx.WaveInHandle, &Buf.Header, sizeof(WAVEHDR));
+	}
+
+	waveInStart(PipeCtx.WaveInHandle);
+	#ifdef DEBUG
+		printf("[audio_pipeline] Capture started on device index %d\n", DeviceIndex);
+	#endif
+
+	while (AppState->CaptureRunning.load())
+	{
+		DWORD WaitResult = WaitForSingleObject(PipeCtx.ReadyEvent, 50);
+		if (WaitResult == WAIT_TIMEOUT) continue;
+
+		for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
+		{
+			WAVEHDR &Hdr = PipeCtx.Buffers[i].Header;
+			if (!(Hdr.dwFlags & WHDR_DONE)) continue;
+
+			int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(int16_t));
+			if (SamplesGot > 0)
+			{
+				const int16_t *Src = PipeCtx.Buffers[i].Data.data();
+				std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
+				size_t OldSize = AppState->AudioAccumBuffer.size();
+				AppState->AudioAccumBuffer.resize(OldSize + SamplesGot);
+				for (int j = 0; j < SamplesGot; j++)
+				{
+					AppState->AudioAccumBuffer[OldSize + j] = Src[j] / 32768.0f;
+				}
+			}
+
+			Hdr.dwFlags         = 0;
+			Hdr.dwBytesRecorded = 0;
+			waveInPrepareHeader(PipeCtx.WaveInHandle, &Hdr, sizeof(WAVEHDR));
+			waveInAddBuffer(PipeCtx.WaveInHandle, &Hdr, sizeof(WAVEHDR));
+		}
+	}
+
+	waveInStop(PipeCtx.WaveInHandle);
+	waveInReset(PipeCtx.WaveInHandle);
+
+	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
+	{
+		waveInUnprepareHeader(PipeCtx.WaveInHandle, &PipeCtx.Buffers[i].Header, sizeof(WAVEHDR));
+	}
+
+	waveInClose(PipeCtx.WaveInHandle);
+	CloseHandle(PipeCtx.ReadyEvent);
+
+	#ifdef DEBUG
+		printf("[audio_pipeline] Capture stopped\n");
+	#endif
+	return true;
 }
