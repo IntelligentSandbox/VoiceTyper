@@ -155,6 +155,7 @@ cancel_recording(GlobalState *AppState)
 
 	AppState->CancelRequested.store(true);
 	signal_record_stop(AppState);
+	if (AppState->PlayRecordSound) play_cancel_recording_sound();
 
 	AppState->IsRecording = false;
 	AppState->RecordButton->setEnabled(false);

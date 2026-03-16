@@ -412,3 +412,10 @@ play_stop_recording_sound()
 {
     Beep(800, 200);
 }
+
+inline
+void
+play_cancel_recording_sound()
+{
+    Beep(400, 300);
+}

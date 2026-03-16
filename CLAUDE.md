@@ -2,8 +2,9 @@
 
 ## Environment
 You are running on **Windows 11** in **Git Bash** (MSYS2) — not cmd.exe or PowerShell.
-Use Unix commands and forward slashes for paths: `ls`, `cp`, `mv`, `E:/repos/project`.
-You are ALWAYS running from the project root. NEVER use cd before build commands.
+You are always ran from the root dir of this project.
+Use Unix commands and forward slashes for paths: `ls`, `cp`, `mv`.
+Reference paths using relative paths like `./src/audio_pipeline.h`.
 
 ## Project Overview
 This is a voice typing application that runs as a native application on the host OS.

@@ -2,7 +2,7 @@
 
 Tasks are worked top to bottom. Each task is committed individually.
 
-- [ ] Disable settings button/settings dialog from being allowed to be opened if in the middle of a transcription or streaming, should be a simple check the bool flag in gamestate in the toggle settings fn that gets triggered.
+- [x] Disable settings button/settings dialog from being allowed to be opened if in the middle of a transcription or streaming, should be a simple check the bool flag in gamestate in the toggle settings fn that gets triggered.
 - [ ] Add a sound for when it's cancelled. It should be a different beep sound than the start/end ones. Preferably like a deeper sound that should indicate cancellation.
 - [ ] address this TODO in system.h (Should be done by checking if the corresponding model files are found in their expected path. if not found, the select option in the drop down combo select should be disabled or not available. If no models are found at all, then the combo select should have a default option that is disabled but like say No Models found. And then we should not allow any transcription/streaming to start.)
       // TODO(warren): Assuming all the model files are present. 
