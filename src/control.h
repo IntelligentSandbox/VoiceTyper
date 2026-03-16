@@ -241,11 +241,21 @@ toggle_stt_model_load(GlobalState *AppState)
 	}
 	else
 	{
+		int ModelIdx = AppState->CurrentSTTModelIndex;
+		if (ModelIdx < 0 || ModelIdx >= (int)AppState->STTModelAvailable.size() ||
+			!AppState->STTModelAvailable[ModelIdx])
+		{
+			#ifdef DEBUG
+				printf("[control] toggle_stt_model_load: selected model not available on disk\n");
+			#endif
+			return;
+		}
+
 		AppState->LoadModelButton->setEnabled(false);
 		AppState->LoadModelButton->setText("Loading...");
 		AppState->LoadModelButton->repaint();
 
-		bool Success = load_whisper_model(&AppState->WhisperState, AppState->CurrentSTTModelIndex);
+		bool Success = load_whisper_model(&AppState->WhisperState, ModelIdx);
 		AppState->LoadModelButton->setEnabled(true);
 		if (Success)
 		{

@@ -114,6 +114,8 @@ struct GlobalState
 	// Whisper Wrapper
 	int CurrentSTTModelIndex;
 	std::vector<std::string> STTModels;
+	std::vector<bool> STTModelAvailable;
+	bool AnySTTModelAvailable;
 	WhisperModelState WhisperState;
 
 	// Audio capture pipeline

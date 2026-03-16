@@ -388,11 +388,29 @@ init_main_window(GlobalState *AppState)
 	// STT Model
 	GridLayout->addWidget(new QLabel("STT Model", MainWindow), Row++, 0);
 	QComboBox *STTModelSelect = new QComboBox(MainWindow);
-	for (size_t i = 0; i < AppState->STTModels.size(); i++)
+	if (!AppState->AnySTTModelAvailable)
 	{
-		STTModelSelect->addItem(QString::fromStdString(AppState->STTModels.at(i)));
-		if (AppState->CurrentSTTModelIndex == (int)i)
-			STTModelSelect->setCurrentIndex(i);
+		STTModelSelect->addItem("No Models Found");
+		STTModelSelect->setEnabled(false);
+	}
+	else
+	{
+		for (size_t i = 0; i < AppState->STTModels.size(); i++)
+		{
+			QString Label = QString::fromStdString(AppState->STTModels.at(i));
+			if (!AppState->STTModelAvailable[i]) Label += " [not found]";
+			STTModelSelect->addItem(Label);
+			if (AppState->CurrentSTTModelIndex == (int)i)
+				STTModelSelect->setCurrentIndex(i);
+		}
+		QStandardItemModel *ComboModel =
+			qobject_cast<QStandardItemModel *>(STTModelSelect->model());
+		for (size_t i = 0; i < AppState->STTModels.size(); i++)
+		{
+			if (AppState->STTModelAvailable[i]) continue;
+			QStandardItem *Item = ComboModel->item((int)i);
+			Item->setFlags(Item->flags() & ~Qt::ItemIsEnabled);
+		}
 	}
 	GridLayout->addWidget(STTModelSelect, Row++, 0);
 
@@ -401,6 +419,7 @@ init_main_window(GlobalState *AppState)
 	LoadModelButton->setStyleSheet(BUTTON_STYLE_GREY);
 	LoadModelButton->setText(load_model_button_idle_label(AppState));
 	LoadModelButton->setMinimumHeight(60);
+	if (!AppState->AnySTTModelAvailable) LoadModelButton->setEnabled(false);
 	GridLayout->addWidget(LoadModelButton, Row++, 0);
 	AppState->LoadModelButton = LoadModelButton;
 

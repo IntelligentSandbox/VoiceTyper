@@ -291,14 +291,12 @@ query_hotkey_settings(GlobalState *AppState)
 	#endif
 }
 
-// TODO(warren): Assuming all the model files are present. 
-// Maybe want to actually look to see if they are present on disk, but if they
-// aren't, do we want to just download them automatically from huggingface?
 inline
 void
 query_available_stt_models(GlobalState *AppState)
 {
 	AppState->STTModels.clear();
+	AppState->STTModelAvailable.clear();
 
 	AppState->STTModels.push_back("Whisper tiny.en (75 MB)");
 	AppState->STTModels.push_back("Whisper base.en (142 MB)");
@@ -306,5 +304,31 @@ query_available_stt_models(GlobalState *AppState)
 	// AppState->STTModels.push_back("Whisper medium.en (1.5 GB)");
 	// AppState->STTModels.push_back("Whisper large-v3-turbo (1.5 GB)");
 
-	AppState->CurrentSTTModelIndex = WHISPER_MODEL_BASE_EN;
+	AppState->AnySTTModelAvailable = false;
+	int FirstAvailableIndex = -1;
+	for (int i = 0; i < WHISPER_MODEL_COUNT; i++)
+	{
+		bool Exists = QFile::exists(WHISPER_MODEL_PATHS[i]);
+		AppState->STTModelAvailable.push_back(Exists);
+		if (Exists && FirstAvailableIndex == -1) FirstAvailableIndex = i;
+		if (Exists) AppState->AnySTTModelAvailable = true;
+		#ifdef DEBUG
+			printf("[system] Model '%s' (%s): %s\n",
+				AppState->STTModels[i].c_str(),
+				WHISPER_MODEL_PATHS[i],
+				Exists ? "found" : "NOT FOUND");
+		#endif
+	}
+
+	if (FirstAvailableIndex != -1)
+	{
+		AppState->CurrentSTTModelIndex =
+			(FirstAvailableIndex <= WHISPER_MODEL_BASE_EN &&
+			 AppState->STTModelAvailable[WHISPER_MODEL_BASE_EN])
+			? WHISPER_MODEL_BASE_EN : FirstAvailableIndex;
+	}
+	else
+	{
+		AppState->CurrentSTTModelIndex = 0;
+	}
 }
