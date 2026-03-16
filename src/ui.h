@@ -477,6 +477,7 @@ init_main_window(GlobalState *AppState)
 
 	QObject::connect(SettingsButton, &QPushButton::clicked, [AppState]()
 	{
+		if (AppState->IsRecording || AppState->IsStreaming) return;
 		open_settings_window(AppState);
 	});
 }
