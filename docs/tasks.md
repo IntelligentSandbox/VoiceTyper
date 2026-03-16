@@ -4,7 +4,7 @@ Tasks are worked top to bottom. Each task is committed individually.
 
 ## NVIDIA CUDA GPU Support
 
-- [ ] Enable GGML_CUDA in the build system
+- [x] Enable GGML_CUDA in the build system
       In `CMakeLists.txt`, add an option `VOICETYPER_CUDA` (default OFF). When ON, set `GGML_CUDA ON` instead of OFF.
       Update `build_git_bash.sh` to accept a `cuda` flag (e.g. `./build_git_bash.sh cuda` or `./build_git_bash.sh debug cuda`)
       that passes `-DVOICETYPER_CUDA=ON` to cmake.

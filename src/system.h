@@ -9,6 +9,10 @@
 	#include "platform_win32.h"
 #endif
 
+#ifdef VOICETYPER_CUDA
+	#include "ggml-cuda.h"
+#endif
+
 std::atomic<bool> HotkeyThreadRunning = false;
 
 inline
@@ -236,8 +240,27 @@ query_inference_devices(GlobalState *AppState)
 	AppState->InferenceDevices.push_back("CPU");
 	AppState->CurrentInferenceDeviceIndex = 0;
 
-	// TODO(warren): In the future, enable GPU support for dedicated cards like NVIDIA
-	// AppState->InferenceDevices.push_back("GPU");
+#ifdef VOICETYPER_CUDA
+	int DeviceCount = ggml_backend_cuda_get_device_count();
+	for (int i = 0; i < DeviceCount; i++)
+	{
+		char Description[128] = {};
+		ggml_backend_cuda_get_device_description(i, Description, sizeof(Description));
+
+		std::string Label = "GPU: ";
+		Label += Description;
+		AppState->InferenceDevices.push_back(Label);
+
+		#ifdef DEBUG
+			size_t FreeMem = 0, TotalMem = 0;
+			ggml_backend_cuda_get_device_memory(i, &FreeMem, &TotalMem);
+			printf("[system] CUDA device %d: %s (%.0f MB free / %.0f MB total)\n",
+				i, Description,
+				(double)FreeMem / (1024.0 * 1024.0),
+				(double)TotalMem / (1024.0 * 1024.0));
+		#endif
+	}
+#endif
 }
 
 inline
