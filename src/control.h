@@ -111,15 +111,10 @@ toggle_recording(GlobalState *AppState)
 
 	if (AppState->IsRecording)
 	{
-		HWND Foreground = GetForegroundWindow();
-		HWND OwnWindow  = (HWND)AppState->QtMainWindow->winId();
-		AppState->FocusedWindow = (Foreground != OwnWindow) ? Foreground : nullptr;
-
 		bool Started = start_record_pipeline(AppState);
 		if (!Started)
 		{
 			AppState->IsRecording = false;
-			AppState->FocusedWindow = nullptr;
 			#ifdef DEBUG
 				printf("[control] toggle_recording: failed to start record pipeline\n");
 			#endif
@@ -129,23 +124,44 @@ toggle_recording(GlobalState *AppState)
 
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_RED);
 		AppState->RecordButton->setText(QString("Stop (%1)").arg(AppState->RecordHotkey.to_label()));
+		AppState->CancelRecordButton->setEnabled(true);
 		AppState->StreamButton->setEnabled(false);
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREY);
 	}
 	else
 	{
-		// Non-blocking: signal capture to stop. The pipeline thread will
-		// finish transcription in the background and restore both buttons.
 		if (AppState->PlayRecordSound) play_stop_recording_sound();
 		signal_record_stop(AppState);
 		AppState->RecordButton->setEnabled(false);
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
 		AppState->RecordButton->setText("Transcribing...");
+		AppState->CancelRecordButton->setEnabled(false);
 	}
 
 	#ifdef DEBUG
 		qDebug() << "Recording toggled to:" << AppState->IsRecording;
 	#endif
+}
+
+inline
+void
+cancel_recording(GlobalState *AppState)
+{
+	if (!AppState->IsRecording) return;
+
+	#ifdef DEBUG
+		printf("[control] cancel_recording: cancelling\n");
+	#endif
+
+	AppState->CancelRequested.store(true);
+	signal_record_stop(AppState);
+	if (AppState->PlayRecordSound) play_cancel_recording_sound();
+
+	AppState->IsRecording = false;
+	AppState->RecordButton->setEnabled(false);
+	AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
+	AppState->RecordButton->setText("Cancelled");
+	AppState->CancelRecordButton->setEnabled(false);
 }
 
 inline
@@ -172,15 +188,10 @@ toggle_streaming(GlobalState *AppState)
 
 	if (AppState->IsStreaming)
 	{
-		HWND Foreground = GetForegroundWindow();
-		HWND OwnWindow  = (HWND)AppState->QtMainWindow->winId();
-		AppState->FocusedWindow = (Foreground != OwnWindow) ? Foreground : nullptr;
-
 		bool Started = start_streaming_pipeline(AppState);
 		if (!Started)
 		{
 			AppState->IsStreaming = false;
-			AppState->FocusedWindow = nullptr;
 			#ifdef DEBUG
 				printf("[control] toggle_streaming: failed to start streaming pipeline\n");
 			#endif
@@ -194,7 +205,6 @@ toggle_streaming(GlobalState *AppState)
 	else
 	{
 		stop_streaming_pipeline(AppState);
-		AppState->FocusedWindow = nullptr;
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
 		AppState->StreamButton->setText(stream_button_idle_label(AppState));
 		AppState->RecordButton->setEnabled(true);
@@ -231,11 +241,21 @@ toggle_stt_model_load(GlobalState *AppState)
 	}
 	else
 	{
+		int ModelIdx = AppState->CurrentSTTModelIndex;
+		if (ModelIdx < 0 || ModelIdx >= (int)AppState->STTModelAvailable.size() ||
+			!AppState->STTModelAvailable[ModelIdx])
+		{
+			#ifdef DEBUG
+				printf("[control] toggle_stt_model_load: selected model not available on disk\n");
+			#endif
+			return;
+		}
+
 		AppState->LoadModelButton->setEnabled(false);
 		AppState->LoadModelButton->setText("Loading...");
 		AppState->LoadModelButton->repaint();
 
-		bool Success = load_whisper_model(&AppState->WhisperState, AppState->CurrentSTTModelIndex);
+		bool Success = load_whisper_model(&AppState->WhisperState, ModelIdx);
 		AppState->LoadModelButton->setEnabled(true);
 		if (Success)
 		{

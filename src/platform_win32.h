@@ -162,28 +162,82 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	std::wstring Wide(WideLen - 1, L'\0');
 	MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, &Wide[0], WideLen);
 
+	SetForegroundWindow(TargetWindow);
+	Sleep(50);
+
 	std::vector<INPUT> Inputs;
 	Inputs.reserve(Wide.size() * 2);
 
-	for (wchar_t Wc : Wide)
+	for (wchar_t Ch : Wide)
 	{
-		INPUT KeyDown = {};
-		KeyDown.type           = INPUT_KEYBOARD;
-		KeyDown.ki.wVk         = 0;
-		KeyDown.ki.wScan       = Wc;
-		KeyDown.ki.dwFlags     = KEYEVENTF_UNICODE;
-		KeyDown.ki.time        = 0;
-		KeyDown.ki.dwExtraInfo = 0;
+		INPUT Down = {};
+		Down.type           = INPUT_KEYBOARD;
+		Down.ki.wScan       = Ch;
+		Down.ki.dwFlags     = KEYEVENTF_UNICODE;
+		Inputs.push_back(Down);
 
-		INPUT KeyUp = KeyDown;
-		KeyUp.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-
-		Inputs.push_back(KeyDown);
-		Inputs.push_back(KeyUp);
+		INPUT Up = {};
+		Up.type           = INPUT_KEYBOARD;
+		Up.ki.wScan       = Ch;
+		Up.ki.dwFlags     = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+		Inputs.push_back(Up);
 	}
 
-	SetForegroundWindow(TargetWindow);
 	SendInput((UINT)Inputs.size(), Inputs.data(), sizeof(INPUT));
+}
+
+inline
+void
+paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
+{
+	if (!TargetWindow || !Utf8Text || Utf8Text[0] == '\0') return;
+
+	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
+	if (WideLen <= 1) return;
+
+	if (!OpenClipboard(nullptr)) return;
+	EmptyClipboard();
+
+	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, WideLen * sizeof(wchar_t));
+	if (!hMem)
+	{
+		CloseClipboard();
+		return;
+	}
+
+	wchar_t *pMem = (wchar_t *)GlobalLock(hMem);
+	MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, pMem, WideLen);
+	GlobalUnlock(hMem);
+	SetClipboardData(CF_UNICODETEXT, hMem);
+	CloseClipboard();
+
+	SetForegroundWindow(TargetWindow);
+	Sleep(50);
+
+	INPUT Inputs[6] = {};
+
+	Inputs[0].type = INPUT_KEYBOARD;
+	Inputs[0].ki.wVk = VK_CONTROL;
+
+	Inputs[1].type = INPUT_KEYBOARD;
+	Inputs[1].ki.wVk = VK_SHIFT;
+
+	Inputs[2].type = INPUT_KEYBOARD;
+	Inputs[2].ki.wVk = 'V';
+
+	Inputs[3].type = INPUT_KEYBOARD;
+	Inputs[3].ki.wVk = 'V';
+	Inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+
+	Inputs[4].type = INPUT_KEYBOARD;
+	Inputs[4].ki.wVk = VK_SHIFT;
+	Inputs[4].ki.dwFlags = KEYEVENTF_KEYUP;
+
+	Inputs[5].type = INPUT_KEYBOARD;
+	Inputs[5].ki.wVk = VK_CONTROL;
+	Inputs[5].ki.dwFlags = KEYEVENTF_KEYUP;
+
+	SendInput(6, Inputs, sizeof(INPUT));
 }
 
 inline
@@ -357,4 +411,11 @@ void
 play_stop_recording_sound()
 {
     Beep(800, 200);
+}
+
+inline
+void
+play_cancel_recording_sound()
+{
+    Beep(400, 300);
 }

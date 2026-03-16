@@ -120,16 +120,18 @@ struct SettingsWindowState
 	HotkeyCaptureState Capture;
 
 	// Temporary hotkey configs (committed on Save)
-	HotkeyConfig TempHotkeys[3];
+	HotkeyConfig TempHotkeys[4];
 
-	// Temporary sound setting (committed on Save)
+	// Temporary settings (committed on Save)
 	bool TempPlayRecordSound;
+	bool TempUseCharByCharInjection;
 
 	// Pointers back into the dialog so callbacks can refresh UI
 	QLabel     *CurrentLabel;
 	QLineEdit  *CaptureEdit;
-	QPushButton *ActionButtons[3];
+	QPushButton *ActionButtons[4];
 	QCheckBox  *SoundCheckBox;
+	QCheckBox  *CharByCharCheckBox;
 };
 
 inline
@@ -139,7 +141,7 @@ settings_select_action(SettingsWindowState *S, int Action)
 	S->SelectedAction = Action;
 
 	// Highlight the selected button, un-highlight the others
-	for (int I = 0; I < 3; I++)
+	for (int I = 0; I < 4; I++)
 	{
 		S->ActionButtons[I]->setStyleSheet(
 			I == Action ? BUTTON_STYLE_BLUE : "");
@@ -164,14 +166,18 @@ open_settings_window(GlobalState *AppState)
 	QDialog *Dialog = new QDialog(AppState->QtMainWindow);
 	Dialog->setWindowTitle("Settings");
 	Dialog->setModal(true);
-	Dialog->resize(500, 320);
+	Dialog->resize(620, 320);
 
 	QGridLayout *Layout = new QGridLayout(Dialog);
 	int Row = 0;
 
 	// Sound checkbox
 	QCheckBox *SoundCheckBox = new QCheckBox("Play sound when starting/stopping recording", Dialog);
-	Layout->addWidget(SoundCheckBox, Row++, 0, 1, 3);
+	Layout->addWidget(SoundCheckBox, Row++, 0, 1, 4);
+
+	// Text injection method checkbox
+	QCheckBox *CharByCharCheckBox = new QCheckBox("Use character-by-character text injection (instead of paste)", Dialog);
+	Layout->addWidget(CharByCharCheckBox, Row++, 0, 1, 4);
 
 	// Heading
 	QLabel *Heading = new QLabel("Keyboard Shortcuts", Dialog);
@@ -179,46 +185,54 @@ open_settings_window(GlobalState *AppState)
 	HeadingFont.setPointSize(11);
 	HeadingFont.setWeight(QFont::Bold);
 	Heading->setFont(HeadingFont);
-	Layout->addWidget(Heading, Row++, 0, 1, 3);
+	Layout->addWidget(Heading, Row++, 0, 1, 4);
 
 	// Action selector row
-	QPushButton *RecordBtn    = new QPushButton("Record",           Dialog);
-	QPushButton *StreamBtn    = new QPushButton("Stream",           Dialog);
-	QPushButton *LoadModelBtn = new QPushButton("Load / Unload Model", Dialog);
+	QPushButton *RecordBtn       = new QPushButton("Record",              Dialog);
+	QPushButton *CancelRecordBtn = new QPushButton("Cancel Record",       Dialog);
+	QPushButton *StreamBtn       = new QPushButton("Stream",              Dialog);
+	QPushButton *LoadModelBtn    = new QPushButton("Load / Unload Model", Dialog);
 	RecordBtn->setMinimumHeight(40);
+	CancelRecordBtn->setMinimumHeight(40);
 	StreamBtn->setMinimumHeight(40);
 	LoadModelBtn->setMinimumHeight(40);
-	Layout->addWidget(RecordBtn,    Row, 0);
-	Layout->addWidget(StreamBtn,    Row, 1);
-	Layout->addWidget(LoadModelBtn, Row, 2);
+	Layout->addWidget(RecordBtn,       Row, 0);
+	Layout->addWidget(CancelRecordBtn, Row, 1);
+	Layout->addWidget(StreamBtn,       Row, 2);
+	Layout->addWidget(LoadModelBtn,    Row, 3);
 	Row++;
 
 	// "Current: ..." label
 	QLabel *CurrentLabel = new QLabel("", Dialog);
-	Layout->addWidget(CurrentLabel, Row++, 0, 1, 3);
+	Layout->addWidget(CurrentLabel, Row++, 0, 1, 4);
 
 	// Shared state - initialize temp values from AppState
 	SettingsWindowState S = {};
 	S.SelectedAction   = 0;
 	S.CurrentLabel     = CurrentLabel;
 	S.ActionButtons[0] = RecordBtn;
-	S.ActionButtons[1] = StreamBtn;
-	S.ActionButtons[2] = LoadModelBtn;
-	S.SoundCheckBox    = SoundCheckBox;
+	S.ActionButtons[1] = CancelRecordBtn;
+	S.ActionButtons[2] = StreamBtn;
+	S.ActionButtons[3] = LoadModelBtn;
+	S.SoundCheckBox      = SoundCheckBox;
+	S.CharByCharCheckBox = CharByCharCheckBox;
 
 	// Copy current hotkeys to temp storage
 	S.TempHotkeys[0] = AppState->RecordHotkey;
-	S.TempHotkeys[1] = AppState->StreamHotkey;
-	S.TempHotkeys[2] = AppState->LoadModelHotkey;
-	S.TempPlayRecordSound = AppState->PlayRecordSound;
+	S.TempHotkeys[1] = AppState->CancelRecordHotkey;
+	S.TempHotkeys[2] = AppState->StreamHotkey;
+	S.TempHotkeys[3] = AppState->LoadModelHotkey;
+	S.TempPlayRecordSound         = AppState->PlayRecordSound;
+	S.TempUseCharByCharInjection  = AppState->UseCharByCharInjection;
 
 	SoundCheckBox->setChecked(S.TempPlayRecordSound);
+	CharByCharCheckBox->setChecked(S.TempUseCharByCharInjection);
 
 	// Hotkey capture box — filter writes into S.Capture
 	QLineEdit *CaptureEdit = nullptr;
 	make_hotkey_capture_edit(Dialog, &S.Capture, &CaptureEdit, S.TempHotkeys[0]);
 	CaptureEdit->setMinimumHeight(40);
-	Layout->addWidget(CaptureEdit, Row++, 0, 1, 3);
+	Layout->addWidget(CaptureEdit, Row++, 0, 1, 4);
 	S.CaptureEdit = CaptureEdit;
 
 	// Hint
@@ -231,7 +245,7 @@ open_settings_window(GlobalState *AppState)
 	HintFont.setPointSize(9);
 	HintFont.setWeight(QFont::Normal);
 	HintLabel->setFont(HintFont);
-	Layout->addWidget(HintLabel, Row++, 0, 1, 3);
+	Layout->addWidget(HintLabel, Row++, 0, 1, 4);
 
 	// Set Hotkey / Save / Cancel buttons
 	QPushButton *SetButton   = new QPushButton("Set Hotkey", Dialog);
@@ -252,13 +266,17 @@ open_settings_window(GlobalState *AppState)
 	{
 		settings_select_action(&S, 0);
 	});
-	QObject::connect(StreamBtn, &QPushButton::clicked, [&S]()
+	QObject::connect(CancelRecordBtn, &QPushButton::clicked, [&S]()
 	{
 		settings_select_action(&S, 1);
 	});
-	QObject::connect(LoadModelBtn, &QPushButton::clicked, [&S]()
+	QObject::connect(StreamBtn, &QPushButton::clicked, [&S]()
 	{
 		settings_select_action(&S, 2);
+	});
+	QObject::connect(LoadModelBtn, &QPushButton::clicked, [&S]()
+	{
+		settings_select_action(&S, 3);
 	});
 
     // TODO(warren): not quite right.
@@ -284,18 +302,24 @@ open_settings_window(GlobalState *AppState)
 
 	QObject::connect(SaveButton, &QPushButton::clicked, [AppState, Dialog, &S]()
 	{
-		AppState->RecordHotkey    = S.TempHotkeys[0];
-		AppState->StreamHotkey    = S.TempHotkeys[1];
-		AppState->LoadModelHotkey = S.TempHotkeys[2];
+		AppState->RecordHotkey       = S.TempHotkeys[0];
+		AppState->CancelRecordHotkey = S.TempHotkeys[1];
+		AppState->StreamHotkey       = S.TempHotkeys[2];
+		AppState->LoadModelHotkey    = S.TempHotkeys[3];
 
-		save_hotkey_setting("record_hotkey",    (int)AppState->RecordHotkey.Modifiers,    (int)AppState->RecordHotkey.Key);
-		save_hotkey_setting("stream_hotkey",    (int)AppState->StreamHotkey.Modifiers,    (int)AppState->StreamHotkey.Key);
-		save_hotkey_setting("load_model_hotkey", (int)AppState->LoadModelHotkey.Modifiers, (int)AppState->LoadModelHotkey.Key);
+		save_hotkey_setting("record_hotkey",        (int)AppState->RecordHotkey.Modifiers,       (int)AppState->RecordHotkey.Key);
+		save_hotkey_setting("cancel_record_hotkey",  (int)AppState->CancelRecordHotkey.Modifiers, (int)AppState->CancelRecordHotkey.Key);
+		save_hotkey_setting("stream_hotkey",         (int)AppState->StreamHotkey.Modifiers,       (int)AppState->StreamHotkey.Key);
+		save_hotkey_setting("load_model_hotkey",     (int)AppState->LoadModelHotkey.Modifiers,    (int)AppState->LoadModelHotkey.Key);
 
 		AppState->PlayRecordSound = S.SoundCheckBox->isChecked();
 		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
 
+		AppState->UseCharByCharInjection = S.CharByCharCheckBox->isChecked();
+		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
+
 		AppState->RecordButton->setText(record_button_idle_label(AppState));
+		AppState->CancelRecordButton->setText(cancel_record_button_idle_label(AppState));
 		AppState->StreamButton->setText(stream_button_idle_label(AppState));
 		AppState->LoadModelButton->setText(load_model_button_idle_label(AppState));
 	});
@@ -328,6 +352,14 @@ init_main_window(GlobalState *AppState)
 	GridLayout->addWidget(RecordButton, Row++, 0);
 	AppState->RecordButton = RecordButton;
 
+	// Cancel Record Button
+	QPushButton *CancelRecordButton = new QPushButton(MainWindow);
+	CancelRecordButton->setText(cancel_record_button_idle_label(AppState));
+	CancelRecordButton->setMinimumHeight(40);
+	CancelRecordButton->setEnabled(false);
+	GridLayout->addWidget(CancelRecordButton, Row++, 0);
+	AppState->CancelRecordButton = CancelRecordButton;
+
 	// Stream Button
 	QPushButton *StreamButton = new QPushButton(MainWindow);
 	StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
@@ -356,11 +388,29 @@ init_main_window(GlobalState *AppState)
 	// STT Model
 	GridLayout->addWidget(new QLabel("STT Model", MainWindow), Row++, 0);
 	QComboBox *STTModelSelect = new QComboBox(MainWindow);
-	for (size_t i = 0; i < AppState->STTModels.size(); i++)
+	if (!AppState->AnySTTModelAvailable)
 	{
-		STTModelSelect->addItem(QString::fromStdString(AppState->STTModels.at(i)));
-		if (AppState->CurrentSTTModelIndex == (int)i)
-			STTModelSelect->setCurrentIndex(i);
+		STTModelSelect->addItem("No Models Found");
+		STTModelSelect->setEnabled(false);
+	}
+	else
+	{
+		for (size_t i = 0; i < AppState->STTModels.size(); i++)
+		{
+			QString Label = QString::fromStdString(AppState->STTModels.at(i));
+			if (!AppState->STTModelAvailable[i]) Label += " [not found]";
+			STTModelSelect->addItem(Label);
+			if (AppState->CurrentSTTModelIndex == (int)i)
+				STTModelSelect->setCurrentIndex(i);
+		}
+		QStandardItemModel *ComboModel =
+			qobject_cast<QStandardItemModel *>(STTModelSelect->model());
+		for (size_t i = 0; i < AppState->STTModels.size(); i++)
+		{
+			if (AppState->STTModelAvailable[i]) continue;
+			QStandardItem *Item = ComboModel->item((int)i);
+			Item->setFlags(Item->flags() & ~Qt::ItemIsEnabled);
+		}
 	}
 	GridLayout->addWidget(STTModelSelect, Row++, 0);
 
@@ -369,6 +419,7 @@ init_main_window(GlobalState *AppState)
 	LoadModelButton->setStyleSheet(BUTTON_STYLE_GREY);
 	LoadModelButton->setText(load_model_button_idle_label(AppState));
 	LoadModelButton->setMinimumHeight(60);
+	if (!AppState->AnySTTModelAvailable) LoadModelButton->setEnabled(false);
 	GridLayout->addWidget(LoadModelButton, Row++, 0);
 	AppState->LoadModelButton = LoadModelButton;
 
@@ -408,6 +459,11 @@ init_main_window(GlobalState *AppState)
 		toggle_recording(AppState);
 	});
 
+	QObject::connect(CancelRecordButton, &QPushButton::clicked, [AppState]()
+	{
+		cancel_recording(AppState);
+	});
+
 	QObject::connect(StreamButton, &QPushButton::clicked, [AppState]()
 	{
 		toggle_streaming(AppState);
@@ -440,6 +496,7 @@ init_main_window(GlobalState *AppState)
 
 	QObject::connect(SettingsButton, &QPushButton::clicked, [AppState]()
 	{
+		if (AppState->IsRecording || AppState->IsStreaming) return;
 		open_settings_window(AppState);
 	});
 }

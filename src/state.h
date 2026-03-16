@@ -50,6 +50,14 @@ inline HotkeyConfig default_record_hotkey()
 	return H;
 }
 
+inline HotkeyConfig default_cancel_record_hotkey()
+{
+	HotkeyConfig H;
+	H.Modifiers = Qt::AltModifier;
+	H.Key       = Qt::Key_F3;
+	return H;
+}
+
 inline HotkeyConfig default_stream_hotkey()
 {
 	HotkeyConfig H;
@@ -77,12 +85,14 @@ struct GlobalState
 	QApplication *QtApp;
 	QWidget *QtMainWindow;
 	QPushButton *RecordButton;
+	QPushButton *CancelRecordButton;
 	QPushButton *StreamButton;
 	QPushButton *LoadModelButton;
 	QPushButton *SettingsButton;
 
 	// Hotkeys
 	HotkeyConfig RecordHotkey;
+	HotkeyConfig CancelRecordHotkey;
 	HotkeyConfig StreamHotkey;
 	HotkeyConfig LoadModelHotkey;
 
@@ -91,6 +101,7 @@ struct GlobalState
 	bool IsStreaming;
 	bool IsSettingsDialogOpen;
 	bool PlayRecordSound;
+	bool UseCharByCharInjection;
 
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;
@@ -103,10 +114,13 @@ struct GlobalState
 	// Whisper Wrapper
 	int CurrentSTTModelIndex;
 	std::vector<std::string> STTModels;
+	std::vector<bool> STTModelAvailable;
+	bool AnySTTModelAvailable;
 	WhisperModelState WhisperState;
 
 	// Audio capture pipeline
 	std::atomic<bool> CaptureRunning;
+	std::atomic<bool> CancelRequested;
 	std::thread CaptureThread;
 	std::mutex AudioBufferMutex;
 	std::vector<float> AudioAccumBuffer;
@@ -114,8 +128,8 @@ struct GlobalState
 	// Inference threading
 	int WhisperThreadCount;
 
-	// Text injection target: captured when a pipeline starts, null if our own window was focused
-	HWND FocusedWindow;
+	// Our own main window handle — used to exclude self when doing just-in-time target lookup.
+	HWND OwnWindow;
 
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;
@@ -128,6 +142,11 @@ struct GlobalState
 inline QString record_button_idle_label(GlobalState *AppState)
 {
 	return QString("Record (%1)").arg(AppState->RecordHotkey.to_label());
+}
+
+inline QString cancel_record_button_idle_label(GlobalState *AppState)
+{
+	return QString("Cancel (%1)").arg(AppState->CancelRecordHotkey.to_label());
 }
 
 inline QString stream_button_idle_label(GlobalState *AppState)

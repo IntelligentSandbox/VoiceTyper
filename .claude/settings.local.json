@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir E:\\\\repos\\\\voice-typer:*)",
+      "Bash(cmd:*)",
+      "Bash(cmake:*)",
+      "Bash(E:/repos/voice-typer/build.bat:*)",
+      "Bash(find /e/repos/voice-typer -name \"*.h\" -o -name \"*.cpp\" | grep -E \"src/.*\\\\.\\(h|cpp\\)$\" | grep -v external | grep -v build)",
+      "Bash(grep -n \"inject_text_to_window\\\\|run_whisper_on_chunk\\\\|record_pipeline_thread\\\\|stream_infer_thread\" /e/repos/voice-typer/src/*.h | head -30)",
+      "Bash(cmd.exe //c build.bat 2>&1)",
+      "Bash(cmd.exe //c \"cd /d E:\\\\repos\\\\voice-typer && build.bat\" 2>&1)",
+      "Bash(cd E:/repos/voice-typer && cmd.exe //c \"build.bat\" 2>&1)",
+      "Bash(cmd.exe //c \"E:\\\\repos\\\\voice-typer\\\\build.bat\" 2>&1)",
+      "Bash(cmd.exe //c \"E:\\\\repos\\\\voice-typer\\\\build.bat debug\" 2>&1)",
+      "Bash(./build_git_bash.sh 2>&1 | tail -5)",
+      "Bash(./build_git_bash.sh debug:*)",
+      "Bash(./build_git_bash.sh 2>&1 | tail -10)"
+    ]
+  }
+}

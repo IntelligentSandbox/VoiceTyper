@@ -2,4 +2,3 @@ build/
 notes/
 compile_commands.json
 models/
-.claude/
