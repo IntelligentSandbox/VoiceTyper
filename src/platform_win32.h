@@ -399,6 +399,41 @@ save_bool_setting(const char *JsonKey, bool Value)
 	return Ok;
 }
 
+// Saves a string setting to the JSON file.
+inline
+bool
+save_string_setting(const char *JsonKey, const char *Value)
+{
+	QJsonObject Root = read_settings_root();
+	Root[JsonKey] = QString::fromUtf8(Value);
+	bool Ok = write_settings_root(Root);
+
+	#ifdef DEBUG
+		if (Ok)
+			printf("[platform] Saved %s: %s\n", JsonKey, Value);
+	#endif
+
+	return Ok;
+}
+
+// Loads a string setting from the JSON file.
+// Returns false if the file or key is missing; caller should keep the default.
+inline
+bool
+load_string_setting(const char *JsonKey, std::string *OutValue)
+{
+	QJsonObject Root = read_settings_root();
+	if (!Root.contains(JsonKey)) return false;
+
+	*OutValue = Root[JsonKey].toString().toUtf8().constData();
+
+	#ifdef DEBUG
+		printf("[platform] Loaded %s: %s\n", JsonKey, OutValue->c_str());
+	#endif
+
+	return true;
+}
+
 // Loads a boolean setting from the JSON file.
 // Returns false if the file or key is missing; caller should keep the default.
 inline

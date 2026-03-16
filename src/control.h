@@ -33,6 +33,9 @@ update_inference_device_selection(GlobalState *AppState, int Index)
 		printf("Selected inference device index: %d\n", Index);
 	#endif
 
+	if (Index >= 0 && Index < (int)AppState->InferenceDevices.size())
+		save_string_setting("inference_device", AppState->InferenceDevices[Index].c_str());
+
 	if (PreviousIndex == Index) return;
 	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
 

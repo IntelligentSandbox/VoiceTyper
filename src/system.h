@@ -261,6 +261,23 @@ query_inference_devices(GlobalState *AppState)
 		#endif
 	}
 #endif
+
+	std::string SavedDevice;
+	if (load_string_setting("inference_device", &SavedDevice))
+	{
+		for (int i = 0; i < (int)AppState->InferenceDevices.size(); i++)
+		{
+			if (AppState->InferenceDevices[i] == SavedDevice)
+			{
+				AppState->CurrentInferenceDeviceIndex = i;
+				#ifdef DEBUG
+					printf("[system] Restored inference device: %s (index %d)\n",
+						SavedDevice.c_str(), i);
+				#endif
+				break;
+			}
+		}
+	}
 }
 
 inline

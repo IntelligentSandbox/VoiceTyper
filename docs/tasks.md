@@ -23,7 +23,7 @@ Tasks are worked top to bottom. Each task is committed individually.
       and `ContextParams.gpu_device` to the appropriate CUDA device index. Otherwise keep `use_gpu = false`.
       Update all call sites of `load_whisper_model()` to pass the device info.
 
-- [ ] Reload model when inference device changes
+- [x] Reload model when inference device changes
       In `control.h` `update_inference_device_selection()`, after updating the index, if a model is currently
       loaded (`WhisperState.IsLoaded`), unload it and reload it so it picks up the new device setting.
       This handles the case where a user switches from CPU to GPU (or vice versa) while a model is loaded.
