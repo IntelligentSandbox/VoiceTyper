@@ -10,7 +10,7 @@ Tasks are worked top to bottom. Each task is committed individually.
       that passes `-DVOICETYPER_CUDA=ON` to cmake.
       Add a post-build step to copy CUDA runtime DLLs (cublas, cublasLt, cudart) to the output directory when CUDA is enabled.
 
-- [ ] Add CUDA device discovery to query_inference_devices
+- [x] Add CUDA device discovery to query_inference_devices
       In `system.h` `query_inference_devices()`, when the build has CUDA support (`GGML_CUDA` is defined or
       linked), call `ggml_backend_cuda_get_device_count()` and `ggml_backend_cuda_get_device_description()`
       to enumerate available NVIDIA GPUs. Add each as an entry like "GPU: NVIDIA RTX 4090" to

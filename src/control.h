@@ -66,7 +66,8 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 	AppState->LoadModelButton->repaint();
 	QApplication::processEvents();
 
-	bool Success = load_whisper_model(&AppState->WhisperState, Index);
+	bool Success = load_whisper_model(
+		&AppState->WhisperState, Index, AppState->CurrentInferenceDeviceIndex);
 	AppState->LoadModelButton->setEnabled(true);
 	if (Success)
 	{
@@ -255,7 +256,8 @@ toggle_stt_model_load(GlobalState *AppState)
 		AppState->LoadModelButton->setText("Loading...");
 		AppState->LoadModelButton->repaint();
 
-		bool Success = load_whisper_model(&AppState->WhisperState, ModelIdx);
+		bool Success = load_whisper_model(
+			&AppState->WhisperState, ModelIdx, AppState->CurrentInferenceDeviceIndex);
 		AppState->LoadModelButton->setEnabled(true);
 		if (Success)
 		{
