@@ -17,7 +17,7 @@ Tasks are worked top to bottom. Each task is committed individually.
       `AppState->InferenceDevices`. Guard this behind `#ifdef GGML_USE_CUDA` (or the appropriate whisper.cpp
       preprocessor define for CUDA availability). Remove the existing TODO comment.
 
-- [ ] Wire GPU selection through to model loading
+- [x] Wire GPU selection through to model loading
       In `whisper_wrapper.h` `load_whisper_model()`, accept the current inference device index and device list.
       If the selected device is a GPU entry (index > 0 when GPUs are present), set `ContextParams.use_gpu = true`
       and `ContextParams.gpu_device` to the appropriate CUDA device index. Otherwise keep `use_gpu = false`.

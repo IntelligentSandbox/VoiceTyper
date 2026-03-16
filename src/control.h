@@ -26,10 +26,46 @@ inline
 void
 update_inference_device_selection(GlobalState *AppState, int Index)
 {
+	int PreviousIndex = AppState->CurrentInferenceDeviceIndex;
 	AppState->CurrentInferenceDeviceIndex = Index;
+
 	#ifdef DEBUG
 		printf("Selected inference device index: %d\n", Index);
 	#endif
+
+	if (PreviousIndex == Index) return;
+	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
+
+	#ifdef DEBUG
+		printf("[control] Inference device changed while model loaded (%d -> %d), reloading\n",
+			PreviousIndex, Index);
+	#endif
+
+	AppState->LoadModelButton->setEnabled(false);
+	AppState->LoadModelButton->setText("Reloading...");
+	AppState->LoadModelButton->repaint();
+	QApplication::processEvents();
+
+	bool Success = load_whisper_model(
+		&AppState->WhisperState, AppState->WhisperState.LoadedModelIndex, Index);
+	AppState->LoadModelButton->setEnabled(true);
+	if (Success)
+	{
+		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
+		AppState->LoadModelButton->setText(
+			QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
+		#ifdef DEBUG
+			printf("[control] Model reloaded on new inference device successfully\n");
+		#endif
+	}
+	else
+	{
+		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
+		AppState->LoadModelButton->setText("Failed to load Model.");
+		#ifdef DEBUG
+			printf("[control] ERROR: Failed to reload model on new inference device\n");
+		#endif
+	}
 }
 
 inline
