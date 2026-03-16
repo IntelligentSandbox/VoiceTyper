@@ -11,6 +11,26 @@
 
 std::atomic<bool> HotkeyThreadRunning = false;
 
+inline
+void
+set_application_icon(GlobalState *AppState)
+{
+	QPixmap Pixmap(APP_ICON_PATH);
+	if (Pixmap.isNull())
+	{
+		#ifdef DEBUG
+			printf("[system] WARNING: Could not load icon from %s\n", APP_ICON_PATH);
+		#endif
+		return;
+	}
+	QIcon Icon(Pixmap);
+	AppState->QtMainWindow->setWindowIcon(Icon);
+	AppState->QtApp->setWindowIcon(Icon);
+	#ifdef DEBUG
+		printf("[system] Application icon set from %s\n", APP_ICON_PATH);
+	#endif
+}
+
 // TODO(warren): A lot of these functions mix WIN32 dependency in them...oh AI.
 // For code quality control, we'll need to split them out eventually...push
 // specifics into win32 layer and os agnostic code in here again.

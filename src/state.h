@@ -32,6 +32,8 @@ struct AudioInputDeviceInfo
 #define WINDOW_DEFAULT_WIDTH 500
 #define WINDOW_DEFAULT_HEIGHT 500
 
+#define APP_ICON_PATH "media/voicetyper-icon.png"
+
 // Represents a user-configurable hotkey as Qt modifier flags + an optional main key.
 // Key == Qt::Key_unknown (0) means the hotkey fires on modifiers alone (e.g. Ctrl+Alt).
 struct HotkeyConfig

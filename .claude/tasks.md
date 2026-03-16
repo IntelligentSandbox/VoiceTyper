@@ -9,12 +9,12 @@ Tasks are worked top to bottom. Each task is committed individually.
       // Maybe want to actually look to see if they are present on disk, but if they
       // aren't, do we want to just download them automatically from huggingface?
 - Refactor Audio Pipeline (goal is to clean things up for future cross platform implementations)
-  - [ ] Move Win32 audio capture structs (WaveInBuffer, AudioPipelineContext) and wavein_proc callback from audio_pipeline.h into platform_win32.h
-  - [ ] Extract run_wavein_capture() from audio_pipeline.h into platform_win32.h, keeping the same function signature (takes GlobalState*, int DeviceIndex; writes float samples into AudioAccumBuffer via mutex)
-  - [ ] Add platform-agnostic function declaration/interface comment in audio_pipeline.h that documents the contract: `run_platform_audio_capture(GlobalState*, int)` — returns bool, pumps float samples into AudioAccumBuffer until CaptureRunning goes false
-  - [ ] Rename run_wavein_capture to run_platform_audio_capture in platform_win32.h and update all call sites in audio_pipeline.h (record_pipeline_thread, streaming_pipeline_thread)
-  - [ ] Remove `#include <windows.h>` and `#include <mmsystem.h>` from audio_pipeline.h (these should only be needed in platform_win32.h now)
-  - [ ] Verify both release and debug builds pass with the refactored structure
+  - [x] Move Win32 audio capture structs (WaveInBuffer, AudioPipelineContext) and wavein_proc callback from audio_pipeline.h into platform_win32.h
+  - [x] Extract run_wavein_capture() from audio_pipeline.h into platform_win32.h, keeping the same function signature (takes GlobalState*, int DeviceIndex; writes float samples into AudioAccumBuffer via mutex)
+  - [x] Add platform-agnostic function declaration/interface comment in audio_pipeline.h that documents the contract: `run_platform_audio_capture(GlobalState*, int)` — returns bool, pumps float samples into AudioAccumBuffer until CaptureRunning goes false
+  - [x] Rename run_wavein_capture to run_platform_audio_capture in platform_win32.h and update all call sites in audio_pipeline.h (record_pipeline_thread, streaming_pipeline_thread)
+  - [x] Remove `#include <windows.h>` and `#include <mmsystem.h>` from audio_pipeline.h (these should only be needed in platform_win32.h now)
+  - [x] Verify both release and debug builds pass with the refactored structure
 - Add a way to display an icon for the application (PNG file path based)
   - [ ] Add a platform-agnostic icon path constant or config (e.g. `#define APP_ICON_PATH "data/icon.png"`) in state.h or a shared location
   - [ ] In system.h, add `set_application_icon(GlobalState*)` that uses Qt's QIcon/QPixmap to load the PNG and call `AppState->QtMainWindow->setWindowIcon(...)` — this is platform-agnostic via Qt

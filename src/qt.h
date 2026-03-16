@@ -24,3 +24,5 @@
 #include <QMessageBox>
 #include <QCheckBox>
 #include <QStandardItemModel>
+#include <QIcon>
+#include <QPixmap>

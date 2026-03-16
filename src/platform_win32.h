@@ -235,6 +235,39 @@ query_logical_processor_count()
 }
 
 inline
+void
+set_taskbar_icon(HWND Window, const char *PngPath)
+{
+	if (!Window || !PngPath) return;
+
+	QPixmap Pixmap(PngPath);
+	if (Pixmap.isNull())
+	{
+		#ifdef DEBUG
+			printf("[platform] set_taskbar_icon: failed to load %s\n", PngPath);
+		#endif
+		return;
+	}
+
+	HICON BigIcon = Pixmap.scaled(
+		GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
+		Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage().toHICON();
+	HICON SmallIcon = Pixmap.scaled(
+		GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+		Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage().toHICON();
+
+	if (BigIcon)
+		SendMessageW(Window, WM_SETICON, ICON_BIG, (LPARAM)BigIcon);
+	if (SmallIcon)
+		SendMessageW(Window, WM_SETICON, ICON_SMALL, (LPARAM)SmallIcon);
+
+	#ifdef DEBUG
+		printf("[platform] set_taskbar_icon: big=%s small=%s\n",
+			BigIcon ? "ok" : "failed", SmallIcon ? "ok" : "failed");
+	#endif
+}
+
+inline
 const char*
 audio_device_get_name(AudioInputDeviceInfo *Info)
 {

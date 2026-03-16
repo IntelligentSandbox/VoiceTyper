@@ -68,4 +68,12 @@ if(WIN32)
             "||" exit 0
         COMMENT "Copying models to output directory"
     )
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND cmd /c robocopy
+            "${CMAKE_SOURCE_DIR}\\media"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>\\media"
+            /E /NJH /NJS /NFL /NDL
+            "||" exit 0
+        COMMENT "Copying media to output directory"
+    )
 endif()
