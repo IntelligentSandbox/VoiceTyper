@@ -35,8 +35,12 @@ add_subdirectory(src/external/whisper.cpp)
 
 set(SOURCES src/main.cpp)
 
+if(WIN32)
+	set(APP_ICON_RESOURCE "${CMAKE_SOURCE_DIR}/src/resources.rc")
+endif()
+
 qt_standard_project_setup()
-qt_add_executable(${PROJECT_NAME} WIN32 ${SOURCES})
+qt_add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${APP_ICON_RESOURCE})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/external/whisper.cpp/include
