@@ -14,7 +14,9 @@
       "Bash(cmd.exe //c \"E:\\\\repos\\\\voice-typer\\\\build.bat debug\" 2>&1)",
       "Bash(./build_git_bash.sh 2>&1 | tail -5)",
       "Bash(./build_git_bash.sh debug:*)",
-      "Bash(./build_git_bash.sh 2>&1 | tail -10)"
+      "Bash(./build_git_bash.sh 2>&1 | tail -10)",
+      "Bash(find:*)",
+      "Bash(echo:*)"
     ]
   }
 }
