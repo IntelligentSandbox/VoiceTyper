@@ -17,16 +17,16 @@ The application's primary responsibility is facilitating user control of:
     ./build_git_bash.sh debug    - debug build
 
 ## Workflow
-1. Read `.claude/tasks.md` at the start of every session.
+1. Read `docs/tasks.md` at the start of every session.
 2. Work through tasks in order, top to bottom. Do not skip tasks.
 3. For each task:
    a. Implement the change.
-   b. Verify it passes **both** release and debug builds (`./build_git_bash.sh` then `./build_git_bash.sh debug`).
+   b. Verify it passes **both** release and debug builds (`./build_git_bash.sh` then `./build_git_bash.sh debug`) by reading the full build output. You must inspect the entire build output to catch any errors and ensure successful compilation. If a build fails, you will try to debug it and fix the issue.
    c. Commit with: `git add -A && git commit -m "<task title>" -m "<brief description of what was done>"`
       - Use multiple `-m` flags for multiline messages.
       - Never use heredocs or command substitution in git commands.
-   d. Mark the task complete in `.claude/tasks.md` by checking its checkbox.
-4. Stop and report once all tasks are complete, or if a build fails.
+   d. Mark the task complete in `docs/tasks.md` by checking its checkbox as soon as the respective task is complete and commited in git.
+4. Stop and report once all tasks are complete.
 
 ## Task Complexity
 If a task is marked `[PLAN]` instead of `[ ]`, do not implement it.

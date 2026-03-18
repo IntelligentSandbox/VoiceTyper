@@ -3,7 +3,7 @@
 	<Package
 		Name="VoiceTyper"
 		Manufacturer="VoiceTyper"
-		Version="1.0.0"
+		Version="0.1.2"
 		UpgradeCode="3762D62A-0556-4CB3-AFC0-3E8157426C38"
 		Scope="perUser">
 

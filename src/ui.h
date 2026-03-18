@@ -510,7 +510,7 @@ init_ui(GlobalState *AppState)
 	Font.setWeight(QFont::Bold);
 	AppState->QtApp->setFont(Font);
 
-	AppState->QtMainWindow->setWindowTitle("Voice Typer");
+	AppState->QtMainWindow->setWindowTitle("VoiceTyper");
 	AppState->QtMainWindow->resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT);
 
 	init_main_window(AppState);
