@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<Package
+		Name="VoiceTyper"
+		Manufacturer="VoiceTyper"
+		Version="1.0.0"
+		UpgradeCode="3762D62A-0556-4CB3-AFC0-3E8157426C38"
+		Scope="perUser">
+
+		<MajorUpgrade DowngradeErrorMessage="A newer version of VoiceTyper is already installed." />
+
+		<MediaTemplate EmbedCab="yes" />
+
+		<StandardDirectory Id="LocalAppDataFolder">
+			<Directory Id="INSTALLFOLDER" Name="VoiceTyper">
+				<Directory Id="DataFolder" Name="data" />
+			</Directory>
+		</StandardDirectory>
+
+		<StandardDirectory Id="ProgramMenuFolder">
+			<Directory Id="AppStartMenuFolder" Name="VoiceTyper" />
+		</StandardDirectory>
+
+		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+			<Files Include="$(var.BuildOutput)\**">
+				<Exclude Files="$(var.BuildOutput)\data\settings.json" />
+				<Exclude Files="$(var.BuildOutput)\models\ggml-small.en.bin" />
+				<Exclude Files="$(var.BuildOutput)\models\ggml-medium.en.bin" />
+				<Exclude Files="$(var.BuildOutput)\models\ggml-large-v3-turbo.bin" />
+			</Files>
+		</ComponentGroup>
+
+		<Component Id="SettingsFile" Directory="DataFolder" NeverOverwrite="yes" Permanent="yes" Guid="ADC30D4C-1E7A-473C-A996-34683840F96A">
+			<File Source="$(var.BuildOutput)\data\settings.json" />
+			<RemoveFolder Id="RemoveDataFolder" Directory="DataFolder" On="uninstall" />
+		</Component>
+
+		<Component Id="StartMenuShortcut" Directory="AppStartMenuFolder" Guid="7E8838D4-997D-4D98-B1C8-53AA4E309DE9">
+			<Shortcut
+				Id="VoiceTyperShortcut"
+				Name="VoiceTyper"
+				Target="[INSTALLFOLDER]VoiceTyper.exe"
+				WorkingDirectory="INSTALLFOLDER" />
+			<RemoveFolder Id="RemoveStartMenuFolder" Directory="AppStartMenuFolder" On="uninstall" />
+			<RegistryValue Root="HKCU" Key="Software\VoiceTyper" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+		</Component>
+
+		<Feature Id="MainFeature" Title="VoiceTyper" Level="1">
+			<ComponentGroupRef Id="AppFiles" />
+			<ComponentRef Id="SettingsFile" />
+			<ComponentRef Id="StartMenuShortcut" />
+		</Feature>
+	</Package>
+</Wix>
