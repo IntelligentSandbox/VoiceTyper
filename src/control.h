@@ -265,6 +265,14 @@ toggle_stt_model_load(GlobalState *AppState)
 		printf("[control] toggle_stt_model_load called\n");
 	#endif
 
+	if (AppState->IsRecording || AppState->IsStreaming || AppState->CaptureRunning.load())
+	{
+		#ifdef DEBUG
+			printf("[control] toggle_stt_model_load: busy (recording/streaming/transcribing), ignoring\n");
+		#endif
+		return;
+	}
+
 	if (is_whisper_model_loaded(&AppState->WhisperState))
 	{
 		#ifdef DEBUG

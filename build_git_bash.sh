@@ -2,18 +2,20 @@
 
 export CMAKE_PREFIX_PATH="C:/Qt/6.10.2/msvc2022_64"
 BUILD_TYPE="Release"
-EXTRA_FLAGS=()
+USE_CUDA=OFF
 
 for arg in "$@"; do
 	case "$arg" in
 		debug) BUILD_TYPE="Debug" ;;
-		cuda)
-			export CUDA_PATH="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.2"
-			EXTRA_FLAGS+=("-DVOICETYPER_CUDA=ON")
-			EXTRA_FLAGS+=("-DCUDAToolkit_ROOT=$CUDA_PATH")
-			;;
+		cuda) USE_CUDA=ON ;;
 	esac
 done
+
+EXTRA_FLAGS=("-DVOICETYPER_CUDA=$USE_CUDA")
+if [ "$USE_CUDA" = "ON" ]; then
+	export CUDA_PATH="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.2"
+	EXTRA_FLAGS+=("-DCUDAToolkit_ROOT=$CUDA_PATH")
+fi
 
 mkdir -p build
 cd build
