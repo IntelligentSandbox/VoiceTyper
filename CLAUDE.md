@@ -21,7 +21,7 @@ The application's primary responsibility is facilitating user control of:
 2. Work through tasks in order, top to bottom. Do not skip tasks.
 3. For each task:
    a. Implement the change.
-   b. Verify it passes **both** release and debug builds (`./build_git_bash.sh` then `./build_git_bash.sh debug`) by reading the full build output. You must inspect the entire build output to catch any errors and ensure successful compilation. If a build fails, you will try to debug it and fix the issue.
+   b. Verify it passes **both** release and debug builds (`./build_git_bash.sh` then `./build_git_bash.sh debug`) by reading the full build output. Do NOT tail the build output. You must inspect the entire build output to catch any errors and ensure successful compilation. If a build fails, you will try to debug it and fix the issue.
    c. Commit with: `git add -A && git commit -m "<task title>" -m "<brief description of what was done>"`
       - Use multiple `-m` flags for multiline messages.
       - Never use heredocs or command substitution in git commands.

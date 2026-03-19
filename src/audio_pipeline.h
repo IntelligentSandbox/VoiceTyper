@@ -246,6 +246,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 			AppState->StreamButton->setEnabled(true);
 			AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
 			AppState->AudioInputDropdown->setEnabled(true);
+			AppState->STTModelDropdown->setEnabled(true);
 			AppState->InferenceDeviceDropdown->setEnabled(true);
 		},
 		Qt::QueuedConnection);

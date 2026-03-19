@@ -168,6 +168,7 @@ toggle_recording(GlobalState *AppState)
 		AppState->StreamButton->setEnabled(false);
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREY);
 		AppState->AudioInputDropdown->setEnabled(false);
+		AppState->STTModelDropdown->setEnabled(false);
 		AppState->InferenceDeviceDropdown->setEnabled(false);
 	}
 	else
@@ -205,6 +206,7 @@ cancel_recording(GlobalState *AppState)
 	AppState->RecordButton->setText("Cancelled");
 	AppState->CancelRecordButton->setEnabled(false);
 	AppState->AudioInputDropdown->setEnabled(true);
+	AppState->STTModelDropdown->setEnabled(true);
 	AppState->InferenceDeviceDropdown->setEnabled(true);
 }
 
@@ -246,6 +248,7 @@ toggle_streaming(GlobalState *AppState)
 		AppState->RecordButton->setEnabled(false);
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
 		AppState->AudioInputDropdown->setEnabled(false);
+		AppState->STTModelDropdown->setEnabled(false);
 		AppState->InferenceDeviceDropdown->setEnabled(false);
 	}
 	else
@@ -257,6 +260,7 @@ toggle_streaming(GlobalState *AppState)
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREEN);
 		AppState->RecordButton->setText(record_button_idle_label(AppState));
 		AppState->AudioInputDropdown->setEnabled(true);
+		AppState->STTModelDropdown->setEnabled(true);
 		AppState->InferenceDeviceDropdown->setEnabled(true);
 	}
 

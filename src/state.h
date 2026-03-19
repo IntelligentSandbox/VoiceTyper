@@ -112,6 +112,7 @@ struct GlobalState
 	QPushButton *LoadModelButton;
 	QPushButton *SettingsButton;
 	QComboBox *AudioInputDropdown;
+	QComboBox *STTModelDropdown;
 	QComboBox *InferenceDeviceDropdown;
 
 	// Hotkeys

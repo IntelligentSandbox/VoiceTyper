@@ -432,6 +432,7 @@ init_main_window(GlobalState *AppState)
 		}
 	}
 	GridLayout->addWidget(STTModelSelect, Row++, 0);
+	AppState->STTModelDropdown = STTModelSelect;
 
 	// Load Model Button
 	QPushButton *LoadModelButton = new QPushButton(MainWindow);
