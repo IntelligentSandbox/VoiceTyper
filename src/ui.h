@@ -125,6 +125,7 @@ struct SettingsWindowState
 	// Temporary settings (committed on Save)
 	bool TempPlayRecordSound;
 	bool TempUseCharByCharInjection;
+	int TempWhisperThreadCount;
 
 	// Pointers back into the dialog so callbacks can refresh UI
 	QLabel     *CurrentLabel;
@@ -132,6 +133,7 @@ struct SettingsWindowState
 	QPushButton *ActionButtons[4];
 	QCheckBox  *SoundCheckBox;
 	QCheckBox  *CharByCharCheckBox;
+	QSpinBox   *ThreadCountSpinner;
 };
 
 inline
@@ -179,6 +181,18 @@ open_settings_window(GlobalState *AppState)
 	QCheckBox *CharByCharCheckBox = new QCheckBox("Use character-by-character text injection (instead of paste)", Dialog);
 	Layout->addWidget(CharByCharCheckBox, Row++, 0, 1, 4);
 
+	// CPU Cores for Inference
+	QHBoxLayout *ThreadCountRow = new QHBoxLayout();
+	QLabel *ThreadCountLabel = new QLabel("CPU Cores for Inference:", Dialog);
+	QSpinBox *ThreadCountSpinner = new QSpinBox(Dialog);
+	ThreadCountSpinner->setMinimum(1);
+	ThreadCountSpinner->setMaximum(query_logical_processor_count());
+	ThreadCountSpinner->setValue(AppState->WhisperThreadCount);
+	ThreadCountRow->addWidget(ThreadCountLabel);
+	ThreadCountRow->addWidget(ThreadCountSpinner);
+	ThreadCountRow->addStretch();
+	Layout->addLayout(ThreadCountRow, Row++, 0, 1, 4);
+
 	// Heading
 	QLabel *Heading = new QLabel("Keyboard Shortcuts", Dialog);
 	QFont HeadingFont = Heading->font();
@@ -216,6 +230,7 @@ open_settings_window(GlobalState *AppState)
 	S.ActionButtons[3] = LoadModelBtn;
 	S.SoundCheckBox      = SoundCheckBox;
 	S.CharByCharCheckBox = CharByCharCheckBox;
+	S.ThreadCountSpinner = ThreadCountSpinner;
 
 	// Copy current hotkeys to temp storage
 	S.TempHotkeys[0] = AppState->RecordHotkey;
@@ -224,6 +239,7 @@ open_settings_window(GlobalState *AppState)
 	S.TempHotkeys[3] = AppState->LoadModelHotkey;
 	S.TempPlayRecordSound         = AppState->PlayRecordSound;
 	S.TempUseCharByCharInjection  = AppState->UseCharByCharInjection;
+	S.TempWhisperThreadCount      = AppState->WhisperThreadCount;
 
 	SoundCheckBox->setChecked(S.TempPlayRecordSound);
 	CharByCharCheckBox->setChecked(S.TempUseCharByCharInjection);
@@ -317,6 +333,8 @@ open_settings_window(GlobalState *AppState)
 
 		AppState->UseCharByCharInjection = S.CharByCharCheckBox->isChecked();
 		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
+
+		update_whisper_thread_count(AppState, S.ThreadCountSpinner->value());
 
 		AppState->RecordButton->setText(record_button_idle_label(AppState));
 		AppState->CancelRecordButton->setText(cancel_record_button_idle_label(AppState));
@@ -440,14 +458,6 @@ init_main_window(GlobalState *AppState)
 	GridLayout->addWidget(InferenceDeviceSelect, Row++, 0);
 	AppState->InferenceDeviceDropdown = InferenceDeviceSelect;
 
-	// CPU Cores
-	GridLayout->addWidget(new QLabel("CPU Cores for Inference", MainWindow), Row++, 0);
-	QSpinBox *ThreadCountSpinner = new QSpinBox(MainWindow);
-	ThreadCountSpinner->setMinimum(1);
-	ThreadCountSpinner->setMaximum(query_logical_processor_count());
-	ThreadCountSpinner->setValue(AppState->WhisperThreadCount);
-	GridLayout->addWidget(ThreadCountSpinner, Row++, 0);
-
 	// Settings Button
 	QPushButton *SettingsButton = new QPushButton(MainWindow);
 	SettingsButton->setText("Settings");
@@ -489,11 +499,6 @@ init_main_window(GlobalState *AppState)
 	QObject::connect(InferenceDeviceSelect, &QComboBox::currentIndexChanged, [AppState](int index)
 	{
 		update_inference_device_selection(AppState, index);
-	});
-
-	QObject::connect(ThreadCountSpinner, &QSpinBox::valueChanged, [AppState](int value)
-	{
-		update_whisper_thread_count(AppState, value);
 	});
 
 	QObject::connect(SettingsButton, &QPushButton::clicked, [AppState]()

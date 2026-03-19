@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QGridLayout>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QPlainTextEdit>
 #include <QAudioDevice>
 #include <QMediaDevices>
