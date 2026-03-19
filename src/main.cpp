@@ -23,6 +23,8 @@ int main(int argc, char *argv[])
 	AppState.CaptureRunning = false;
 	AppState.OwnWindow = nullptr;
 	AppState.SettingsButton = nullptr;
+	AppState.AudioInputDropdown = nullptr;
+	AppState.InferenceDeviceDropdown = nullptr;
 	AppState.IsSettingsDialogOpen = false;
 	AppState.PlayRecordSound = false;
 

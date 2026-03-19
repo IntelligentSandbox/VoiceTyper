@@ -384,6 +384,7 @@ init_main_window(GlobalState *AppState)
 	}
 	AudioInputSelect->setSizeAdjustPolicy(QComboBox::AdjustToContents);
 	GridLayout->addWidget(AudioInputSelect, Row++, 0);
+	AppState->AudioInputDropdown = AudioInputSelect;
 
 	// STT Model
 	GridLayout->addWidget(new QLabel("STT Model", MainWindow), Row++, 0);
@@ -437,6 +438,7 @@ init_main_window(GlobalState *AppState)
 			InferenceDeviceSelect->setCurrentIndex(i);
 	}
 	GridLayout->addWidget(InferenceDeviceSelect, Row++, 0);
+	AppState->InferenceDeviceDropdown = InferenceDeviceSelect;
 
 	// CPU Cores
 	GridLayout->addWidget(new QLabel("CPU Cores for Inference", MainWindow), Row++, 0);
