@@ -26,10 +26,49 @@ inline
 void
 update_inference_device_selection(GlobalState *AppState, int Index)
 {
+	int PreviousIndex = AppState->CurrentInferenceDeviceIndex;
 	AppState->CurrentInferenceDeviceIndex = Index;
+
 	#ifdef DEBUG
 		printf("Selected inference device index: %d\n", Index);
 	#endif
+
+	if (Index >= 0 && Index < (int)AppState->InferenceDevices.size())
+		save_string_setting("inference_device", AppState->InferenceDevices[Index].c_str());
+
+	if (PreviousIndex == Index) return;
+	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
+
+	#ifdef DEBUG
+		printf("[control] Inference device changed while model loaded (%d -> %d), reloading\n",
+			PreviousIndex, Index);
+	#endif
+
+	AppState->LoadModelButton->setEnabled(false);
+	AppState->LoadModelButton->setText("Reloading...");
+	AppState->LoadModelButton->repaint();
+	QApplication::processEvents();
+
+	bool Success = load_whisper_model(
+		&AppState->WhisperState, AppState->WhisperState.LoadedModelIndex, Index);
+	AppState->LoadModelButton->setEnabled(true);
+	if (Success)
+	{
+		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
+		AppState->LoadModelButton->setText(
+			QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
+		#ifdef DEBUG
+			printf("[control] Model reloaded on new inference device successfully\n");
+		#endif
+	}
+	else
+	{
+		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
+		AppState->LoadModelButton->setText("Failed to load Model.");
+		#ifdef DEBUG
+			printf("[control] ERROR: Failed to reload model on new inference device\n");
+		#endif
+	}
 }
 
 inline
@@ -66,7 +105,8 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 	AppState->LoadModelButton->repaint();
 	QApplication::processEvents();
 
-	bool Success = load_whisper_model(&AppState->WhisperState, Index);
+	bool Success = load_whisper_model(
+		&AppState->WhisperState, Index, AppState->CurrentInferenceDeviceIndex);
 	AppState->LoadModelButton->setEnabled(true);
 	if (Success)
 	{
@@ -127,6 +167,9 @@ toggle_recording(GlobalState *AppState)
 		AppState->CancelRecordButton->setEnabled(true);
 		AppState->StreamButton->setEnabled(false);
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREY);
+		AppState->AudioInputDropdown->setEnabled(false);
+		AppState->STTModelDropdown->setEnabled(false);
+		AppState->InferenceDeviceDropdown->setEnabled(false);
 	}
 	else
 	{
@@ -162,6 +205,9 @@ cancel_recording(GlobalState *AppState)
 	AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
 	AppState->RecordButton->setText("Cancelled");
 	AppState->CancelRecordButton->setEnabled(false);
+	AppState->AudioInputDropdown->setEnabled(true);
+	AppState->STTModelDropdown->setEnabled(true);
+	AppState->InferenceDeviceDropdown->setEnabled(true);
 }
 
 inline
@@ -201,6 +247,9 @@ toggle_streaming(GlobalState *AppState)
 		AppState->StreamButton->setText(QString("Stop Streaming (%1)").arg(AppState->StreamHotkey.to_label()));
 		AppState->RecordButton->setEnabled(false);
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
+		AppState->AudioInputDropdown->setEnabled(false);
+		AppState->STTModelDropdown->setEnabled(false);
+		AppState->InferenceDeviceDropdown->setEnabled(false);
 	}
 	else
 	{
@@ -210,6 +259,9 @@ toggle_streaming(GlobalState *AppState)
 		AppState->RecordButton->setEnabled(true);
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREEN);
 		AppState->RecordButton->setText(record_button_idle_label(AppState));
+		AppState->AudioInputDropdown->setEnabled(true);
+		AppState->STTModelDropdown->setEnabled(true);
+		AppState->InferenceDeviceDropdown->setEnabled(true);
 	}
 
 	#ifdef DEBUG
@@ -224,6 +276,14 @@ toggle_stt_model_load(GlobalState *AppState)
 	#ifdef DEBUG
 		printf("[control] toggle_stt_model_load called\n");
 	#endif
+
+	if (AppState->IsRecording || AppState->IsStreaming || AppState->CaptureRunning.load())
+	{
+		#ifdef DEBUG
+			printf("[control] toggle_stt_model_load: busy (recording/streaming/transcribing), ignoring\n");
+		#endif
+		return;
+	}
 
 	if (is_whisper_model_loaded(&AppState->WhisperState))
 	{
@@ -255,7 +315,8 @@ toggle_stt_model_load(GlobalState *AppState)
 		AppState->LoadModelButton->setText("Loading...");
 		AppState->LoadModelButton->repaint();
 
-		bool Success = load_whisper_model(&AppState->WhisperState, ModelIdx);
+		bool Success = load_whisper_model(
+			&AppState->WhisperState, ModelIdx, AppState->CurrentInferenceDeviceIndex);
 		AppState->LoadModelButton->setEnabled(true);
 		if (Success)
 		{

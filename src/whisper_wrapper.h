@@ -66,10 +66,11 @@ get_model_path_for_index(int ModelIndex)
 	return WHISPER_MODEL_PATHS[ModelIndex];
 }
 
-// Returns true on success, false on failure
+// Returns true on success, false on failure.
+// InferenceDeviceIndex: 0 = CPU, >= 1 = GPU (CUDA device = InferenceDeviceIndex - 1)
 inline
 bool
-load_whisper_model(WhisperModelState *State, int ModelIndex)
+load_whisper_model(WhisperModelState *State, int ModelIndex, int InferenceDeviceIndex)
 {
 	const char *ModelPath = get_model_path_for_index(ModelIndex);
 
@@ -91,14 +92,19 @@ load_whisper_model(WhisperModelState *State, int ModelIndex)
 		printf("[whisper_wrapper] Loading model from: %s\n", ModelPath);
 	#endif
 
+	bool UseGpu = (InferenceDeviceIndex > 0);
+	int GpuDevice = UseGpu ? (InferenceDeviceIndex - 1) : 0;
+
 	whisper_context_params ContextParams = whisper_context_default_params();
-	ContextParams.use_gpu = false;  // CPU only for now
-	ContextParams.flash_attn = false;
+	ContextParams.use_gpu = UseGpu;
+	ContextParams.flash_attn = UseGpu;
+	ContextParams.gpu_device = GpuDevice;
 
 	#ifdef DEBUG
-		printf("[whisper_wrapper] Context params: use_gpu=%d, flash_attn=%d\n", 
+		printf("[whisper_wrapper] Context params: use_gpu=%d, flash_attn=%d, gpu_device=%d\n",
 				ContextParams.use_gpu,
-				ContextParams.flash_attn);
+				ContextParams.flash_attn,
+				ContextParams.gpu_device);
 		printf("[whisper_wrapper] Initializing whisper context (this may take a moment)...\n");
 	#endif
 

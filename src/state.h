@@ -1,16 +1,38 @@
 #pragma once
 
 #include "qt.h"
-#include "platform_win32.h"
 #include "whisper_wrapper.h"
+
+#ifdef _WIN32
+	#include <windows.h>
+#endif
 
 #include <atomic>
 #include <mutex>
 #include <vector>
 #include <thread>
+#include <string>
+
+#define MAX_AUDIO_DEVICE_NAME_LENGTH 512
+
+struct AudioInputDeviceInfo
+{
+	int Index;
+	std::string Id;
+	std::string Name;
+	bool IsDefault;
+};
+
+#define AUDIO_CAPTURE_SAMPLE_RATE       16000
+#define AUDIO_CAPTURE_CHANNELS          1
+#define AUDIO_CAPTURE_BITS_PER_SAMPLE   16
+#define AUDIO_CAPTURE_BUFFER_MS         100
+#define AUDIO_CAPTURE_BUFFER_COUNT      8
 
 #define WINDOW_DEFAULT_WIDTH 500
 #define WINDOW_DEFAULT_HEIGHT 500
+
+#define APP_ICON_PATH "media/voicetyper-icon.png"
 
 // Represents a user-configurable hotkey as Qt modifier flags + an optional main key.
 // Key == Qt::Key_unknown (0) means the hotkey fires on modifiers alone (e.g. Ctrl+Alt).
@@ -89,6 +111,9 @@ struct GlobalState
 	QPushButton *StreamButton;
 	QPushButton *LoadModelButton;
 	QPushButton *SettingsButton;
+	QComboBox *AudioInputDropdown;
+	QComboBox *STTModelDropdown;
+	QComboBox *InferenceDeviceDropdown;
 
 	// Hotkeys
 	HotkeyConfig RecordHotkey;

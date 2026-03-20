@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QGridLayout>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QPlainTextEdit>
 #include <QAudioDevice>
 #include <QMediaDevices>
@@ -24,3 +25,5 @@
 #include <QMessageBox>
 #include <QCheckBox>
 #include <QStandardItemModel>
+#include <QIcon>
+#include <QPixmap>

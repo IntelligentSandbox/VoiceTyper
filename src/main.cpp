@@ -23,6 +23,8 @@ int main(int argc, char *argv[])
 	AppState.CaptureRunning = false;
 	AppState.OwnWindow = nullptr;
 	AppState.SettingsButton = nullptr;
+	AppState.AudioInputDropdown = nullptr;
+	AppState.InferenceDeviceDropdown = nullptr;
 	AppState.IsSettingsDialogOpen = false;
 	AppState.PlayRecordSound = false;
 
@@ -40,6 +42,11 @@ int main(int argc, char *argv[])
 
 	QtMainWindow.show();
 	AppState.OwnWindow = (HWND)QtMainWindow.winId();
+
+	set_application_icon(&AppState);
+	#ifdef _WIN32
+		set_taskbar_icon(AppState.OwnWindow, APP_ICON_PATH);
+	#endif
 	int exitCode = QtApp.exec();
 
 	stop_hotkey_listener();

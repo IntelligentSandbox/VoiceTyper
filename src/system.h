@@ -9,7 +9,31 @@
 	#include "platform_win32.h"
 #endif
 
+#ifdef VOICETYPER_CUDA
+	#include "ggml-cuda.h"
+#endif
+
 std::atomic<bool> HotkeyThreadRunning = false;
+
+inline
+void
+set_application_icon(GlobalState *AppState)
+{
+	QPixmap Pixmap(APP_ICON_PATH);
+	if (Pixmap.isNull())
+	{
+		#ifdef DEBUG
+			printf("[system] WARNING: Could not load icon from %s\n", APP_ICON_PATH);
+		#endif
+		return;
+	}
+	QIcon Icon(Pixmap);
+	AppState->QtMainWindow->setWindowIcon(Icon);
+	AppState->QtApp->setWindowIcon(Icon);
+	#ifdef DEBUG
+		printf("[system] Application icon set from %s\n", APP_ICON_PATH);
+	#endif
+}
 
 // TODO(warren): A lot of these functions mix WIN32 dependency in them...oh AI.
 // For code quality control, we'll need to split them out eventually...push
@@ -216,8 +240,44 @@ query_inference_devices(GlobalState *AppState)
 	AppState->InferenceDevices.push_back("CPU");
 	AppState->CurrentInferenceDeviceIndex = 0;
 
-	// TODO(warren): In the future, enable GPU support for dedicated cards like NVIDIA
-	// AppState->InferenceDevices.push_back("GPU");
+#ifdef VOICETYPER_CUDA
+	int DeviceCount = ggml_backend_cuda_get_device_count();
+	for (int i = 0; i < DeviceCount; i++)
+	{
+		char Description[128] = {};
+		ggml_backend_cuda_get_device_description(i, Description, sizeof(Description));
+
+		std::string Label = "GPU: ";
+		Label += Description;
+		AppState->InferenceDevices.push_back(Label);
+
+		#ifdef DEBUG
+			size_t FreeMem = 0, TotalMem = 0;
+			ggml_backend_cuda_get_device_memory(i, &FreeMem, &TotalMem);
+			printf("[system] CUDA device %d: %s (%.0f MB free / %.0f MB total)\n",
+				i, Description,
+				(double)FreeMem / (1024.0 * 1024.0),
+				(double)TotalMem / (1024.0 * 1024.0));
+		#endif
+	}
+#endif
+
+	std::string SavedDevice;
+	if (load_string_setting("inference_device", &SavedDevice))
+	{
+		for (int i = 0; i < (int)AppState->InferenceDevices.size(); i++)
+		{
+			if (AppState->InferenceDevices[i] == SavedDevice)
+			{
+				AppState->CurrentInferenceDeviceIndex = i;
+				#ifdef DEBUG
+					printf("[system] Restored inference device: %s (index %d)\n",
+						SavedDevice.c_str(), i);
+				#endif
+				break;
+			}
+		}
+	}
 }
 
 inline
