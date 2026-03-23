@@ -3,10 +3,7 @@
 #include "state.h"
 #include "audio_pipeline.h"
 #include "settings.h"
-
-#ifdef _WIN32
-	#include "platform_win32.h"
-#endif
+#include "sounds.h"
 
 inline
 void

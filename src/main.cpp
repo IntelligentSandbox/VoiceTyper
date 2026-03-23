@@ -44,9 +44,7 @@ int main(int argc, char *argv[])
 	AppState.OwnWindow = (void*)QtMainWindow.winId();
 
 	set_application_icon(&AppState);
-	#ifdef _WIN32
-		set_taskbar_icon((HWND)AppState.OwnWindow, APP_ICON_PATH);
-	#endif
+	platform_set_taskbar_icon(AppState.OwnWindow, APP_ICON_PATH);
 	int exitCode = QtApp.exec();
 
 	stop_hotkey_listener();

@@ -290,27 +290,6 @@ platform_get_exe_dir()
 	return ExeDir.toStdString();
 }
 
-inline
-void
-play_start_recording_sound()
-{
-    Beep(1000, 200);
-}
-
-inline
-void
-play_stop_recording_sound()
-{
-    Beep(800, 200);
-}
-
-inline
-void
-play_cancel_recording_sound()
-{
-    Beep(400, 300);
-}
-
 // ---------------------------------------------------------------------------
 // Win32 audio capture internals
 // ---------------------------------------------------------------------------
@@ -498,6 +477,53 @@ platform_play_sound(int FreqHz, int DurationMs)
 inline bool
 platform_is_key_down(int VirtualKey)
 {
+	if (VirtualKey == VK_LWIN)
+		return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
+		    || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
 	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
+}
+
+inline int
+platform_qt_key_to_native(Qt::Key Key)
+{
+	if (Key == Qt::Key_unknown || Key == 0) return 0;
+
+	// Modifier keys
+	if (Key == Qt::Key_Control) return VK_CONTROL;
+	if (Key == Qt::Key_Alt)     return VK_MENU;
+	if (Key == Qt::Key_Shift)   return VK_SHIFT;
+	if (Key == Qt::Key_Meta)    return VK_LWIN;
+
+	// Function keys
+	if (Key >= Qt::Key_F1 && Key <= Qt::Key_F35)
+		return VK_F1 + (Key - Qt::Key_F1);
+
+	// Letters A-Z
+	if (Key >= Qt::Key_A && Key <= Qt::Key_Z)
+		return 'A' + (Key - Qt::Key_A);
+
+	// Digits 0-9
+	if (Key >= Qt::Key_0 && Key <= Qt::Key_9)
+		return '0' + (Key - Qt::Key_0);
+
+	switch (Key)
+	{
+		case Qt::Key_Space:     return VK_SPACE;
+		case Qt::Key_Return:    return VK_RETURN;
+		case Qt::Key_Escape:    return VK_ESCAPE;
+		case Qt::Key_Tab:       return VK_TAB;
+		case Qt::Key_Backspace: return VK_BACK;
+		case Qt::Key_Delete:    return VK_DELETE;
+		case Qt::Key_Insert:    return VK_INSERT;
+		case Qt::Key_Home:      return VK_HOME;
+		case Qt::Key_End:       return VK_END;
+		case Qt::Key_PageUp:    return VK_PRIOR;
+		case Qt::Key_PageDown:  return VK_NEXT;
+		case Qt::Key_Left:      return VK_LEFT;
+		case Qt::Key_Right:     return VK_RIGHT;
+		case Qt::Key_Up:        return VK_UP;
+		case Qt::Key_Down:      return VK_DOWN;
+		default:                return 0;
+	}
 }
 
