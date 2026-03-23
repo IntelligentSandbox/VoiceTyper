@@ -230,6 +230,9 @@ toggle_streaming(GlobalState *AppState)
 		return;
 	}
 
+	AppState->StreamButton->setEnabled(false);
+	AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREY);
+
 	AppState->IsStreaming = !AppState->IsStreaming;
 
 	if (AppState->IsStreaming)
@@ -238,11 +241,15 @@ toggle_streaming(GlobalState *AppState)
 		if (!Started)
 		{
 			AppState->IsStreaming = false;
+			AppState->StreamButton->setEnabled(true);
+			AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
+			AppState->StreamButton->setText(stream_button_idle_label(AppState));
 			#ifdef DEBUG
 				printf("[control] toggle_streaming: failed to start streaming pipeline\n");
 			#endif
 			return;
 		}
+		AppState->StreamButton->setEnabled(true);
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_RED);
 		AppState->StreamButton->setText(QString("Stop Streaming (%1)").arg(AppState->StreamHotkey.to_label()));
 		AppState->RecordButton->setEnabled(false);
@@ -254,6 +261,7 @@ toggle_streaming(GlobalState *AppState)
 	else
 	{
 		stop_streaming_pipeline(AppState);
+		AppState->StreamButton->setEnabled(true);
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
 		AppState->StreamButton->setText(stream_button_idle_label(AppState));
 		AppState->RecordButton->setEnabled(true);
