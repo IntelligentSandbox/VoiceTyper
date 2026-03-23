@@ -1,5 +1,6 @@
 #pragma once
 
+#include "platform.h"
 #include "state.h"
 
 #include <vector>
@@ -15,16 +16,13 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "propsys.lib")
 
-struct AudioCaptureDevice
-{
-	HWAVEIN Handle;
-	int DeviceIndex;
-	bool IsCapturing;
-};
+// ---------------------------------------------------------------------------
+// Platform interface implementations (declared in platform.h)
+// ---------------------------------------------------------------------------
 
 inline
 std::vector<AudioInputDeviceInfo>
-query_audio_input_devices_native()
+platform_query_audio_devices()
 {
 	std::vector<AudioInputDeviceInfo> Devices;
 
@@ -135,12 +133,9 @@ query_audio_input_devices_native()
 	return Devices;
 }
 
-inline
-void
-inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
+static void
+platform_inject_text_char_by_char(HWND TargetWindow, const char *Utf8Text)
 {
-	if (!TargetWindow || !Utf8Text || Utf8Text[0] == '\0') return;
-
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
 
@@ -171,12 +166,9 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SendInput((UINT)Inputs.size(), Inputs.data(), sizeof(INPUT));
 }
 
-inline
-void
-paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
+static void
+platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text)
 {
-	if (!TargetWindow || !Utf8Text || Utf8Text[0] == '\0') return;
-
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
 
@@ -225,17 +217,35 @@ paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SendInput(6, Inputs, sizeof(INPUT));
 }
 
-inline
-void
-set_taskbar_icon(HWND Window, const char *PngPath)
+inline void
+platform_inject_text(void *Window, const char *Utf8, bool CharByChar)
 {
-	if (!Window || !PngPath) return;
+	HWND HWnd = (HWND)Window;
+	if (!HWnd || !Utf8 || Utf8[0] == '\0') return;
+
+	if (CharByChar)
+		platform_inject_text_char_by_char(HWnd, Utf8);
+	else
+		platform_inject_text_via_paste(HWnd, Utf8);
+}
+
+inline void *
+platform_get_foreground_window()
+{
+	return (void*)GetForegroundWindow();
+}
+
+inline void
+platform_set_taskbar_icon(void *Window, const char *PngPath)
+{
+	HWND HWnd = (HWND)Window;
+	if (!HWnd || !PngPath) return;
 
 	QPixmap Pixmap(PngPath);
 	if (Pixmap.isNull())
 	{
 		#ifdef DEBUG
-			printf("[platform] set_taskbar_icon: failed to load %s\n", PngPath);
+			printf("[platform] platform_set_taskbar_icon: failed to load %s\n", PngPath);
 		#endif
 		return;
 	}
@@ -248,36 +258,73 @@ set_taskbar_icon(HWND Window, const char *PngPath)
 		Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage().toHICON();
 
 	if (BigIcon)
-		SendMessageW(Window, WM_SETICON, ICON_BIG, (LPARAM)BigIcon);
+		SendMessageW(HWnd, WM_SETICON, ICON_BIG, (LPARAM)BigIcon);
 	if (SmallIcon)
-		SendMessageW(Window, WM_SETICON, ICON_SMALL, (LPARAM)SmallIcon);
+		SendMessageW(HWnd, WM_SETICON, ICON_SMALL, (LPARAM)SmallIcon);
 
 	#ifdef DEBUG
-		printf("[platform] set_taskbar_icon: big=%s small=%s\n",
+		printf("[platform] platform_set_taskbar_icon: big=%s small=%s\n",
 			BigIcon ? "ok" : "failed", SmallIcon ? "ok" : "failed");
 	#endif
 }
 
-inline
-const char*
-audio_device_get_name(AudioInputDeviceInfo *Info)
+inline void
+platform_play_sound(int FreqHz, int DurationMs)
 {
-	if (Info)
-	{
-		return Info->Name.c_str();
-	}
-	return "";
+	Beep(FreqHz, DurationMs);
 }
 
-inline
-int
-audio_device_get_index(AudioInputDeviceInfo *Info)
+inline bool
+platform_is_key_down(int VirtualKey)
 {
-	if (Info)
+	if (VirtualKey == VK_LWIN)
+		return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
+		    || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
+}
+
+inline int
+platform_qt_key_to_native(Qt::Key Key)
+{
+	if (Key == Qt::Key_unknown || Key == 0) return 0;
+
+	// Modifier keys
+	if (Key == Qt::Key_Control) return VK_CONTROL;
+	if (Key == Qt::Key_Alt)     return VK_MENU;
+	if (Key == Qt::Key_Shift)   return VK_SHIFT;
+	if (Key == Qt::Key_Meta)    return VK_LWIN;
+
+	// Function keys
+	if (Key >= Qt::Key_F1 && Key <= Qt::Key_F35)
+		return VK_F1 + (Key - Qt::Key_F1);
+
+	// Letters A-Z
+	if (Key >= Qt::Key_A && Key <= Qt::Key_Z)
+		return 'A' + (Key - Qt::Key_A);
+
+	// Digits 0-9
+	if (Key >= Qt::Key_0 && Key <= Qt::Key_9)
+		return '0' + (Key - Qt::Key_0);
+
+	switch (Key)
 	{
-		return Info->Index;
+		case Qt::Key_Space:     return VK_SPACE;
+		case Qt::Key_Return:    return VK_RETURN;
+		case Qt::Key_Escape:    return VK_ESCAPE;
+		case Qt::Key_Tab:       return VK_TAB;
+		case Qt::Key_Backspace: return VK_BACK;
+		case Qt::Key_Delete:    return VK_DELETE;
+		case Qt::Key_Insert:    return VK_INSERT;
+		case Qt::Key_Home:      return VK_HOME;
+		case Qt::Key_End:       return VK_END;
+		case Qt::Key_PageUp:    return VK_PRIOR;
+		case Qt::Key_PageDown:  return VK_NEXT;
+		case Qt::Key_Left:      return VK_LEFT;
+		case Qt::Key_Right:     return VK_RIGHT;
+		case Qt::Key_Up:        return VK_UP;
+		case Qt::Key_Down:      return VK_DOWN;
+		default:                return 0;
 	}
-	return -1;
 }
 
 inline
@@ -322,12 +369,8 @@ wavein_proc(
 	SetEvent(Ctx->ReadyEvent);
 }
 
-// Win32 implementation of platform audio capture.
-// Opens the WaveIn device, queues buffers, starts capture, and pumps completed
-// buffers into AppState->AudioAccumBuffer until CaptureRunning goes false.
-// Caller is responsible for setting CaptureRunning before calling.
-static bool
-run_platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+inline bool
+platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 {
 	const int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
 
@@ -429,101 +472,3 @@ run_platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 	#endif
 	return true;
 }
-
-// ---------------------------------------------------------------------------
-// Platform interface implementations (declared in platform.h)
-// ---------------------------------------------------------------------------
-
-inline bool
-platform_audio_capture(GlobalState *AppState, int DeviceIndex)
-{
-	return run_platform_audio_capture(AppState, DeviceIndex);
-}
-
-inline std::vector<AudioInputDeviceInfo>
-platform_query_audio_devices()
-{
-	return query_audio_input_devices_native();
-}
-
-inline void
-platform_inject_text(void *Window, const char *Utf8, bool CharByChar)
-{
-	HWND HWnd = (HWND)Window;
-	if (CharByChar)
-		inject_text_to_window(HWnd, Utf8);
-	else
-		paste_text_to_window(HWnd, Utf8);
-}
-
-inline void *
-platform_get_foreground_window()
-{
-	return (void*)GetForegroundWindow();
-}
-
-inline void
-platform_set_taskbar_icon(void *Window, const char *PngPath)
-{
-	set_taskbar_icon((HWND)Window, PngPath);
-}
-
-inline void
-platform_play_sound(int FreqHz, int DurationMs)
-{
-	Beep(FreqHz, DurationMs);
-}
-
-inline bool
-platform_is_key_down(int VirtualKey)
-{
-	if (VirtualKey == VK_LWIN)
-		return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
-		    || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
-	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
-}
-
-inline int
-platform_qt_key_to_native(Qt::Key Key)
-{
-	if (Key == Qt::Key_unknown || Key == 0) return 0;
-
-	// Modifier keys
-	if (Key == Qt::Key_Control) return VK_CONTROL;
-	if (Key == Qt::Key_Alt)     return VK_MENU;
-	if (Key == Qt::Key_Shift)   return VK_SHIFT;
-	if (Key == Qt::Key_Meta)    return VK_LWIN;
-
-	// Function keys
-	if (Key >= Qt::Key_F1 && Key <= Qt::Key_F35)
-		return VK_F1 + (Key - Qt::Key_F1);
-
-	// Letters A-Z
-	if (Key >= Qt::Key_A && Key <= Qt::Key_Z)
-		return 'A' + (Key - Qt::Key_A);
-
-	// Digits 0-9
-	if (Key >= Qt::Key_0 && Key <= Qt::Key_9)
-		return '0' + (Key - Qt::Key_0);
-
-	switch (Key)
-	{
-		case Qt::Key_Space:     return VK_SPACE;
-		case Qt::Key_Return:    return VK_RETURN;
-		case Qt::Key_Escape:    return VK_ESCAPE;
-		case Qt::Key_Tab:       return VK_TAB;
-		case Qt::Key_Backspace: return VK_BACK;
-		case Qt::Key_Delete:    return VK_DELETE;
-		case Qt::Key_Insert:    return VK_INSERT;
-		case Qt::Key_Home:      return VK_HOME;
-		case Qt::Key_End:       return VK_END;
-		case Qt::Key_PageUp:    return VK_PRIOR;
-		case Qt::Key_PageDown:  return VK_NEXT;
-		case Qt::Key_Left:      return VK_LEFT;
-		case Qt::Key_Right:     return VK_RIGHT;
-		case Qt::Key_Up:        return VK_UP;
-		case Qt::Key_Down:      return VK_DOWN;
-		default:                return 0;
-	}
-}
-
