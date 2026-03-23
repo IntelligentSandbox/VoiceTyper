@@ -23,6 +23,12 @@
 // Minimum RMS energy to bother sending a chunk to whisper (streaming mode).
 #define PIPELINE_SILENCE_RMS_THRESHOLD 0.002f
 
+// How often (ms) the stream inference thread polls the audio buffer for energy levels.
+#define STREAM_POLL_INTERVAL_MS 100
+
+// RMS energy threshold for classifying a poll interval as speech vs silence.
+#define STREAM_SPEECH_RMS_THRESHOLD 0.002f
+
 // ---------------------------------------------------------------------------
 // Platform audio capture interface
 // ---------------------------------------------------------------------------
@@ -145,26 +151,30 @@ stream_infer_thread(GlobalState *AppState)
 	whisper_full_params Params = make_whisper_params(AppState);
 	Params.single_segment      = true;
 
+	bool InSpeech = false;
+
 	#ifdef DEBUG
 		printf("[audio_pipeline] Stream inference thread started\n");
 	#endif
 
 	while (AppState->CaptureRunning.load())
 	{
-		Sleep(3000);
-
-		if (!AppState->CaptureRunning.load())
-		{
-			break;
-		}
+		Sleep(STREAM_POLL_INTERVAL_MS);
+		if (!AppState->CaptureRunning.load()) break;
 
 		std::vector<float> Chunk;
 		{
 			std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-			if ((int)AppState->AudioAccumBuffer.size() < PIPELINE_STREAM_CHUNK_SAMPLES)
-			{
-				continue;
-			}
+			int BufferSize = (int)AppState->AudioAccumBuffer.size();
+			if (BufferSize == 0) continue;
+
+			int RecentCount = AUDIO_CAPTURE_SAMPLE_RATE * STREAM_POLL_INTERVAL_MS / 1000;
+			if (RecentCount > BufferSize) RecentCount = BufferSize;
+			float CurrentRms = compute_rms(
+				AppState->AudioAccumBuffer.data() + BufferSize - RecentCount, RecentCount);
+			InSpeech = CurrentRms >= STREAM_SPEECH_RMS_THRESHOLD;
+
+			if (BufferSize < PIPELINE_STREAM_CHUNK_SAMPLES) continue;
 
 			Chunk = std::move(AppState->AudioAccumBuffer);
 			AppState->AudioAccumBuffer.clear();
