@@ -1,6 +1,7 @@
 #include "state.h"
 #include "control.h"
 
+#include <chrono>
 #include <thread>
 #include <atomic>
 
@@ -143,7 +144,7 @@ hotkey_thread_func(GlobalState *AppState)
 			// Skip all hotkey checks if the settings dialog is open (remapping mode)
 			if (AppState->IsSettingsDialogOpen)
 			{
-				Sleep(10);
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				continue;
 			}
 
@@ -188,7 +189,7 @@ hotkey_thread_func(GlobalState *AppState)
 			CancelRecordKeyWasDown = CancelRecordKeyIsDown;
 			StreamKeyWasDown       = StreamKeyIsDown;
 			LoadModelKeyWasDown    = LoadModelKeyIsDown;
-			Sleep(1);
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		#endif
 	}
 }

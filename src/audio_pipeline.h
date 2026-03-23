@@ -8,6 +8,7 @@
 
 #include <cstdio>
 #include <cmath>
+#include <chrono>
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -164,7 +165,7 @@ stream_infer_thread(GlobalState *AppState)
 
 	while (AppState->CaptureRunning.load())
 	{
-		Sleep(STREAM_POLL_INTERVAL_MS);
+		std::this_thread::sleep_for(std::chrono::milliseconds(STREAM_POLL_INTERVAL_MS));
 		if (!AppState->CaptureRunning.load()) break;
 
 		std::vector<float> Chunk;
