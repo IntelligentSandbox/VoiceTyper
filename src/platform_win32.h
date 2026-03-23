@@ -450,3 +450,54 @@ run_platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 	#endif
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// Platform interface implementations (declared in platform.h)
+// ---------------------------------------------------------------------------
+
+inline bool
+platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+{
+	return run_platform_audio_capture(AppState, DeviceIndex);
+}
+
+inline std::vector<AudioInputDeviceInfo>
+platform_query_audio_devices()
+{
+	return query_audio_input_devices_native();
+}
+
+inline void
+platform_inject_text(void *Window, const char *Utf8, bool CharByChar)
+{
+	HWND HWnd = (HWND)Window;
+	if (CharByChar)
+		inject_text_to_window(HWnd, Utf8);
+	else
+		paste_text_to_window(HWnd, Utf8);
+}
+
+inline void *
+platform_get_foreground_window()
+{
+	return (void*)GetForegroundWindow();
+}
+
+inline void
+platform_set_taskbar_icon(void *Window, const char *PngPath)
+{
+	set_taskbar_icon((HWND)Window, PngPath);
+}
+
+inline void
+platform_play_sound(int FreqHz, int DurationMs)
+{
+	Beep(FreqHz, DurationMs);
+}
+
+inline bool
+platform_is_key_down(int VirtualKey)
+{
+	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
+}
+

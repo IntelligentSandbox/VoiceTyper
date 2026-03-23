@@ -4,6 +4,10 @@
 #include "audio_pipeline.h"
 #include "settings.h"
 
+#ifdef _WIN32
+	#include "platform_win32.h"
+#endif
+
 inline
 void
 update_audio_input_selection(GlobalState *AppState, int Index)

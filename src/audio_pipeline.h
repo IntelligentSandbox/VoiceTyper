@@ -2,9 +2,7 @@
 
 #include "state.h"
 
-#ifdef _WIN32
-	#include "platform_win32.h"
-#endif
+#include "platform.h"
 
 #include <cstdio>
 #include <cmath>
@@ -38,7 +36,7 @@
 // ---------------------------------------------------------------------------
 // Platform audio capture interface
 // ---------------------------------------------------------------------------
-// bool run_platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+// bool platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 //
 // Platform-specific function that opens the audio capture device at the given
 // index, captures PCM audio, converts to float samples, and appends them to
@@ -130,20 +128,15 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 
 	if (!Transcription.empty())
 	{
-		HWND TargetWindow = GetForegroundWindow();
-		if ((void*)TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
+		void *TargetWindow = platform_get_foreground_window();
+		if (TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
 		#ifdef DEBUG
 			printf("[transcription] %s\n", Transcription.c_str());
 		#else
 			if (!TargetWindow)
 				printf("[transcription] %s\n", Transcription.c_str());
 		#endif
-		#ifdef _WIN32
-			if (AppState->UseCharByCharInjection)
-				inject_text_to_window(TargetWindow, Transcription.c_str());
-			else
-				paste_text_to_window(TargetWindow, Transcription.c_str());
-		#endif
+		platform_inject_text(TargetWindow, Transcription.c_str(), AppState->UseCharByCharInjection);
 	}
 }
 
@@ -215,7 +208,7 @@ static void
 streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
 	std::thread InferThread(stream_infer_thread, AppState);
-	run_platform_audio_capture(AppState, DeviceIndex);
+	platform_audio_capture(AppState, DeviceIndex);
 	InferThread.join();
 }
 
@@ -226,7 +219,7 @@ streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 static void
 record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
-	run_platform_audio_capture(AppState, DeviceIndex);
+	platform_audio_capture(AppState, DeviceIndex);
 
 	bool Cancelled = AppState->CancelRequested.load();
 	AppState->CancelRequested.store(false);
