@@ -18,6 +18,8 @@ query_logical_processor_count()
 	#include "platform_win32.h"
 #endif
 
+#include "settings.h"
+
 #ifdef VOICETYPER_CUDA
 	#include "ggml-cuda.h"
 #endif

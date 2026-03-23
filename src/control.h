@@ -2,6 +2,7 @@
 
 #include "state.h"
 #include "audio_pipeline.h"
+#include "settings.h"
 
 inline
 void
