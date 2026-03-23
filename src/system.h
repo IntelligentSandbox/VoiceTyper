@@ -5,6 +5,14 @@
 #include <thread>
 #include <atomic>
 
+inline
+int
+query_logical_processor_count()
+{
+	unsigned int Count = std::thread::hardware_concurrency();
+	return (Count > 0) ? (int)Count : 1;
+}
+
 #ifdef _WIN32
 	#include <windows.h>
 	#include "platform_win32.h"

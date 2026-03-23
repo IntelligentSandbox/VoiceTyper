@@ -226,15 +226,6 @@ paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
 }
 
 inline
-int
-query_logical_processor_count()
-{
-	SYSTEM_INFO SysInfo = {};
-	GetSystemInfo(&SysInfo);
-	return (int)SysInfo.dwNumberOfProcessors;
-}
-
-inline
 void
 set_taskbar_icon(HWND Window, const char *PngPath)
 {

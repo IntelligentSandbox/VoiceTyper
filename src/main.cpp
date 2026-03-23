@@ -1,6 +1,6 @@
 #include "state.h"
-#include "ui.h"
 #include "system.h"
+#include "ui.h"
 #include "audio_pipeline.h"
 
 int main(int argc, char *argv[])
