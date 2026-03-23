@@ -41,11 +41,11 @@ int main(int argc, char *argv[])
 	init_ui(&AppState);
 
 	QtMainWindow.show();
-	AppState.OwnWindow = (HWND)QtMainWindow.winId();
+	AppState.OwnWindow = (void*)QtMainWindow.winId();
 
 	set_application_icon(&AppState);
 	#ifdef _WIN32
-		set_taskbar_icon(AppState.OwnWindow, APP_ICON_PATH);
+		set_taskbar_icon((HWND)AppState.OwnWindow, APP_ICON_PATH);
 	#endif
 	int exitCode = QtApp.exec();
 

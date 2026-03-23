@@ -131,7 +131,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	if (!Transcription.empty())
 	{
 		HWND TargetWindow = GetForegroundWindow();
-		if (TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
+		if ((void*)TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
 		#ifdef DEBUG
 			printf("[transcription] %s\n", Transcription.c_str());
 		#else
