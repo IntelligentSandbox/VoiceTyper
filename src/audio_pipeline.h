@@ -16,11 +16,7 @@
 
 #define VAD_MODEL_PATH "models/ggml-silero-v5.1.2.bin"
 
-// Streaming pipeline: how many samples to accumulate before each inference pass.
-// 16000 samples/sec * 3 sec = 48000 samples.
-#define PIPELINE_STREAM_CHUNK_SAMPLES (AUDIO_CAPTURE_SAMPLE_RATE * 3)
-
-// Minimum RMS energy to bother sending a chunk to whisper (streaming mode).
+// Minimum RMS energy to bother sending a chunk to whisper.
 #define PIPELINE_SILENCE_RMS_THRESHOLD 0.002f
 
 // How often (ms) the stream inference thread polls the audio buffer for energy levels.
@@ -28,6 +24,15 @@
 
 // RMS energy threshold for classifying a poll interval as speech vs silence.
 #define STREAM_SPEECH_RMS_THRESHOLD 0.002f
+
+// Minimum chunk duration (ms) before a speech→silence transition can trigger a cutoff.
+#define STREAM_MIN_CHUNK_DURATION_MS 1000
+
+// Maximum chunk duration (ms); forces a cutoff even during continuous speech.
+#define STREAM_MAX_CHUNK_DURATION_MS 10000
+
+// How long silence (ms) must persist after speech before cutting the chunk.
+#define STREAM_SILENCE_DURATION_MS 500
 
 // ---------------------------------------------------------------------------
 // Platform audio capture interface
@@ -151,7 +156,7 @@ stream_infer_thread(GlobalState *AppState)
 	whisper_full_params Params = make_whisper_params(AppState);
 	Params.single_segment      = true;
 
-	bool InSpeech = false;
+	int SilenceMs = 0;
 
 	#ifdef DEBUG
 		printf("[audio_pipeline] Stream inference thread started\n");
@@ -172,12 +177,29 @@ stream_infer_thread(GlobalState *AppState)
 			if (RecentCount > BufferSize) RecentCount = BufferSize;
 			float CurrentRms = compute_rms(
 				AppState->AudioAccumBuffer.data() + BufferSize - RecentCount, RecentCount);
-			InSpeech = CurrentRms >= STREAM_SPEECH_RMS_THRESHOLD;
 
-			if (BufferSize < PIPELINE_STREAM_CHUNK_SAMPLES) continue;
+			if (CurrentRms >= STREAM_SPEECH_RMS_THRESHOLD)
+				SilenceMs = 0;
+			else
+				SilenceMs += STREAM_POLL_INTERVAL_MS;
+
+			int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
+			bool ShouldCut = false;
+
+			if (SilenceMs >= STREAM_SILENCE_DURATION_MS &&
+				BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS)
+			{
+				ShouldCut = true;
+			}
+
+			if (BufferDurationMs >= STREAM_MAX_CHUNK_DURATION_MS)
+				ShouldCut = true;
+
+			if (!ShouldCut) continue;
 
 			Chunk = std::move(AppState->AudioAccumBuffer);
 			AppState->AudioAccumBuffer.clear();
+			SilenceMs = 0;
 		}
 
 		run_whisper_on_chunk(AppState, Params, Chunk);
