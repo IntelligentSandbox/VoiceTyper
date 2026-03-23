@@ -5,7 +5,7 @@
 
 int main(int argc, char *argv[])
 {
-	#ifdef DEBUG
+	#if defined(DEBUG) && defined(_WIN32)
 		if (!AttachConsole(ATTACH_PARENT_PROCESS)) AllocConsole();
 		freopen("CONOUT$", "w", stdout);
 		freopen("CONOUT$", "w", stderr);
