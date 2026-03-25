@@ -99,19 +99,5 @@ if(WIN32)
     )
     if(VOICETYPER_CUDA)
         find_package(CUDAToolkit REQUIRED)
-        set(CUDA_DLL_DIR "${CUDAToolkit_BIN_DIR}")
-        if(EXISTS "${CUDAToolkit_BIN_DIR}/x64")
-            set(CUDA_DLL_DIR "${CUDAToolkit_BIN_DIR}/x64")
-        endif()
-        set(CUDA_DLLS
-            "${CUDA_DLL_DIR}/cublas64_${CUDAToolkit_VERSION_MAJOR}.dll"
-            "${CUDA_DLL_DIR}/cublasLt64_${CUDAToolkit_VERSION_MAJOR}.dll"
-        )
-        foreach(DLL ${CUDA_DLLS})
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-                COMMENT "Copying ${DLL}"
-            )
-        endforeach()
     endif()
 endif()

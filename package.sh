@@ -5,6 +5,8 @@ set -e
 VERSION=$(cat VERSION | tr -d '[:space:]')
 DIST_DIR="dist"
 
+rm -rf build/Release
+rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
 # --- CUDA build ---
@@ -17,7 +19,7 @@ CUDA_MSI="$DIST_DIR/voicetyper-v${VERSION}-cuda.msi"
 
 echo ""
 echo "=== Creating $CUDA_ZIP ==="
-tar -acf "$CUDA_ZIP" -C build/Release .
+cd build/Release && 7z a -tzip "../../$CUDA_ZIP" -r . > /dev/null && cd ../..
 
 echo ""
 echo "=== Building $CUDA_MSI ==="
@@ -39,7 +41,7 @@ CPU_MSI="$DIST_DIR/voicetyper-v${VERSION}-cpu.msi"
 
 echo ""
 echo "=== Creating $CPU_ZIP ==="
-tar -acf "$CPU_ZIP" -C build/Release .
+cd build/Release && 7z a -tzip "../../$CPU_ZIP" -r . > /dev/null && cd ../..
 
 echo ""
 echo "=== Building $CPU_MSI ==="
