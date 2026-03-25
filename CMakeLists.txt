@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
-project(VoiceTyper VERSION 1.0.0 LANGUAGES C CXX)
+
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" VOICETYPER_VERSION)
+string(STRIP "${VOICETYPER_VERSION}" VOICETYPER_VERSION)
+
+project(VoiceTyper VERSION ${VOICETYPER_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,6 +54,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
     $<$<BOOL:${VOICETYPER_CUDA}>:VOICETYPER_CUDA>
+    VOICETYPER_VERSION="${VOICETYPER_VERSION}"
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -102,6 +107,14 @@ if(WIN32)
             "${CUDA_DLL_DIR}/cublas64_${CUDAToolkit_VERSION_MAJOR}.dll"
             "${CUDA_DLL_DIR}/cublasLt64_${CUDAToolkit_VERSION_MAJOR}.dll"
             "${CUDA_DLL_DIR}/cudart64_${CUDAToolkit_VERSION_MAJOR}.dll"
+        )
+        file(GLOB CUDA_DLLS_NVJITLINK "${CUDA_DLL_DIR}/nvJitLink*.dll")
+        file(GLOB CUDA_DLLS_NVFATBIN  "${CUDA_DLL_DIR}/nvfatbin*.dll")
+        file(GLOB CUDA_DLLS_NVRTC     "${CUDA_DLL_DIR}/nvrtc*.dll")
+        list(APPEND CUDA_DLLS
+            ${CUDA_DLLS_NVJITLINK}
+            ${CUDA_DLLS_NVFATBIN}
+            ${CUDA_DLLS_NVRTC}
         )
         foreach(DLL ${CUDA_DLLS})
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
