@@ -4,3 +4,4 @@ compile_commands.json
 models/
 docs/tasks.md
 .claude/settings.local.json
+dist/
