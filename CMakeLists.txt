@@ -106,15 +106,6 @@ if(WIN32)
         set(CUDA_DLLS
             "${CUDA_DLL_DIR}/cublas64_${CUDAToolkit_VERSION_MAJOR}.dll"
             "${CUDA_DLL_DIR}/cublasLt64_${CUDAToolkit_VERSION_MAJOR}.dll"
-            "${CUDA_DLL_DIR}/cudart64_${CUDAToolkit_VERSION_MAJOR}.dll"
-        )
-        file(GLOB CUDA_DLLS_NVJITLINK "${CUDA_DLL_DIR}/nvJitLink*.dll")
-        file(GLOB CUDA_DLLS_NVFATBIN  "${CUDA_DLL_DIR}/nvfatbin*.dll")
-        file(GLOB CUDA_DLLS_NVRTC     "${CUDA_DLL_DIR}/nvrtc*.dll")
-        list(APPEND CUDA_DLLS
-            ${CUDA_DLLS_NVJITLINK}
-            ${CUDA_DLLS_NVFATBIN}
-            ${CUDA_DLLS_NVRTC}
         )
         foreach(DLL ${CUDA_DLLS})
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
