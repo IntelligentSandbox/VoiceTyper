@@ -8,7 +8,7 @@ PRODUCT_VERSION=$(cat VERSION | tr -d '[:space:]')
 
 echo ""
 echo "=== Building MSI installer ==="
-wix build -o "$MSI_OUTPUT" -d "BuildOutput=$(pwd)/$BUILD_OUTPUT" -d "ProductVersion=$PRODUCT_VERSION" packaging/VoiceTyper.wxs
+wix build -o "$MSI_OUTPUT" -pdbtype none -d "BuildOutput=$(pwd)/$BUILD_OUTPUT" -d "ProductVersion=$PRODUCT_VERSION" packaging/VoiceTyper.wxs
 
 echo ""
 echo "=== Done ==="
