@@ -2,12 +2,11 @@
 
 #include "state.h"
 
-#ifdef _WIN32
-	#include "platform_win32.h"
-#endif
+#include "platform.h"
 
 #include <cstdio>
 #include <cmath>
+#include <chrono>
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -16,17 +15,28 @@
 
 #define VAD_MODEL_PATH "models/ggml-silero-v5.1.2.bin"
 
-// Streaming pipeline: how many samples to accumulate before each inference pass.
-// 16000 samples/sec * 3 sec = 48000 samples.
-#define PIPELINE_STREAM_CHUNK_SAMPLES (AUDIO_CAPTURE_SAMPLE_RATE * 3)
-
-// Minimum RMS energy to bother sending a chunk to whisper (streaming mode).
+// Minimum RMS energy to bother sending a chunk to whisper.
 #define PIPELINE_SILENCE_RMS_THRESHOLD 0.002f
+
+// How often (ms) the stream inference thread polls the audio buffer for energy levels.
+#define STREAM_POLL_INTERVAL_MS 100
+
+// RMS energy threshold for classifying a poll interval as speech vs silence.
+#define STREAM_SPEECH_RMS_THRESHOLD 0.002f
+
+// Minimum chunk duration (ms) before a speech→silence transition can trigger a cutoff.
+#define STREAM_MIN_CHUNK_DURATION_MS 1000
+
+// Maximum chunk duration (ms); forces a cutoff even during continuous speech.
+#define STREAM_MAX_CHUNK_DURATION_MS 10000
+
+// How long silence (ms) must persist after speech before cutting the chunk.
+#define STREAM_SILENCE_DURATION_MS 500
 
 // ---------------------------------------------------------------------------
 // Platform audio capture interface
 // ---------------------------------------------------------------------------
-// bool run_platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+// bool platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 //
 // Platform-specific function that opens the audio capture device at the given
 // index, captures PCM audio, converts to float samples, and appends them to
@@ -118,7 +128,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 
 	if (!Transcription.empty())
 	{
-		HWND TargetWindow = GetForegroundWindow();
+		void *TargetWindow = platform_get_foreground_window();
 		if (TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
 		#ifdef DEBUG
 			printf("[transcription] %s\n", Transcription.c_str());
@@ -126,12 +136,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 			if (!TargetWindow)
 				printf("[transcription] %s\n", Transcription.c_str());
 		#endif
-		#ifdef _WIN32
-			if (AppState->UseCharByCharInjection)
-				inject_text_to_window(TargetWindow, Transcription.c_str());
-			else
-				paste_text_to_window(TargetWindow, Transcription.c_str());
-		#endif
+		platform_inject_text(TargetWindow, Transcription.c_str(), AppState->UseCharByCharInjection);
 	}
 }
 
@@ -145,29 +150,50 @@ stream_infer_thread(GlobalState *AppState)
 	whisper_full_params Params = make_whisper_params(AppState);
 	Params.single_segment      = true;
 
+	int SilenceMs = 0;
+
 	#ifdef DEBUG
 		printf("[audio_pipeline] Stream inference thread started\n");
 	#endif
 
 	while (AppState->CaptureRunning.load())
 	{
-		Sleep(3000);
-
-		if (!AppState->CaptureRunning.load())
-		{
-			break;
-		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(STREAM_POLL_INTERVAL_MS));
+		if (!AppState->CaptureRunning.load()) break;
 
 		std::vector<float> Chunk;
 		{
 			std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-			if ((int)AppState->AudioAccumBuffer.size() < PIPELINE_STREAM_CHUNK_SAMPLES)
+			int BufferSize = (int)AppState->AudioAccumBuffer.size();
+			if (BufferSize == 0) continue;
+
+			int RecentCount = AUDIO_CAPTURE_SAMPLE_RATE * STREAM_POLL_INTERVAL_MS / 1000;
+			if (RecentCount > BufferSize) RecentCount = BufferSize;
+			float CurrentRms = compute_rms(
+				AppState->AudioAccumBuffer.data() + BufferSize - RecentCount, RecentCount);
+
+			if (CurrentRms >= STREAM_SPEECH_RMS_THRESHOLD)
+				SilenceMs = 0;
+			else
+				SilenceMs += STREAM_POLL_INTERVAL_MS;
+
+			int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
+			bool ShouldCut = false;
+
+			if (SilenceMs >= STREAM_SILENCE_DURATION_MS &&
+				BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS)
 			{
-				continue;
+				ShouldCut = true;
 			}
+
+			if (BufferDurationMs >= STREAM_MAX_CHUNK_DURATION_MS)
+				ShouldCut = true;
+
+			if (!ShouldCut) continue;
 
 			Chunk = std::move(AppState->AudioAccumBuffer);
 			AppState->AudioAccumBuffer.clear();
+			SilenceMs = 0;
 		}
 
 		run_whisper_on_chunk(AppState, Params, Chunk);
@@ -182,7 +208,7 @@ static void
 streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
 	std::thread InferThread(stream_infer_thread, AppState);
-	run_platform_audio_capture(AppState, DeviceIndex);
+	platform_audio_capture(AppState, DeviceIndex);
 	InferThread.join();
 }
 
@@ -193,7 +219,7 @@ streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 static void
 record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
-	run_platform_audio_capture(AppState, DeviceIndex);
+	platform_audio_capture(AppState, DeviceIndex);
 
 	bool Cancelled = AppState->CancelRequested.load();
 	AppState->CancelRequested.store(false);

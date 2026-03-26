@@ -5,6 +5,7 @@ You are running on **Windows 11** in **Git Bash** (MSYS2) — not cmd.exe or Pow
 You are always ran from the root dir of this project.
 Use Unix commands and forward slashes for paths: `ls`, `cp`, `mv`.
 Reference paths using relative paths like `./src/audio_pipeline.h`.
+All paths will be linux style under git bash: `/c/dir1/dir2`.
 
 ## Project Overview
 This is a voice typing application that runs as a native application on the host OS.

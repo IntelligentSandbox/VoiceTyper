@@ -1,11 +1,11 @@
 #include "state.h"
-#include "ui.h"
 #include "system.h"
+#include "ui.h"
 #include "audio_pipeline.h"
 
 int main(int argc, char *argv[])
 {
-	#ifdef DEBUG
+	#if defined(DEBUG) && defined(_WIN32)
 		if (!AttachConsole(ATTACH_PARENT_PROCESS)) AllocConsole();
 		freopen("CONOUT$", "w", stdout);
 		freopen("CONOUT$", "w", stderr);
@@ -41,12 +41,10 @@ int main(int argc, char *argv[])
 	init_ui(&AppState);
 
 	QtMainWindow.show();
-	AppState.OwnWindow = (HWND)QtMainWindow.winId();
+	AppState.OwnWindow = (void*)QtMainWindow.winId();
 
 	set_application_icon(&AppState);
-	#ifdef _WIN32
-		set_taskbar_icon(AppState.OwnWindow, APP_ICON_PATH);
-	#endif
+	platform_set_taskbar_icon(AppState.OwnWindow, APP_ICON_PATH);
 	int exitCode = QtApp.exec();
 
 	stop_hotkey_listener();

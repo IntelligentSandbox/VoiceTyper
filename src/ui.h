@@ -173,6 +173,19 @@ open_settings_window(GlobalState *AppState)
 	QGridLayout *Layout = new QGridLayout(Dialog);
 	int Row = 0;
 
+#ifdef VOICETYPER_CUDA
+	QLabel *VersionLabel = new QLabel(QString("v%1 CUDA").arg(VOICETYPER_VERSION), Dialog);
+#else
+	QLabel *VersionLabel = new QLabel(QString("v%1 CPU").arg(VOICETYPER_VERSION), Dialog);
+#endif
+	VersionLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+	QFont VersionFont = VersionLabel->font();
+	VersionFont.setPointSize(8);
+	VersionFont.setWeight(QFont::Normal);
+	VersionLabel->setFont(VersionFont);
+	VersionLabel->setStyleSheet("color: gray;");
+	Layout->addWidget(VersionLabel, Row++, 0, 1, 4);
+
 	// Sound checkbox
 	QCheckBox *SoundCheckBox = new QCheckBox("Play sound when starting/stopping recording", Dialog);
 	Layout->addWidget(SoundCheckBox, Row++, 0, 1, 4);
@@ -273,6 +286,7 @@ open_settings_window(GlobalState *AppState)
 	Layout->addWidget(SetButton,   Row, 0);
 	Layout->addWidget(SaveButton,   Row, 1);
 	Layout->addWidget(CancelButton, Row, 2);
+	Row++;
 
 	// Select Record by default to prime the UI
 	settings_select_action(&S, 0);

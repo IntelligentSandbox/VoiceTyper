@@ -4,13 +4,11 @@ set -e
 
 BUILD_OUTPUT="build/Release"
 MSI_OUTPUT="build/VoiceTyper.msi"
-
-echo "=== Building VoiceTyper release ==="
-./build_git_bash.sh
+PRODUCT_VERSION=$(cat VERSION | tr -d '[:space:]')
 
 echo ""
 echo "=== Building MSI installer ==="
-wix build -o "$MSI_OUTPUT" -d "BuildOutput=$(pwd)/$BUILD_OUTPUT" packaging/VoiceTyper.wxs
+wix build -o "$MSI_OUTPUT" -pdbtype none -d "BuildOutput=$(pwd)/$BUILD_OUTPUT" -d "ProductVersion=$PRODUCT_VERSION" packaging/VoiceTyper.wxs
 
 echo ""
 echo "=== Done ==="

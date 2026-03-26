@@ -3,10 +3,6 @@
 #include "qt.h"
 #include "whisper_wrapper.h"
 
-#ifdef _WIN32
-	#include <windows.h>
-#endif
-
 #include <atomic>
 #include <mutex>
 #include <vector>
@@ -154,7 +150,7 @@ struct GlobalState
 	int WhisperThreadCount;
 
 	// Our own main window handle — used to exclude self when doing just-in-time target lookup.
-	HWND OwnWindow;
+	void *OwnWindow;
 
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;

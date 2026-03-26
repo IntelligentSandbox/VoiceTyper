@@ -1,5 +1,6 @@
 #pragma once
 
+#include "platform.h"
 #include "state.h"
 
 #include <vector>
@@ -15,16 +16,13 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "propsys.lib")
 
-struct AudioCaptureDevice
-{
-	HWAVEIN Handle;
-	int DeviceIndex;
-	bool IsCapturing;
-};
+// ---------------------------------------------------------------------------
+// Platform interface implementations (declared in platform.h)
+// ---------------------------------------------------------------------------
 
 inline
 std::vector<AudioInputDeviceInfo>
-query_audio_input_devices_native()
+platform_query_audio_devices()
 {
 	std::vector<AudioInputDeviceInfo> Devices;
 
@@ -135,12 +133,9 @@ query_audio_input_devices_native()
 	return Devices;
 }
 
-inline
-void
-inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
+static void
+platform_inject_text_char_by_char(HWND TargetWindow, const char *Utf8Text)
 {
-	if (!TargetWindow || !Utf8Text || Utf8Text[0] == '\0') return;
-
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
 
@@ -171,12 +166,9 @@ inject_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SendInput((UINT)Inputs.size(), Inputs.data(), sizeof(INPUT));
 }
 
-inline
-void
-paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
+static void
+platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text)
 {
-	if (!TargetWindow || !Utf8Text || Utf8Text[0] == '\0') return;
-
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
 
@@ -225,26 +217,35 @@ paste_text_to_window(HWND TargetWindow, const char *Utf8Text)
 	SendInput(6, Inputs, sizeof(INPUT));
 }
 
-inline
-int
-query_logical_processor_count()
+inline void
+platform_inject_text(void *Window, const char *Utf8, bool CharByChar)
 {
-	SYSTEM_INFO SysInfo = {};
-	GetSystemInfo(&SysInfo);
-	return (int)SysInfo.dwNumberOfProcessors;
+	HWND HWnd = (HWND)Window;
+	if (!HWnd || !Utf8 || Utf8[0] == '\0') return;
+
+	if (CharByChar)
+		platform_inject_text_char_by_char(HWnd, Utf8);
+	else
+		platform_inject_text_via_paste(HWnd, Utf8);
 }
 
-inline
-void
-set_taskbar_icon(HWND Window, const char *PngPath)
+inline void *
+platform_get_foreground_window()
 {
-	if (!Window || !PngPath) return;
+	return (void*)GetForegroundWindow();
+}
+
+inline void
+platform_set_taskbar_icon(void *Window, const char *PngPath)
+{
+	HWND HWnd = (HWND)Window;
+	if (!HWnd || !PngPath) return;
 
 	QPixmap Pixmap(PngPath);
 	if (Pixmap.isNull())
 	{
 		#ifdef DEBUG
-			printf("[platform] set_taskbar_icon: failed to load %s\n", PngPath);
+			printf("[platform] platform_set_taskbar_icon: failed to load %s\n", PngPath);
 		#endif
 		return;
 	}
@@ -257,220 +258,83 @@ set_taskbar_icon(HWND Window, const char *PngPath)
 		Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage().toHICON();
 
 	if (BigIcon)
-		SendMessageW(Window, WM_SETICON, ICON_BIG, (LPARAM)BigIcon);
+		SendMessageW(HWnd, WM_SETICON, ICON_BIG, (LPARAM)BigIcon);
 	if (SmallIcon)
-		SendMessageW(Window, WM_SETICON, ICON_SMALL, (LPARAM)SmallIcon);
+		SendMessageW(HWnd, WM_SETICON, ICON_SMALL, (LPARAM)SmallIcon);
 
 	#ifdef DEBUG
-		printf("[platform] set_taskbar_icon: big=%s small=%s\n",
+		printf("[platform] platform_set_taskbar_icon: big=%s small=%s\n",
 			BigIcon ? "ok" : "failed", SmallIcon ? "ok" : "failed");
 	#endif
 }
 
-inline
-const char*
-audio_device_get_name(AudioInputDeviceInfo *Info)
+inline void
+platform_play_sound(int FreqHz, int DurationMs)
 {
-	if (Info)
+	Beep(FreqHz, DurationMs);
+}
+
+inline bool
+platform_is_key_down(int VirtualKey)
+{
+	if (VirtualKey == VK_LWIN)
+		return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
+		    || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
+}
+
+inline int
+platform_qt_key_to_native(Qt::Key Key)
+{
+	if (Key == Qt::Key_unknown || Key == 0) return 0;
+
+	// Modifier keys
+	if (Key == Qt::Key_Control) return VK_CONTROL;
+	if (Key == Qt::Key_Alt)     return VK_MENU;
+	if (Key == Qt::Key_Shift)   return VK_SHIFT;
+	if (Key == Qt::Key_Meta)    return VK_LWIN;
+
+	// Function keys
+	if (Key >= Qt::Key_F1 && Key <= Qt::Key_F35)
+		return VK_F1 + (Key - Qt::Key_F1);
+
+	// Letters A-Z
+	if (Key >= Qt::Key_A && Key <= Qt::Key_Z)
+		return 'A' + (Key - Qt::Key_A);
+
+	// Digits 0-9
+	if (Key >= Qt::Key_0 && Key <= Qt::Key_9)
+		return '0' + (Key - Qt::Key_0);
+
+	switch (Key)
 	{
-		return Info->Name.c_str();
+		case Qt::Key_Space:     return VK_SPACE;
+		case Qt::Key_Return:    return VK_RETURN;
+		case Qt::Key_Escape:    return VK_ESCAPE;
+		case Qt::Key_Tab:       return VK_TAB;
+		case Qt::Key_Backspace: return VK_BACK;
+		case Qt::Key_Delete:    return VK_DELETE;
+		case Qt::Key_Insert:    return VK_INSERT;
+		case Qt::Key_Home:      return VK_HOME;
+		case Qt::Key_End:       return VK_END;
+		case Qt::Key_PageUp:    return VK_PRIOR;
+		case Qt::Key_PageDown:  return VK_NEXT;
+		case Qt::Key_Left:      return VK_LEFT;
+		case Qt::Key_Right:     return VK_RIGHT;
+		case Qt::Key_Up:        return VK_UP;
+		case Qt::Key_Down:      return VK_DOWN;
+		default:                return 0;
 	}
-	return "";
 }
 
 inline
-int
-audio_device_get_index(AudioInputDeviceInfo *Info)
-{
-	if (Info)
-	{
-		return Info->Index;
-	}
-	return -1;
-}
-
-// ---- Settings persistence (JSON via Qt) ----
-// Data is stored in <exe_dir>/data/settings.json
-
-inline
-QString
-get_settings_file_path()
+std::string
+platform_get_exe_dir()
 {
 	wchar_t ExePath[MAX_PATH] = {};
 	GetModuleFileNameW(nullptr, ExePath, MAX_PATH);
 	QString ExeDir = QFileInfo(QString::fromWCharArray(ExePath)).absolutePath();
-	return ExeDir + "/data/settings.json";
-}
-
-// Reads the whole JSON root object from disk, or returns an empty object.
-inline
-QJsonObject
-read_settings_root()
-{
-	QFile File(get_settings_file_path());
-	if (!File.open(QIODevice::ReadOnly)) return QJsonObject();
-	QJsonDocument Doc = QJsonDocument::fromJson(File.readAll());
-	File.close();
-	if (Doc.isNull() || !Doc.isObject()) return QJsonObject();
-	return Doc.object();
-}
-
-// Writes a root object back to disk, creating data/ if needed.
-inline
-bool
-write_settings_root(const QJsonObject &Root)
-{
-	QString FilePath = get_settings_file_path();
-	QDir().mkpath(QFileInfo(FilePath).absolutePath());
-
-	QFile File(FilePath);
-	if (!File.open(QIODevice::WriteOnly | QIODevice::Truncate))
-	{
-		#ifdef DEBUG
-			printf("[platform] ERROR: could not write settings file: %s\n",
-				FilePath.toUtf8().constData());
-		#endif
-		return false;
-	}
-	File.write(QJsonDocument(Root).toJson(QJsonDocument::Indented));
-	File.close();
-	return true;
-}
-
-// Saves a single named hotkey (e.g. "record_hotkey") into the JSON file,
-// preserving all other existing keys.
-inline
-bool
-save_hotkey_setting(const char *JsonKey, int Modifiers, int Key)
-{
-	QJsonObject Root = read_settings_root();
-
-	QJsonObject Obj;
-	Obj["modifiers"] = Modifiers;
-	Obj["key"]       = Key;
-	Root[JsonKey]    = Obj;
-
-	bool Ok = write_settings_root(Root);
-
-	#ifdef DEBUG
-		if (Ok)
-			printf("[platform] Saved %s: modifiers=%d key=%d\n", JsonKey, Modifiers, Key);
-	#endif
-
-	return Ok;
-}
-
-// Loads a single named hotkey from the JSON file into OutModifiers / OutKey.
-// Returns false if the file or key is missing; caller should keep the default.
-inline
-bool
-load_hotkey_setting(const char *JsonKey, int *OutModifiers, int *OutKey)
-{
-	QJsonObject Root = read_settings_root();
-	if (!Root.contains(JsonKey)) return false;
-
-	QJsonObject Obj = Root[JsonKey].toObject();
-	if (!Obj.contains("modifiers") || !Obj.contains("key")) return false;
-
-	*OutModifiers = Obj["modifiers"].toInt();
-	*OutKey       = Obj["key"].toInt();
-
-	#ifdef DEBUG
-		printf("[platform] Loaded %s: modifiers=%d key=%d\n", JsonKey, *OutModifiers, *OutKey);
-	#endif
-
-	return true;
-}
-
-// Saves a boolean setting (e.g., "play_record_sound") to the JSON file.
-inline
-bool
-save_bool_setting(const char *JsonKey, bool Value)
-{
-	QJsonObject Root = read_settings_root();
-	Root[JsonKey] = Value;
-	bool Ok = write_settings_root(Root);
-
-	#ifdef DEBUG
-		if (Ok)
-			printf("[platform] Saved %s: %s\n", JsonKey, Value ? "true" : "false");
-	#endif
-
-	return Ok;
-}
-
-// Saves a string setting to the JSON file.
-inline
-bool
-save_string_setting(const char *JsonKey, const char *Value)
-{
-	QJsonObject Root = read_settings_root();
-	Root[JsonKey] = QString::fromUtf8(Value);
-	bool Ok = write_settings_root(Root);
-
-	#ifdef DEBUG
-		if (Ok)
-			printf("[platform] Saved %s: %s\n", JsonKey, Value);
-	#endif
-
-	return Ok;
-}
-
-// Loads a string setting from the JSON file.
-// Returns false if the file or key is missing; caller should keep the default.
-inline
-bool
-load_string_setting(const char *JsonKey, std::string *OutValue)
-{
-	QJsonObject Root = read_settings_root();
-	if (!Root.contains(JsonKey)) return false;
-
-	*OutValue = Root[JsonKey].toString().toUtf8().constData();
-
-	#ifdef DEBUG
-		printf("[platform] Loaded %s: %s\n", JsonKey, OutValue->c_str());
-	#endif
-
-	return true;
-}
-
-// Loads a boolean setting from the JSON file.
-// Returns false if the file or key is missing; caller should keep the default.
-inline
-bool
-load_bool_setting(const char *JsonKey, bool *OutValue)
-{
-	QJsonObject Root = read_settings_root();
-	if (!Root.contains(JsonKey)) return false;
-
-	*OutValue = Root[JsonKey].toBool();
-
-	#ifdef DEBUG
-		printf("[platform] Loaded %s: %s\n", JsonKey, *OutValue ? "true" : "false");
-	#endif
-
-	return true;
-}
-
-inline
-void
-play_start_recording_sound()
-{
-    Beep(1000, 200);
-}
-
-inline
-void
-play_stop_recording_sound()
-{
-    Beep(800, 200);
-}
-
-inline
-void
-play_cancel_recording_sound()
-{
-    Beep(400, 300);
+	return ExeDir.toStdString();
 }
 
 // ---------------------------------------------------------------------------
@@ -505,12 +369,8 @@ wavein_proc(
 	SetEvent(Ctx->ReadyEvent);
 }
 
-// Win32 implementation of platform audio capture.
-// Opens the WaveIn device, queues buffers, starts capture, and pumps completed
-// buffers into AppState->AudioAccumBuffer until CaptureRunning goes false.
-// Caller is responsible for setting CaptureRunning before calling.
-static bool
-run_platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+inline bool
+platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 {
 	const int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
 
