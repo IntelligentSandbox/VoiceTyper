@@ -1,6 +1,9 @@
 #pragma once
 
-#include "qt.h"
+#ifndef VOICETYPER_USE_IMGUI
+	#include "qt.h"
+#endif
+
 #include "whisper_wrapper.h"
 
 #include <atomic>
@@ -8,6 +11,11 @@
 #include <vector>
 #include <thread>
 #include <string>
+
+#ifdef VOICETYPER_USE_IMGUI
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+#endif
 
 #define MAX_AUDIO_DEVICE_NAME_LENGTH 512
 
@@ -29,6 +37,117 @@ struct AudioInputDeviceInfo
 #define WINDOW_DEFAULT_HEIGHT 500
 
 #define APP_ICON_PATH "media/voicetyper-icon.png"
+
+// ---------------------------------------------------------------------------
+// Hotkey Config
+// ---------------------------------------------------------------------------
+#ifdef VOICETYPER_USE_IMGUI
+
+#define HOTKEY_MOD_CTRL  0x01
+#define HOTKEY_MOD_ALT   0x02
+#define HOTKEY_MOD_SHIFT 0x04
+#define HOTKEY_MOD_WIN   0x08
+
+struct HotkeyConfig
+{
+	UINT Modifiers;
+	UINT VirtualKey;
+
+	std::string
+	to_label() const
+	{
+		std::string Label;
+
+		if (Modifiers & HOTKEY_MOD_CTRL)  Label += "Ctrl+";
+		if (Modifiers & HOTKEY_MOD_ALT)   Label += "Alt+";
+		if (Modifiers & HOTKEY_MOD_SHIFT) Label += "Shift+";
+		if (Modifiers & HOTKEY_MOD_WIN)   Label += "Win+";
+
+		if (VirtualKey == 0)
+		{
+			if (!Label.empty() && Label.back() == '+')
+				Label.pop_back();
+			return Label;
+		}
+
+		if (VirtualKey >= VK_F1 && VirtualKey <= VK_F24)
+		{
+			Label += "F" + std::to_string(VirtualKey - VK_F1 + 1);
+		}
+		else if (VirtualKey >= 'A' && VirtualKey <= 'Z')
+		{
+			Label += (char)VirtualKey;
+		}
+		else if (VirtualKey >= '0' && VirtualKey <= '9')
+		{
+			Label += (char)VirtualKey;
+		}
+		else
+		{
+			switch (VirtualKey)
+			{
+			case VK_SPACE:   Label += "Space";     break;
+			case VK_RETURN:  Label += "Enter";     break;
+			case VK_ESCAPE:  Label += "Escape";    break;
+			case VK_TAB:     Label += "Tab";       break;
+			case VK_BACK:    Label += "Backspace"; break;
+			case VK_DELETE:  Label += "Delete";    break;
+			case VK_INSERT:  Label += "Insert";    break;
+			case VK_HOME:    Label += "Home";      break;
+			case VK_END:     Label += "End";       break;
+			case VK_PRIOR:   Label += "PageUp";    break;
+			case VK_NEXT:    Label += "PageDown";  break;
+			case VK_LEFT:    Label += "Left";      break;
+			case VK_RIGHT:   Label += "Right";     break;
+			case VK_UP:      Label += "Up";        break;
+			case VK_DOWN:    Label += "Down";      break;
+			default:         Label += "??";        break;
+			}
+		}
+
+		return Label;
+	}
+
+	bool
+	is_valid() const
+	{
+		return Modifiers != 0 || VirtualKey != 0;
+	}
+};
+
+inline HotkeyConfig default_record_hotkey()
+{
+	HotkeyConfig H = {};
+	H.Modifiers = HOTKEY_MOD_CTRL | HOTKEY_MOD_ALT;
+	H.VirtualKey = 0;
+	return H;
+}
+
+inline HotkeyConfig default_cancel_record_hotkey()
+{
+	HotkeyConfig H = {};
+	H.Modifiers = HOTKEY_MOD_ALT;
+	H.VirtualKey = VK_F3;
+	return H;
+}
+
+inline HotkeyConfig default_stream_hotkey()
+{
+	HotkeyConfig H = {};
+	H.Modifiers = HOTKEY_MOD_ALT;
+	H.VirtualKey = VK_F2;
+	return H;
+}
+
+inline HotkeyConfig default_load_model_hotkey()
+{
+	HotkeyConfig H = {};
+	H.Modifiers = HOTKEY_MOD_ALT;
+	H.VirtualKey = VK_F1;
+	return H;
+}
+
+#else // Qt build
 
 // Represents a user-configurable hotkey as Qt modifier flags + an optional main key.
 // Key == Qt::Key_unknown (0) means the hotkey fires on modifiers alone (e.g. Ctrl+Alt).
@@ -92,14 +211,35 @@ inline HotkeyConfig default_load_model_hotkey()
 	return H;
 }
 
+#endif // VOICETYPER_USE_IMGUI
+
+// ---------------------------------------------------------------------------
+// Button styles
+// ---------------------------------------------------------------------------
+#ifdef VOICETYPER_USE_IMGUI
+
+#include "imgui.h"
+#define BUTTON_COLOR_GREEN   ImVec4(0.0f, 0.50f, 0.0f, 1.0f)
+#define BUTTON_COLOR_RED     ImVec4(0.75f, 0.07f, 0.13f, 1.0f)
+#define BUTTON_COLOR_GREY    ImVec4(0.50f, 0.50f, 0.50f, 1.0f)
+#define BUTTON_COLOR_BLUE    ImVec4(0.13f, 0.59f, 0.95f, 1.0f)
+
+#else
+
 #define BUTTON_STYLE_GREEN "font-family: Georgia; font-size: 12pt; font-weight: bold; color: black; background-color: green;"
 #define BUTTON_STYLE_RED "font-family: Georgia; font-size: 12pt; font-weight: bold; color: black; background-color: #bF1121;"
 #define BUTTON_STYLE_GREY "font-family: Georgia; font-size: 12pt; font-weight: bold; color: black; background-color: #808080;"
 #define BUTTON_STYLE_BLUE "font-family: Georgia; font-size: 12pt; font-weight: bold; color: white; background-color: #2196F3;"
 
+#endif
+
+// ---------------------------------------------------------------------------
+// Application State
+// ---------------------------------------------------------------------------
 struct GlobalState
 {
-	// UI
+#ifndef VOICETYPER_USE_IMGUI
+	// UI (Qt)
 	QApplication *QtApp;
 	QWidget *QtMainWindow;
 	QPushButton *RecordButton;
@@ -110,6 +250,7 @@ struct GlobalState
 	QComboBox *AudioInputDropdown;
 	QComboBox *STTModelDropdown;
 	QComboBox *InferenceDeviceDropdown;
+#endif
 
 	// Hotkeys
 	HotkeyConfig RecordHotkey;
@@ -128,7 +269,7 @@ struct GlobalState
 	int CurrentAudioDeviceIndex;
 	std::vector<AudioInputDeviceInfo> AudioInputDevices;
 
-	// Inference Device 
+	// Inference Device
 	int CurrentInferenceDeviceIndex;
 	std::vector<std::string> InferenceDevices;
 
@@ -150,15 +291,42 @@ struct GlobalState
 	int WhisperThreadCount;
 
 	// Our own main window handle — used to exclude self when doing just-in-time target lookup.
+#ifdef VOICETYPER_USE_IMGUI
+	HWND OwnWindow;
+#else
 	void *OwnWindow;
+#endif
 
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;
 };
 
-// ---- Button idle-label helpers ----
-// Centralized here so both control.h and audio_pipeline.h can use them
-// without a circular include dependency.
+// ---------------------------------------------------------------------------
+// Button idle-label helpers
+// ---------------------------------------------------------------------------
+#ifdef VOICETYPER_USE_IMGUI
+
+inline std::string record_button_idle_label(GlobalState *AppState)
+{
+	return "Record (" + AppState->RecordHotkey.to_label() + ")";
+}
+
+inline std::string cancel_record_button_idle_label(GlobalState *AppState)
+{
+	return "Cancel (" + AppState->CancelRecordHotkey.to_label() + ")";
+}
+
+inline std::string stream_button_idle_label(GlobalState *AppState)
+{
+	return "Start Streaming (" + AppState->StreamHotkey.to_label() + ")";
+}
+
+inline std::string load_model_button_idle_label(GlobalState *AppState)
+{
+	return "Load Selected STT Model (" + AppState->LoadModelHotkey.to_label() + ")";
+}
+
+#else
 
 inline QString record_button_idle_label(GlobalState *AppState)
 {
@@ -179,3 +347,5 @@ inline QString load_model_button_idle_label(GlobalState *AppState)
 {
 	return QString("Load Selected STT Model (%1)").arg(AppState->LoadModelHotkey.to_label());
 }
+
+#endif

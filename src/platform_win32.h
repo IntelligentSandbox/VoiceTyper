@@ -241,6 +241,14 @@ platform_set_taskbar_icon(void *Window, const char *PngPath)
 	HWND HWnd = (HWND)Window;
 	if (!HWnd || !PngPath) return;
 
+#ifdef VOICETYPER_USE_IMGUI
+	HICON Icon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101));
+	if (Icon)
+	{
+		SendMessageW(HWnd, WM_SETICON, ICON_BIG, (LPARAM)Icon);
+		SendMessageW(HWnd, WM_SETICON, ICON_SMALL, (LPARAM)Icon);
+	}
+#else
 	QPixmap Pixmap(PngPath);
 	if (Pixmap.isNull())
 	{
@@ -266,6 +274,7 @@ platform_set_taskbar_icon(void *Window, const char *PngPath)
 		printf("[platform] platform_set_taskbar_icon: big=%s small=%s\n",
 			BigIcon ? "ok" : "failed", SmallIcon ? "ok" : "failed");
 	#endif
+#endif
 }
 
 inline void
@@ -283,6 +292,7 @@ platform_is_key_down(int VirtualKey)
 	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
 }
 
+#ifndef VOICETYPER_USE_IMGUI
 inline int
 platform_qt_key_to_native(Qt::Key Key)
 {
@@ -326,15 +336,25 @@ platform_qt_key_to_native(Qt::Key Key)
 		default:                return 0;
 	}
 }
+#endif
 
 inline
 std::string
 platform_get_exe_dir()
 {
+#ifdef VOICETYPER_USE_IMGUI
+	char ExePath[MAX_PATH] = {};
+	GetModuleFileNameA(nullptr, ExePath, MAX_PATH);
+	char *LastSlash = strrchr(ExePath, '\\');
+	if (!LastSlash) LastSlash = strrchr(ExePath, '/');
+	if (LastSlash) *LastSlash = '\0';
+	return std::string(ExePath);
+#else
 	wchar_t ExePath[MAX_PATH] = {};
 	GetModuleFileNameW(nullptr, ExePath, MAX_PATH);
 	QString ExeDir = QFileInfo(QString::fromWCharArray(ExePath)).absolutePath();
 	return ExeDir.toStdString();
+#endif
 }
 
 // ---------------------------------------------------------------------------

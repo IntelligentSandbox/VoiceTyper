@@ -9,6 +9,10 @@
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
+#include "state.h"
+#include "system.h"
+#include "imgui_ui.h"
+
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -145,70 +149,6 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 }
 
 // ---------------------------------------------------------------------------
-// UI Rendering (placeholder)
-// ---------------------------------------------------------------------------
-static
-void
-render_main_ui(ImGuiIO &Io)
-{
-	ImGui::SetNextWindowPos(ImVec2(0, 0));
-	ImGui::SetNextWindowSize(Io.DisplaySize);
-	ImGui::Begin(
-		"VoiceTyper", nullptr,
-		ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-
-	ImGui::Text("VoiceTyper - ImGui Shell");
-	ImGui::Separator();
-
-	if (ImGui::Button("Record", ImVec2(-1, 60)))
-	{
-		// TODO: toggle_recording()
-	}
-
-	if (ImGui::Button("Cancel", ImVec2(-1, 40)))
-	{
-		// TODO: cancel_recording()
-	}
-
-	if (ImGui::Button("Stream", ImVec2(-1, 60)))
-	{
-		// TODO: toggle_streaming()
-	}
-
-	ImGui::Separator();
-
-	ImGui::Text("Audio Input");
-	static int AudioDeviceIndex = 0;
-	const char *AudioDevices[] = { "Default Device" };
-	ImGui::Combo("##AudioInput", &AudioDeviceIndex, AudioDevices, 1);
-
-	ImGui::Text("STT Model");
-	static int ModelIndex = 0;
-	const char *Models[] = { "ggml-base.en.bin" };
-	ImGui::Combo("##STTModel", &ModelIndex, Models, 1);
-
-	if (ImGui::Button("Load Model", ImVec2(-1, 60)))
-	{
-		// TODO: toggle_stt_model_load()
-	}
-
-	ImGui::Text("Inference Device");
-	static int InferenceIndex = 0;
-	const char *InferenceDevices[] = { "CPU" };
-	ImGui::Combo("##InferenceDevice", &InferenceIndex, InferenceDevices, 1);
-
-	ImGui::Separator();
-
-	if (ImGui::Button("Settings", ImVec2(-1, 40)))
-	{
-		// TODO: open_settings_window()
-	}
-
-	ImGui::End();
-}
-
-// ---------------------------------------------------------------------------
 // Main Entry Point
 // ---------------------------------------------------------------------------
 int WINAPI
@@ -233,7 +173,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	HWND Hwnd = CreateWindowW(
 		Wc.lpszClassName, L"VoiceTyper", WS_OVERLAPPEDWINDOW,
-		CW_USEDEFAULT, CW_USEDEFAULT, 500, 500,
+		CW_USEDEFAULT, CW_USEDEFAULT,
+		WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT,
 		nullptr, nullptr, Instance, nullptr);
 
 	if (!Hwnd) return 1;
@@ -248,6 +189,25 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	ShowWindow(Hwnd, SW_SHOWDEFAULT);
 	UpdateWindow(Hwnd);
 
+	GlobalState AppState = {};
+	AppState.IsRecording            = false;
+	AppState.IsStreaming            = false;
+	AppState.CaptureRunning        = false;
+	AppState.OwnWindow              = Hwnd;
+	AppState.IsSettingsDialogOpen   = false;
+	AppState.PlayRecordSound        = false;
+	AppState.UseCharByCharInjection = false;
+
+	init_whisper_state(&AppState.WhisperState);
+
+	query_audio_input_devices(&AppState);
+	query_inference_devices(&AppState);
+	query_available_stt_models(&AppState);
+	query_whisper_thread_count(&AppState);
+	query_hotkey_settings(&AppState);
+
+	platform_set_taskbar_icon((void*)Hwnd, APP_ICON_PATH);
+
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &Io = ImGui::GetIO();
@@ -257,6 +217,12 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	ImGui_ImplWin32_Init(Hwnd);
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);
+
+	// Hotkey edge-detection state
+	bool RecordKeyWasDown       = false;
+	bool CancelRecordKeyWasDown = false;
+	bool StreamKeyWasDown       = false;
+	bool LoadModelKeyWasDown    = false;
 
 	bool Running = true;
 	while (Running)
@@ -287,11 +253,45 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			create_render_target();
 		}
 
+		// Poll hotkeys (replaces the background thread)
+		if (!AppState.IsSettingsDialogOpen)
+		{
+			bool RecordKeyIsDown       = is_hotkey_down(AppState.RecordHotkey);
+			bool CancelRecordKeyIsDown = is_hotkey_down(AppState.CancelRecordHotkey);
+			bool StreamKeyIsDown       = is_hotkey_down(AppState.StreamHotkey);
+			bool LoadModelKeyIsDown    = is_hotkey_down(AppState.LoadModelHotkey);
+
+			if (RecordKeyIsDown && !RecordKeyWasDown)
+			{
+				// TODO: toggle_recording(&AppState)
+			}
+
+			if (CancelRecordKeyIsDown && !CancelRecordKeyWasDown)
+			{
+				// TODO: cancel_recording(&AppState)
+			}
+
+			if (StreamKeyIsDown && !StreamKeyWasDown)
+			{
+				// TODO: toggle_streaming(&AppState)
+			}
+
+			if (LoadModelKeyIsDown && !LoadModelKeyWasDown)
+			{
+				// TODO: toggle_stt_model_load(&AppState)
+			}
+
+			RecordKeyWasDown       = RecordKeyIsDown;
+			CancelRecordKeyWasDown = CancelRecordKeyIsDown;
+			StreamKeyWasDown       = StreamKeyIsDown;
+			LoadModelKeyWasDown    = LoadModelKeyIsDown;
+		}
+
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 
-		render_main_ui(Io);
+		render_main_ui(&AppState, Io);
 
 		ImGui::Render();
 		const float ClearColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
@@ -302,6 +302,19 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		HRESULT Hr = g_SwapChain->Present(1, 0);
 		g_SwapChainOccluded = (Hr == DXGI_STATUS_OCCLUDED);
 	}
+
+	if (AppState.IsRecording)
+		AppState.CaptureRunning.store(false);
+
+	if (AppState.IsStreaming)
+	{
+		AppState.CaptureRunning.store(false);
+		if (AppState.CaptureThread.joinable())
+			AppState.CaptureThread.join();
+	}
+
+	if (is_whisper_model_loaded(&AppState.WhisperState))
+		unload_whisper_model(&AppState.WhisperState);
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();

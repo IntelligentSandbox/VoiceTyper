@@ -1,5 +1,8 @@
 #include "state.h"
-#include "control.h"
+
+#ifndef VOICETYPER_USE_IMGUI
+	#include "control.h"
+#endif
 
 #include <chrono>
 #include <thread>
@@ -14,7 +17,10 @@ query_logical_processor_count()
 }
 
 #include "platform.h"
-#include "settings.h"
+
+#ifndef VOICETYPER_USE_IMGUI
+	#include "settings.h"
+#endif
 
 #ifdef _WIN32
 	#include <windows.h>
@@ -25,8 +31,10 @@ query_logical_processor_count()
 	#include "ggml-cuda.h"
 #endif
 
-std::atomic<bool> HotkeyThreadRunning = false;
-
+// ---------------------------------------------------------------------------
+// Application icon
+// ---------------------------------------------------------------------------
+#ifndef VOICETYPER_USE_IMGUI
 inline
 void
 set_application_icon(GlobalState *AppState)
@@ -46,6 +54,49 @@ set_application_icon(GlobalState *AppState)
 		printf("[system] Application icon set from %s\n", APP_ICON_PATH);
 	#endif
 }
+#endif
+
+// ---------------------------------------------------------------------------
+// Hotkey detection
+// ---------------------------------------------------------------------------
+#ifdef VOICETYPER_USE_IMGUI
+
+inline
+bool
+check_modifier_state(UINT Modifiers)
+{
+	bool CtrlRequired  = (Modifiers & HOTKEY_MOD_CTRL)  != 0;
+	bool AltRequired   = (Modifiers & HOTKEY_MOD_ALT)   != 0;
+	bool ShiftRequired = (Modifiers & HOTKEY_MOD_SHIFT) != 0;
+	bool WinRequired   = (Modifiers & HOTKEY_MOD_WIN)   != 0;
+
+	bool CtrlDown  = platform_is_key_down(VK_CONTROL);
+	bool AltDown   = platform_is_key_down(VK_MENU);
+	bool ShiftDown = platform_is_key_down(VK_SHIFT);
+	bool WinDown   = platform_is_key_down(VK_LWIN);
+
+	if (CtrlRequired  && !CtrlDown)  return false;
+	if (AltRequired   && !AltDown)   return false;
+	if (ShiftRequired && !ShiftDown) return false;
+	if (WinRequired   && !WinDown)   return false;
+
+	if (!CtrlRequired  && CtrlDown)  return false;
+	if (!AltRequired   && AltDown)   return false;
+	if (!ShiftRequired && ShiftDown) return false;
+
+	return true;
+}
+
+inline
+bool
+is_hotkey_down(const HotkeyConfig &Config)
+{
+	if (!check_modifier_state(Config.Modifiers)) return false;
+	if (Config.VirtualKey == 0) return true;
+	return platform_is_key_down(Config.VirtualKey);
+}
+
+#else // Qt build
 
 // Maps a Qt::KeyboardModifiers bitmask to platform key-down checks.
 // Returns true only when ALL requested modifiers are held.
@@ -92,6 +143,8 @@ is_hotkey_down(const HotkeyConfig &Config)
 	}
 	return platform_is_key_down(NativeKey);
 }
+
+std::atomic<bool> HotkeyThreadRunning = false;
 
 inline
 void
@@ -171,26 +224,44 @@ stop_hotkey_listener()
 	HotkeyThreadRunning = false;
 }
 
+#endif // VOICETYPER_USE_IMGUI
+
+// ---------------------------------------------------------------------------
+// File existence check (used by model query)
+// ---------------------------------------------------------------------------
+inline
+bool
+file_exists(const char *Path)
+{
+#ifdef VOICETYPER_USE_IMGUI
+	DWORD Attrib = GetFileAttributesA(Path);
+	return (Attrib != INVALID_FILE_ATTRIBUTES && !(Attrib & FILE_ATTRIBUTE_DIRECTORY));
+#else
+	return QFile::exists(Path);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// System queries
+// ---------------------------------------------------------------------------
 inline
 void
 query_audio_input_devices(GlobalState *AppState)
 {
 	AppState->CurrentAudioDeviceIndex = -1;
-	
+
 	std::vector<AudioInputDeviceInfo> NativeDevices = platform_query_audio_devices();
-	
+
 	AppState->AudioInputDevices = NativeDevices;
-	
+
 	if (AppState->AudioInputDevices.size() > 0)
-	{
 		AppState->CurrentAudioDeviceIndex = 0;
-	}
-	
+
 	#ifdef DEBUG
-		qDebug() << "Audio input devices found:" << AppState->AudioInputDevices.size();
+		printf("[system] Audio input devices found: %d\n", (int)AppState->AudioInputDevices.size());
 		for (const auto &Info : AppState->AudioInputDevices)
 		{
-			qDebug() << "  Device:" << Info.Name.c_str() << "(index" << Info.Index << ")";
+			printf("[system]   Device: %s (index %d)\n", Info.Name.c_str(), Info.Index);
 		}
 	#endif
 }
@@ -225,6 +296,7 @@ query_inference_devices(GlobalState *AppState)
 	}
 #endif
 
+#ifndef VOICETYPER_USE_IMGUI
 	std::string SavedDevice;
 	if (load_string_setting("inference_device", &SavedDevice))
 	{
@@ -241,6 +313,7 @@ query_inference_devices(GlobalState *AppState)
 			}
 		}
 	}
+#endif
 }
 
 inline
@@ -268,6 +341,7 @@ query_hotkey_settings(GlobalState *AppState)
 	AppState->StreamHotkey       = default_stream_hotkey();
 	AppState->LoadModelHotkey    = default_load_model_hotkey();
 
+#ifndef VOICETYPER_USE_IMGUI
 	int Modifiers = 0, Key = 0;
 
 	if (load_hotkey_setting("record_hotkey", &Modifiers, &Key))
@@ -296,20 +370,23 @@ query_hotkey_settings(GlobalState *AppState)
 
 	bool SoundEnabled = false;
 	if (load_bool_setting("play_record_sound", &SoundEnabled))
-	{
 		AppState->PlayRecordSound = SoundEnabled;
-	}
 
 	bool CharByChar = false;
 	if (load_bool_setting("use_char_by_char_injection", &CharByChar))
-	{
 		AppState->UseCharByCharInjection = CharByChar;
-	}
+#endif
 
 	#ifdef DEBUG
+	#ifdef VOICETYPER_USE_IMGUI
+		printf("[system] Record hotkey:     %s\n", AppState->RecordHotkey.to_label().c_str());
+		printf("[system] Stream hotkey:     %s\n", AppState->StreamHotkey.to_label().c_str());
+		printf("[system] Load model hotkey: %s\n", AppState->LoadModelHotkey.to_label().c_str());
+	#else
 		printf("[system] Record hotkey:     %s\n", AppState->RecordHotkey.to_label().toUtf8().constData());
 		printf("[system] Stream hotkey:     %s\n", AppState->StreamHotkey.to_label().toUtf8().constData());
 		printf("[system] Load model hotkey: %s\n", AppState->LoadModelHotkey.to_label().toUtf8().constData());
+	#endif
 		printf("[system] Play record sound: %s\n", AppState->PlayRecordSound ? "true" : "false");
 	#endif
 }
@@ -331,7 +408,7 @@ query_available_stt_models(GlobalState *AppState)
 	int FirstAvailableIndex = -1;
 	for (int i = 0; i < WHISPER_MODEL_COUNT; i++)
 	{
-		bool Exists = QFile::exists(WHISPER_MODEL_PATHS[i]);
+		bool Exists = file_exists(WHISPER_MODEL_PATHS[i]);
 		AppState->STTModelAvailable.push_back(Exists);
 		if (Exists && FirstAvailableIndex == -1) FirstAvailableIndex = i;
 		if (Exists) AppState->AnySTTModelAvailable = true;
