@@ -2,8 +2,11 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <dwmapi.h>
 #include <d3d11.h>
 #include <cstdio>
+
+#pragma comment(lib, "dwmapi.lib")
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -210,6 +213,11 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		nullptr, nullptr, Instance, nullptr);
 
 	if (!Hwnd) return 1;
+
+	BOOL DarkMode = TRUE;
+	DwmSetWindowAttribute(Hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &DarkMode, sizeof(DarkMode));
+	COLORREF CaptionColor = RGB(26, 26, 26);
+	DwmSetWindowAttribute(Hwnd, DWMWA_CAPTION_COLOR, &CaptionColor, sizeof(CaptionColor));
 
 	if (!create_device_d3d(Hwnd))
 	{
