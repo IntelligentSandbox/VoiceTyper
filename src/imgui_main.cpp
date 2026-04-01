@@ -190,6 +190,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	ImGui_ImplWin32_EnableDpiAwareness();
 
+	HICON AppIcon = LoadIconW(Instance, MAKEINTRESOURCEW(101));
+
 	WNDCLASSEXW Wc = {};
 	Wc.cbSize = sizeof(Wc);
 	Wc.style = CS_CLASSDC;
@@ -197,6 +199,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	Wc.hInstance = Instance;
 	Wc.lpszClassName = L"VoiceTyperClass";
 	Wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+	Wc.hIcon = AppIcon;
+	Wc.hIconSm = AppIcon;
 	RegisterClassExW(&Wc);
 
 	HWND Hwnd = CreateWindowW(
