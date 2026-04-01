@@ -25,8 +25,8 @@ static ID3D11DeviceContext    *g_DeviceContext     = nullptr;
 static IDXGISwapChain         *g_SwapChain         = nullptr;
 static ID3D11RenderTargetView *g_RenderTargetView  = nullptr;
 static bool                    g_SwapChainOccluded = false;
-static UINT                    g_ResizeWidth       = 0;
-static UINT                    g_ResizeHeight      = 0;
+static GlobalState            *g_AppState          = nullptr;
+static bool                    g_ImGuiReady        = false;
 
 // ---------------------------------------------------------------------------
 // Forward Declarations
@@ -120,6 +120,32 @@ cleanup_render_target()
 }
 
 // ---------------------------------------------------------------------------
+// Render a single frame
+// ---------------------------------------------------------------------------
+static
+void
+render_frame()
+{
+	if (!g_ImGuiReady || !g_AppState) return;
+
+	ImGuiIO &Io = ImGui::GetIO();
+	ImGui_ImplDX11_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
+	render_main_ui(g_AppState, Io);
+
+	ImGui::Render();
+	const float ClearColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
+	g_DeviceContext->OMSetRenderTargets(1, &g_RenderTargetView, nullptr);
+	g_DeviceContext->ClearRenderTargetView(g_RenderTargetView, ClearColor);
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+	HRESULT Hr = g_SwapChain->Present(1, 0);
+	g_SwapChainOccluded = (Hr == DXGI_STATUS_OCCLUDED);
+}
+
+// ---------------------------------------------------------------------------
 // Window Procedure
 // ---------------------------------------------------------------------------
 LRESULT WINAPI
@@ -132,8 +158,10 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 	{
 	case WM_SIZE:
 		if (WParam == SIZE_MINIMIZED) return 0;
-		g_ResizeWidth = (UINT)LOWORD(LParam);
-		g_ResizeHeight = (UINT)HIWORD(LParam);
+		cleanup_render_target();
+		g_SwapChain->ResizeBuffers(0, (UINT)LOWORD(LParam), (UINT)HIWORD(LParam), DXGI_FORMAT_UNKNOWN, 0);
+		create_render_target();
+		render_frame();
 		return 0;
 
 	case WM_SYSCOMMAND:
@@ -189,22 +217,24 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	ShowWindow(Hwnd, SW_SHOWDEFAULT);
 	UpdateWindow(Hwnd);
 
-	GlobalState AppState = {};
-	AppState.IsRecording            = false;
-	AppState.IsStreaming            = false;
-	AppState.CaptureRunning        = false;
-	AppState.OwnWindow              = Hwnd;
-	AppState.IsSettingsDialogOpen   = false;
-	AppState.PlayRecordSound        = false;
-	AppState.UseCharByCharInjection = false;
+	GlobalState AppStateStorage = {};
+	AppStateStorage.IsRecording            = false;
+	AppStateStorage.IsStreaming            = false;
+	AppStateStorage.CaptureRunning        = false;
+	AppStateStorage.OwnWindow              = Hwnd;
+	AppStateStorage.IsSettingsDialogOpen   = false;
+	AppStateStorage.PlayRecordSound        = false;
+	AppStateStorage.UseCharByCharInjection = false;
+	GlobalState *AppState = &AppStateStorage;
+	g_AppState = AppState;
 
-	init_whisper_state(&AppState.WhisperState);
+	init_whisper_state(&AppState->WhisperState);
 
-	query_audio_input_devices(&AppState);
-	query_inference_devices(&AppState);
-	query_available_stt_models(&AppState);
-	query_whisper_thread_count(&AppState);
-	query_hotkey_settings(&AppState);
+	query_audio_input_devices(AppState);
+	query_inference_devices(AppState);
+	query_available_stt_models(AppState);
+	query_whisper_thread_count(AppState);
+	query_hotkey_settings(AppState);
 
 	platform_set_taskbar_icon((void*)Hwnd, APP_ICON_PATH);
 
@@ -212,6 +242,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	ImGui::CreateContext();
 	ImGuiIO &Io = ImGui::GetIO();
 	Io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	Io.IniFilename = nullptr;
 
 	ImGui::StyleColorsDark();
 
@@ -219,8 +250,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	ImGui_ImplWin32_Init(Hwnd);
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);
+	g_ImGuiReady = true;
 
-	// Hotkey edge-detection state
 	bool RecordKeyWasDown       = false;
 	bool CancelRecordKeyWasDown = false;
 	bool StreamKeyWasDown       = false;
@@ -246,34 +277,24 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		}
 		g_SwapChainOccluded = false;
 
-		if (g_ResizeWidth != 0 && g_ResizeHeight != 0)
+		if (!AppState->IsSettingsDialogOpen)
 		{
-			cleanup_render_target();
-			g_SwapChain->ResizeBuffers(0, g_ResizeWidth, g_ResizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-			g_ResizeWidth = 0;
-			g_ResizeHeight = 0;
-			create_render_target();
-		}
-
-		// Poll hotkeys (replaces the background thread)
-		if (!AppState.IsSettingsDialogOpen)
-		{
-			bool RecordKeyIsDown       = is_hotkey_down(AppState.RecordHotkey);
-			bool CancelRecordKeyIsDown = is_hotkey_down(AppState.CancelRecordHotkey);
-			bool StreamKeyIsDown       = is_hotkey_down(AppState.StreamHotkey);
-			bool LoadModelKeyIsDown    = is_hotkey_down(AppState.LoadModelHotkey);
+			bool RecordKeyIsDown       = is_hotkey_down(AppState->RecordHotkey);
+			bool CancelRecordKeyIsDown = is_hotkey_down(AppState->CancelRecordHotkey);
+			bool StreamKeyIsDown       = is_hotkey_down(AppState->StreamHotkey);
+			bool LoadModelKeyIsDown    = is_hotkey_down(AppState->LoadModelHotkey);
 
 			if (RecordKeyIsDown && !RecordKeyWasDown)
-				toggle_recording(&AppState);
+				toggle_recording(AppState);
 
 			if (CancelRecordKeyIsDown && !CancelRecordKeyWasDown)
-				cancel_recording(&AppState);
+				cancel_recording(AppState);
 
 			if (StreamKeyIsDown && !StreamKeyWasDown)
-				toggle_streaming(&AppState);
+				toggle_streaming(AppState);
 
 			if (LoadModelKeyIsDown && !LoadModelKeyWasDown)
-				toggle_stt_model_load(&AppState);
+				toggle_stt_model_load(AppState);
 
 			RecordKeyWasDown       = RecordKeyIsDown;
 			CancelRecordKeyWasDown = CancelRecordKeyIsDown;
@@ -281,34 +302,23 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			LoadModelKeyWasDown    = LoadModelKeyIsDown;
 		}
 
-		ImGui_ImplDX11_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-
-		render_main_ui(&AppState, Io);
-
-		ImGui::Render();
-		const float ClearColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-		g_DeviceContext->OMSetRenderTargets(1, &g_RenderTargetView, nullptr);
-		g_DeviceContext->ClearRenderTargetView(g_RenderTargetView, ClearColor);
-		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
-		HRESULT Hr = g_SwapChain->Present(1, 0);
-		g_SwapChainOccluded = (Hr == DXGI_STATUS_OCCLUDED);
+		render_frame();
 	}
 
-	if (AppState.IsRecording)
-		AppState.CaptureRunning.store(false);
+	g_ImGuiReady = false;
 
-	if (AppState.IsStreaming)
+	if (AppState->IsRecording)
+		AppState->CaptureRunning.store(false);
+
+	if (AppState->IsStreaming)
 	{
-		AppState.CaptureRunning.store(false);
-		if (AppState.CaptureThread.joinable())
-			AppState.CaptureThread.join();
+		AppState->CaptureRunning.store(false);
+		if (AppState->CaptureThread.joinable())
+			AppState->CaptureThread.join();
 	}
 
-	if (is_whisper_model_loaded(&AppState.WhisperState))
-		unload_whisper_model(&AppState.WhisperState);
+	if (is_whisper_model_loaded(&AppState->WhisperState))
+		unload_whisper_model(&AppState->WhisperState);
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
