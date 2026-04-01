@@ -18,9 +18,7 @@ query_logical_processor_count()
 
 #include "platform.h"
 
-#ifndef VOICETYPER_USE_IMGUI
-	#include "settings.h"
-#endif
+#include "settings.h"
 
 #ifdef _WIN32
 	#include <windows.h>
@@ -296,7 +294,6 @@ query_inference_devices(GlobalState *AppState)
 	}
 #endif
 
-#ifndef VOICETYPER_USE_IMGUI
 	std::string SavedDevice;
 	if (load_string_setting("inference_device", &SavedDevice))
 	{
@@ -313,7 +310,6 @@ query_inference_devices(GlobalState *AppState)
 			}
 		}
 	}
-#endif
 }
 
 inline
@@ -341,31 +337,50 @@ query_hotkey_settings(GlobalState *AppState)
 	AppState->StreamHotkey       = default_stream_hotkey();
 	AppState->LoadModelHotkey    = default_load_model_hotkey();
 
-#ifndef VOICETYPER_USE_IMGUI
 	int Modifiers = 0, Key = 0;
 
 	if (load_hotkey_setting("record_hotkey", &Modifiers, &Key))
 	{
+#ifdef VOICETYPER_USE_IMGUI
+		AppState->RecordHotkey.Modifiers = (UINT)Modifiers;
+		AppState->RecordHotkey.VirtualKey = (UINT)Key;
+#else
 		AppState->RecordHotkey.Modifiers = Qt::KeyboardModifiers(Modifiers);
 		AppState->RecordHotkey.Key       = Qt::Key(Key);
+#endif
 	}
 
 	if (load_hotkey_setting("cancel_record_hotkey", &Modifiers, &Key))
 	{
+#ifdef VOICETYPER_USE_IMGUI
+		AppState->CancelRecordHotkey.Modifiers = (UINT)Modifiers;
+		AppState->CancelRecordHotkey.VirtualKey = (UINT)Key;
+#else
 		AppState->CancelRecordHotkey.Modifiers = Qt::KeyboardModifiers(Modifiers);
 		AppState->CancelRecordHotkey.Key       = Qt::Key(Key);
+#endif
 	}
 
 	if (load_hotkey_setting("stream_hotkey", &Modifiers, &Key))
 	{
+#ifdef VOICETYPER_USE_IMGUI
+		AppState->StreamHotkey.Modifiers = (UINT)Modifiers;
+		AppState->StreamHotkey.VirtualKey = (UINT)Key;
+#else
 		AppState->StreamHotkey.Modifiers = Qt::KeyboardModifiers(Modifiers);
 		AppState->StreamHotkey.Key       = Qt::Key(Key);
+#endif
 	}
 
 	if (load_hotkey_setting("load_model_hotkey", &Modifiers, &Key))
 	{
+#ifdef VOICETYPER_USE_IMGUI
+		AppState->LoadModelHotkey.Modifiers = (UINT)Modifiers;
+		AppState->LoadModelHotkey.VirtualKey = (UINT)Key;
+#else
 		AppState->LoadModelHotkey.Modifiers = Qt::KeyboardModifiers(Modifiers);
 		AppState->LoadModelHotkey.Key       = Qt::Key(Key);
+#endif
 	}
 
 	bool SoundEnabled = false;
@@ -375,7 +390,6 @@ query_hotkey_settings(GlobalState *AppState)
 	bool CharByChar = false;
 	if (load_bool_setting("use_char_by_char_injection", &CharByChar))
 		AppState->UseCharByCharInjection = CharByChar;
-#endif
 
 	#ifdef DEBUG
 	#ifdef VOICETYPER_USE_IMGUI

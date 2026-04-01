@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 #include "state.h"
+#include "settings.h"
 
 // ---------------------------------------------------------------------------
 // Styled button helper
@@ -75,6 +76,259 @@ string_combo(const char *Label, int *CurrentIndex, const std::vector<std::string
 	}
 
 	return Changed;
+}
+
+// ---------------------------------------------------------------------------
+// Hotkey capture helpers
+// ---------------------------------------------------------------------------
+static
+UINT
+poll_modifier_state()
+{
+	UINT Mods = 0;
+	if (platform_is_key_down(VK_CONTROL)) Mods |= HOTKEY_MOD_CTRL;
+	if (platform_is_key_down(VK_MENU))    Mods |= HOTKEY_MOD_ALT;
+	if (platform_is_key_down(VK_SHIFT))   Mods |= HOTKEY_MOD_SHIFT;
+	if (platform_is_key_down(VK_LWIN))    Mods |= HOTKEY_MOD_WIN;
+	return Mods;
+}
+
+static
+UINT
+poll_nonmodifier_vk()
+{
+	for (UINT Vk = 'A'; Vk <= 'Z'; Vk++)
+	{
+		if (platform_is_key_down(Vk)) return Vk;
+	}
+	for (UINT Vk = '0'; Vk <= '9'; Vk++)
+	{
+		if (platform_is_key_down(Vk)) return Vk;
+	}
+	for (UINT Vk = VK_F1; Vk <= VK_F24; Vk++)
+	{
+		if (platform_is_key_down(Vk)) return Vk;
+	}
+	UINT Specials[] = {
+		VK_SPACE, VK_RETURN, VK_TAB, VK_BACK, VK_DELETE, VK_INSERT,
+		VK_HOME, VK_END, VK_PRIOR, VK_NEXT,
+		VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN
+	};
+	for (int i = 0; i < (int)(sizeof(Specials) / sizeof(Specials[0])); i++)
+	{
+		if (platform_is_key_down(Specials[i])) return Specials[i];
+	}
+	return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Settings Dialog - select action
+// ---------------------------------------------------------------------------
+static
+void
+settings_select_action(SettingsWindowState *S, int Action)
+{
+	S->SelectedAction = Action;
+	S->Capture.Captured = S->TempHotkeys[Action];
+	S->Capture.HasCapture = S->TempHotkeys[Action].is_valid();
+	S->Capture.IsCapturing = false;
+}
+
+// ---------------------------------------------------------------------------
+// Settings Dialog - initialize state
+// ---------------------------------------------------------------------------
+static
+void
+init_settings_state(GlobalState *AppState)
+{
+	SettingsWindowState *S = &AppState->SettingsState;
+	S->SelectedAction = 0;
+	S->TempHotkeys[0] = AppState->RecordHotkey;
+	S->TempHotkeys[1] = AppState->CancelRecordHotkey;
+	S->TempHotkeys[2] = AppState->StreamHotkey;
+	S->TempHotkeys[3] = AppState->LoadModelHotkey;
+	S->TempPlayRecordSound = AppState->PlayRecordSound;
+	S->TempUseCharByCharInjection = AppState->UseCharByCharInjection;
+	S->TempWhisperThreadCount = AppState->WhisperThreadCount;
+	S->Capture.Captured = AppState->RecordHotkey;
+	S->Capture.HasCapture = AppState->RecordHotkey.is_valid();
+	S->Capture.IsCapturing = false;
+}
+
+// ---------------------------------------------------------------------------
+// Settings Dialog
+// ---------------------------------------------------------------------------
+static
+void
+render_settings_ui(GlobalState *AppState)
+{
+	SettingsWindowState *S = &AppState->SettingsState;
+
+	ImGui::SetNextWindowSize(ImVec2(620, 0));
+	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	AppState->IsSettingsDialogOpen = true;
+
+#ifdef VOICETYPER_CUDA
+	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION);
+#else
+	ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION);
+#endif
+
+	ImGui::Checkbox("Play sound when starting/stopping recording",
+		&S->TempPlayRecordSound);
+
+	ImGui::Checkbox("Use character-by-character text injection (instead of paste)",
+		&S->TempUseCharByCharInjection);
+
+	ImGui::Text("CPU Cores for Inference:");
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(100);
+	int MaxCores = query_logical_processor_count();
+	if (ImGui::InputInt("##ThreadCount", &S->TempWhisperThreadCount, 1, 1))
+	{
+		if (S->TempWhisperThreadCount < 1) S->TempWhisperThreadCount = 1;
+		if (S->TempWhisperThreadCount > MaxCores) S->TempWhisperThreadCount = MaxCores;
+	}
+
+	ImGui::Separator();
+	ImGui::Text("Keyboard Shortcuts");
+
+	float AvailWidth = ImGui::GetContentRegionAvail().x;
+	float Spacing = ImGui::GetStyle().ItemSpacing.x;
+	float BtnWidth = (AvailWidth - Spacing * 3) / 4;
+	ImVec2 ActionSize = ImVec2(BtnWidth, 40);
+
+	const char *ActionLabels[] = { "Record", "Cancel Record", "Stream", "Load Model" };
+	for (int i = 0; i < 4; i++)
+	{
+		if (i > 0) ImGui::SameLine();
+		ImVec4 Color = (S->SelectedAction == i) ? BUTTON_COLOR_BLUE : BUTTON_COLOR_GREY;
+		if (colored_button(ActionLabels[i], ActionSize, Color))
+			settings_select_action(S, i);
+	}
+
+	ImGui::Text("Current: %s", S->TempHotkeys[S->SelectedAction].to_label().c_str());
+
+	// Hotkey capture - poll for input when capturing
+	if (S->Capture.IsCapturing)
+	{
+		if (platform_is_key_down(VK_ESCAPE))
+		{
+			S->Capture.HasCapture = false;
+			S->Capture.Captured = {};
+			S->Capture.IsCapturing = false;
+		}
+		else
+		{
+			UINT Mods = poll_modifier_state();
+			UINT Vk = poll_nonmodifier_vk();
+
+			if (Mods != 0 && Vk != 0)
+			{
+				S->Capture.Captured.Modifiers = Mods;
+				S->Capture.Captured.VirtualKey = Vk;
+				S->Capture.HasCapture = true;
+			}
+			else if (Mods != 0)
+			{
+				S->Capture.Captured.Modifiers = Mods;
+				S->Capture.Captured.VirtualKey = 0;
+				S->Capture.HasCapture = true;
+			}
+		}
+	}
+
+	// Capture display button
+	{
+		std::string CaptureText;
+		ImVec4 BgColor;
+
+		if (S->Capture.IsCapturing)
+		{
+			BgColor = ImVec4(0.08f, 0.40f, 0.75f, 1.0f);
+			if (S->Capture.HasCapture)
+				CaptureText = S->Capture.Captured.to_label() + "...";
+			else
+				CaptureText = "Press a key combination...";
+		}
+		else
+		{
+			BgColor = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
+			if (S->Capture.HasCapture)
+				CaptureText = S->Capture.Captured.to_label();
+			else
+				CaptureText = "Click here, then press your hotkey...";
+		}
+
+		ImGui::PushStyleColor(ImGuiCol_Button, BgColor);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+			ImVec4(BgColor.x * 1.3f > 1.0f ? 1.0f : BgColor.x * 1.3f,
+			       BgColor.y * 1.3f > 1.0f ? 1.0f : BgColor.y * 1.3f,
+			       BgColor.z * 1.3f > 1.0f ? 1.0f : BgColor.z * 1.3f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, BgColor);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+		std::string ButtonLabel = CaptureText + "##CaptureHotkey";
+		if (ImGui::Button(ButtonLabel.c_str(), ImVec2(-1, 40)))
+			S->Capture.IsCapturing = !S->Capture.IsCapturing;
+
+		ImGui::PopStyleColor(4);
+	}
+
+	ImGui::TextWrapped(
+		"Select an action above, then click the box and press your desired combination. "
+		"Modifier-only combos (e.g. Ctrl+Alt) are supported. Escape clears the box.");
+
+	ImGui::Separator();
+
+	float BottomBtnWidth = (AvailWidth - Spacing * 2) / 3;
+	ImVec2 BottomSize = ImVec2(BottomBtnWidth, 40);
+
+	if (colored_button("Set Hotkey", BottomSize, BUTTON_COLOR_GREY))
+	{
+		if (S->Capture.HasCapture)
+		{
+			S->TempHotkeys[S->SelectedAction] = S->Capture.Captured;
+		}
+	}
+	ImGui::SameLine();
+	if (colored_button("Save##Settings", BottomSize, BUTTON_COLOR_GREEN))
+	{
+		AppState->RecordHotkey       = S->TempHotkeys[0];
+		AppState->CancelRecordHotkey = S->TempHotkeys[1];
+		AppState->StreamHotkey       = S->TempHotkeys[2];
+		AppState->LoadModelHotkey    = S->TempHotkeys[3];
+
+		save_hotkey_setting("record_hotkey",
+			(int)AppState->RecordHotkey.Modifiers, (int)AppState->RecordHotkey.VirtualKey);
+		save_hotkey_setting("cancel_record_hotkey",
+			(int)AppState->CancelRecordHotkey.Modifiers, (int)AppState->CancelRecordHotkey.VirtualKey);
+		save_hotkey_setting("stream_hotkey",
+			(int)AppState->StreamHotkey.Modifiers, (int)AppState->StreamHotkey.VirtualKey);
+		save_hotkey_setting("load_model_hotkey",
+			(int)AppState->LoadModelHotkey.Modifiers, (int)AppState->LoadModelHotkey.VirtualKey);
+
+		AppState->PlayRecordSound = S->TempPlayRecordSound;
+		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
+
+		AppState->UseCharByCharInjection = S->TempUseCharByCharInjection;
+		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
+
+		AppState->WhisperThreadCount = S->TempWhisperThreadCount;
+
+		ImGui::CloseCurrentPopup();
+		AppState->IsSettingsDialogOpen = false;
+	}
+	ImGui::SameLine();
+	if (colored_button("Cancel##Settings", BottomSize, BUTTON_COLOR_GREY))
+	{
+		ImGui::CloseCurrentPopup();
+		AppState->IsSettingsDialogOpen = false;
+	}
+
+	ImGui::EndPopup();
 }
 
 // ---------------------------------------------------------------------------
@@ -224,9 +478,12 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		bool Enabled = !Busy;
 		if (colored_button("Settings", SmallButton, BUTTON_COLOR_GREY, Enabled))
 		{
-			// TODO: open_settings_window(AppState)
+			init_settings_state(AppState);
+			ImGui::OpenPopup("Settings");
 		}
 	}
+
+	render_settings_ui(AppState);
 
 	ImGui::End();
 }

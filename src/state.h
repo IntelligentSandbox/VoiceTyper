@@ -147,6 +147,23 @@ inline HotkeyConfig default_load_model_hotkey()
 	return H;
 }
 
+struct HotkeyCaptureState
+{
+	HotkeyConfig Captured;
+	bool         HasCapture;
+	bool         IsCapturing;
+};
+
+struct SettingsWindowState
+{
+	int SelectedAction;
+	HotkeyCaptureState Capture;
+	HotkeyConfig TempHotkeys[4];
+	bool TempPlayRecordSound;
+	bool TempUseCharByCharInjection;
+	int TempWhisperThreadCount;
+};
+
 #else // Qt build
 
 // Represents a user-configurable hotkey as Qt modifier flags + an optional main key.
@@ -293,6 +310,7 @@ struct GlobalState
 	// Our own main window handle — used to exclude self when doing just-in-time target lookup.
 #ifdef VOICETYPER_USE_IMGUI
 	HWND OwnWindow;
+	SettingsWindowState SettingsState;
 #else
 	void *OwnWindow;
 #endif
