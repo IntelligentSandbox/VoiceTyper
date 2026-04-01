@@ -133,6 +133,9 @@ settings_select_action(SettingsWindowState *S, int Action)
 	S->Capture.Captured = S->TempHotkeys[Action];
 	S->Capture.HasCapture = S->TempHotkeys[Action].is_valid();
 	S->Capture.IsCapturing = false;
+	S->Capture.PeakModifiers = 0;
+	S->Capture.PeakVirtualKey = 0;
+	S->Capture.ReleaseFrames = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +157,9 @@ init_settings_state(GlobalState *AppState)
 	S->Capture.Captured = AppState->RecordHotkey;
 	S->Capture.HasCapture = AppState->RecordHotkey.is_valid();
 	S->Capture.IsCapturing = false;
+	S->Capture.PeakModifiers = 0;
+	S->Capture.PeakVirtualKey = 0;
+	S->Capture.ReleaseFrames = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +218,6 @@ render_settings_ui(GlobalState *AppState)
 
 	ImGui::Text("Current: %s", S->TempHotkeys[S->SelectedAction].to_label().c_str());
 
-	// Hotkey capture - poll for input when capturing
 	if (S->Capture.IsCapturing)
 	{
 		if (platform_is_key_down(VK_ESCAPE))
@@ -220,23 +225,38 @@ render_settings_ui(GlobalState *AppState)
 			S->Capture.HasCapture = false;
 			S->Capture.Captured = {};
 			S->Capture.IsCapturing = false;
+			S->Capture.PeakModifiers = 0;
+			S->Capture.PeakVirtualKey = 0;
+			S->Capture.ReleaseFrames = 0;
 		}
 		else
 		{
 			UINT Mods = poll_modifier_state();
 			UINT Vk = poll_nonmodifier_vk();
 
-			if (Mods != 0 && Vk != 0)
+			if (Mods != 0 || Vk != 0)
 			{
-				S->Capture.Captured.Modifiers = Mods;
-				S->Capture.Captured.VirtualKey = Vk;
+				S->Capture.PeakModifiers |= Mods;
+				if (Vk != 0) S->Capture.PeakVirtualKey = Vk;
+				S->Capture.ReleaseFrames = 0;
+
+				S->Capture.Captured.Modifiers = S->Capture.PeakModifiers;
+				S->Capture.Captured.VirtualKey = S->Capture.PeakVirtualKey;
 				S->Capture.HasCapture = true;
 			}
-			else if (Mods != 0)
+			else if (S->Capture.PeakModifiers != 0 || S->Capture.PeakVirtualKey != 0)
 			{
-				S->Capture.Captured.Modifiers = Mods;
-				S->Capture.Captured.VirtualKey = 0;
-				S->Capture.HasCapture = true;
+				S->Capture.ReleaseFrames++;
+				if (S->Capture.ReleaseFrames >= 10)
+				{
+					S->Capture.Captured.Modifiers = S->Capture.PeakModifiers;
+					S->Capture.Captured.VirtualKey = S->Capture.PeakVirtualKey;
+					S->Capture.HasCapture = true;
+					S->Capture.IsCapturing = false;
+					S->Capture.PeakModifiers = 0;
+					S->Capture.PeakVirtualKey = 0;
+					S->Capture.ReleaseFrames = 0;
+				}
 			}
 		}
 	}
@@ -273,7 +293,15 @@ render_settings_ui(GlobalState *AppState)
 
 		std::string ButtonLabel = CaptureText + "##CaptureHotkey";
 		if (ImGui::Button(ButtonLabel.c_str(), ImVec2(-1, 40)))
+		{
 			S->Capture.IsCapturing = !S->Capture.IsCapturing;
+			if (S->Capture.IsCapturing)
+			{
+				S->Capture.PeakModifiers = 0;
+				S->Capture.PeakVirtualKey = 0;
+				S->Capture.ReleaseFrames = 0;
+			}
+		}
 
 		ImGui::PopStyleColor(4);
 	}

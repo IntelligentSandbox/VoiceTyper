@@ -215,6 +215,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	ImGui::StyleColorsDark();
 
+	Io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\georgia.ttf", 18.0f);
+
 	ImGui_ImplWin32_Init(Hwnd);
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);
 

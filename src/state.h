@@ -33,7 +33,7 @@ struct AudioInputDeviceInfo
 #define AUDIO_CAPTURE_BUFFER_MS         100
 #define AUDIO_CAPTURE_BUFFER_COUNT      8
 
-#define WINDOW_DEFAULT_WIDTH 500
+#define WINDOW_DEFAULT_WIDTH 700
 #define WINDOW_DEFAULT_HEIGHT 500
 
 #define APP_ICON_PATH "media/voicetyper-icon.png"
@@ -152,6 +152,9 @@ struct HotkeyCaptureState
 	HotkeyConfig Captured;
 	bool         HasCapture;
 	bool         IsCapturing;
+	UINT         PeakModifiers;
+	UINT         PeakVirtualKey;
+	int          ReleaseFrames;
 };
 
 struct SettingsWindowState
