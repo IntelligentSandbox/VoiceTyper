@@ -1,4 +1,5 @@
 build/
+build-imgui/
 notes/
 compile_commands.json
 models/
