@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "state.h"
 #include "settings.h"
 #include "control.h"
@@ -220,6 +221,9 @@ render_settings_ui(GlobalState *AppState)
 
 	if (S->Capture.IsCapturing)
 	{
+		ImGui::SetNextFrameWantCaptureKeyboard(true);
+		ImGui::ClearActiveID();
+
 		if (platform_is_key_down(VK_ESCAPE))
 		{
 			S->Capture.HasCapture = false;
@@ -228,6 +232,8 @@ render_settings_ui(GlobalState *AppState)
 			S->Capture.PeakModifiers = 0;
 			S->Capture.PeakVirtualKey = 0;
 			S->Capture.ReleaseFrames = 0;
+			ImGui::ClearActiveID();
+			ImGui::SetNextFrameWantCaptureKeyboard(true);
 		}
 		else
 		{
@@ -256,6 +262,8 @@ render_settings_ui(GlobalState *AppState)
 					S->Capture.PeakModifiers = 0;
 					S->Capture.PeakVirtualKey = 0;
 					S->Capture.ReleaseFrames = 0;
+					ImGui::ClearActiveID();
+					ImGui::SetNextFrameWantCaptureKeyboard(true);
 				}
 			}
 		}
