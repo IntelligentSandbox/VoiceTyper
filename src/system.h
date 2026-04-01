@@ -1,8 +1,6 @@
 #include "state.h"
 
-#ifndef VOICETYPER_USE_IMGUI
-	#include "control.h"
-#endif
+#include "control.h"
 
 #include <chrono>
 #include <thread>

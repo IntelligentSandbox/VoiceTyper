@@ -259,7 +259,10 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		#endif
 	}
 
-	// Post back to the main thread to restore the record button to idle state.
+	// Restore state after recording finishes.
+#ifdef VOICETYPER_USE_IMGUI
+	AppState->IsRecording = false;
+#else
 	QMetaObject::invokeMethod(
 		AppState->QtApp,
 		[AppState]()
@@ -276,6 +279,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 			AppState->InferenceDeviceDropdown->setEnabled(true);
 		},
 		Qt::QueuedConnection);
+#endif
 }
 
 // ---------------------------------------------------------------------------

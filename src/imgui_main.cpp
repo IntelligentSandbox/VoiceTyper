@@ -262,24 +262,16 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			bool LoadModelKeyIsDown    = is_hotkey_down(AppState.LoadModelHotkey);
 
 			if (RecordKeyIsDown && !RecordKeyWasDown)
-			{
-				// TODO: toggle_recording(&AppState)
-			}
+				toggle_recording(&AppState);
 
 			if (CancelRecordKeyIsDown && !CancelRecordKeyWasDown)
-			{
-				// TODO: cancel_recording(&AppState)
-			}
+				cancel_recording(&AppState);
 
 			if (StreamKeyIsDown && !StreamKeyWasDown)
-			{
-				// TODO: toggle_streaming(&AppState)
-			}
+				toggle_streaming(&AppState);
 
 			if (LoadModelKeyIsDown && !LoadModelKeyWasDown)
-			{
-				// TODO: toggle_stt_model_load(&AppState)
-			}
+				toggle_stt_model_load(&AppState);
 
 			RecordKeyWasDown       = RecordKeyIsDown;
 			CancelRecordKeyWasDown = CancelRecordKeyIsDown;

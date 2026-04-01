@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "state.h"
 #include "settings.h"
+#include "control.h"
 
 // ---------------------------------------------------------------------------
 // Styled button helper
@@ -371,9 +372,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 
 		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
-		{
-			// TODO: toggle_recording(AppState)
-		}
+			toggle_recording(AppState);
 	}
 
 	// Cancel Record Button
@@ -382,9 +381,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		std::string Label = cancel_record_button_idle_label(AppState);
 
 		if (colored_button(Label.c_str(), SmallButton, BUTTON_COLOR_GREY, Enabled))
-		{
-			// TODO: cancel_recording(AppState)
-		}
+			cancel_recording(AppState);
 	}
 
 	// Stream Button
@@ -400,9 +397,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 
 		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
-		{
-			// TODO: toggle_streaming(AppState)
-		}
+			toggle_streaming(AppState);
 	}
 
 	ImGui::Separator();
@@ -459,9 +454,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 
 		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
-		{
-			// TODO: toggle_stt_model_load(AppState)
-		}
+			toggle_stt_model_load(AppState);
 	}
 
 	// Inference Device

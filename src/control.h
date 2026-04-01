@@ -42,31 +42,37 @@ update_inference_device_selection(GlobalState *AppState, int Index)
 			PreviousIndex, Index);
 	#endif
 
+#ifndef VOICETYPER_USE_IMGUI
 	AppState->LoadModelButton->setEnabled(false);
 	AppState->LoadModelButton->setText("Reloading...");
 	AppState->LoadModelButton->repaint();
 	QApplication::processEvents();
+#endif
 
 	bool Success = load_whisper_model(
 		&AppState->WhisperState, AppState->WhisperState.LoadedModelIndex, Index);
+
+#ifndef VOICETYPER_USE_IMGUI
 	AppState->LoadModelButton->setEnabled(true);
 	if (Success)
 	{
 		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
 		AppState->LoadModelButton->setText(
 			QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
-		#ifdef DEBUG
-			printf("[control] Model reloaded on new inference device successfully\n");
-		#endif
 	}
 	else
 	{
 		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
 		AppState->LoadModelButton->setText("Failed to load Model.");
-		#ifdef DEBUG
-			printf("[control] ERROR: Failed to reload model on new inference device\n");
-		#endif
 	}
+#endif
+
+	#ifdef DEBUG
+		if (Success)
+			printf("[control] Model reloaded on new inference device successfully\n");
+		else
+			printf("[control] ERROR: Failed to reload model on new inference device\n");
+	#endif
 }
 
 inline
@@ -98,31 +104,37 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 			AppState->WhisperState.LoadedModelIndex, Index);
 	#endif
 
+#ifndef VOICETYPER_USE_IMGUI
 	AppState->LoadModelButton->setEnabled(false);
 	AppState->LoadModelButton->setText("Loading...");
 	AppState->LoadModelButton->repaint();
 	QApplication::processEvents();
+#endif
 
 	bool Success = load_whisper_model(
 		&AppState->WhisperState, Index, AppState->CurrentInferenceDeviceIndex);
+
+#ifndef VOICETYPER_USE_IMGUI
 	AppState->LoadModelButton->setEnabled(true);
 	if (Success)
 	{
 		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
 		AppState->LoadModelButton->setText(
 			QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
-		#ifdef DEBUG
-			printf("[control] Model reloaded successfully\n");
-		#endif
 	}
 	else
 	{
 		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
 		AppState->LoadModelButton->setText("Failed to load Model.");
-		#ifdef DEBUG
-			printf("[control] ERROR: Failed to reload model\n");
-		#endif
 	}
+#endif
+
+	#ifdef DEBUG
+		if (Success)
+			printf("[control] Model reloaded successfully\n");
+		else
+			printf("[control] ERROR: Failed to reload model\n");
+	#endif
 }
 
 inline
@@ -160,6 +172,7 @@ toggle_recording(GlobalState *AppState)
 		}
 		if (AppState->PlayRecordSound) play_start_recording_sound();
 
+#ifndef VOICETYPER_USE_IMGUI
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_RED);
 		AppState->RecordButton->setText(QString("Stop (%1)").arg(AppState->RecordHotkey.to_label()));
 		AppState->CancelRecordButton->setEnabled(true);
@@ -168,19 +181,23 @@ toggle_recording(GlobalState *AppState)
 		AppState->AudioInputDropdown->setEnabled(false);
 		AppState->STTModelDropdown->setEnabled(false);
 		AppState->InferenceDeviceDropdown->setEnabled(false);
+#endif
 	}
 	else
 	{
 		if (AppState->PlayRecordSound) play_stop_recording_sound();
 		signal_record_stop(AppState);
+
+#ifndef VOICETYPER_USE_IMGUI
 		AppState->RecordButton->setEnabled(false);
 		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
 		AppState->RecordButton->setText("Transcribing...");
 		AppState->CancelRecordButton->setEnabled(false);
+#endif
 	}
 
 	#ifdef DEBUG
-		qDebug() << "Recording toggled to:" << AppState->IsRecording;
+		printf("[control] Recording toggled to: %s\n", AppState->IsRecording ? "true" : "false");
 	#endif
 }
 
@@ -199,6 +216,8 @@ cancel_recording(GlobalState *AppState)
 	if (AppState->PlayRecordSound) play_cancel_recording_sound();
 
 	AppState->IsRecording = false;
+
+#ifndef VOICETYPER_USE_IMGUI
 	AppState->RecordButton->setEnabled(false);
 	AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
 	AppState->RecordButton->setText("Cancelled");
@@ -206,6 +225,7 @@ cancel_recording(GlobalState *AppState)
 	AppState->AudioInputDropdown->setEnabled(true);
 	AppState->STTModelDropdown->setEnabled(true);
 	AppState->InferenceDeviceDropdown->setEnabled(true);
+#endif
 }
 
 inline
@@ -228,9 +248,6 @@ toggle_streaming(GlobalState *AppState)
 		return;
 	}
 
-	AppState->StreamButton->setEnabled(false);
-	AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREY);
-
 	AppState->IsStreaming = !AppState->IsStreaming;
 
 	if (AppState->IsStreaming)
@@ -239,15 +256,13 @@ toggle_streaming(GlobalState *AppState)
 		if (!Started)
 		{
 			AppState->IsStreaming = false;
-			AppState->StreamButton->setEnabled(true);
-			AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
-			AppState->StreamButton->setText(stream_button_idle_label(AppState));
 			#ifdef DEBUG
 				printf("[control] toggle_streaming: failed to start streaming pipeline\n");
 			#endif
 			return;
 		}
-		AppState->StreamButton->setEnabled(true);
+
+#ifndef VOICETYPER_USE_IMGUI
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_RED);
 		AppState->StreamButton->setText(QString("Stop Streaming (%1)").arg(AppState->StreamHotkey.to_label()));
 		AppState->RecordButton->setEnabled(false);
@@ -255,11 +270,13 @@ toggle_streaming(GlobalState *AppState)
 		AppState->AudioInputDropdown->setEnabled(false);
 		AppState->STTModelDropdown->setEnabled(false);
 		AppState->InferenceDeviceDropdown->setEnabled(false);
+#endif
 	}
 	else
 	{
 		stop_streaming_pipeline(AppState);
-		AppState->StreamButton->setEnabled(true);
+
+#ifndef VOICETYPER_USE_IMGUI
 		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
 		AppState->StreamButton->setText(stream_button_idle_label(AppState));
 		AppState->RecordButton->setEnabled(true);
@@ -268,10 +285,11 @@ toggle_streaming(GlobalState *AppState)
 		AppState->AudioInputDropdown->setEnabled(true);
 		AppState->STTModelDropdown->setEnabled(true);
 		AppState->InferenceDeviceDropdown->setEnabled(true);
+#endif
 	}
 
 	#ifdef DEBUG
-		qDebug() << "Streaming toggled to:" << AppState->IsStreaming;
+		printf("[control] Streaming toggled to: %s\n", AppState->IsStreaming ? "true" : "false");
 	#endif
 }
 
@@ -298,11 +316,13 @@ toggle_stt_model_load(GlobalState *AppState)
 		#endif
 		unload_whisper_model(&AppState->WhisperState);
 
+#ifndef VOICETYPER_USE_IMGUI
 		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_GREY);
 		AppState->LoadModelButton->setText(load_model_button_idle_label(AppState));
+#endif
 
 		#ifdef DEBUG
-			printf("[control] STT model unloaded, button updated to grey\n");
+			printf("[control] STT model unloaded\n");
 		#endif
 	}
 	else
@@ -317,30 +337,35 @@ toggle_stt_model_load(GlobalState *AppState)
 			return;
 		}
 
+#ifndef VOICETYPER_USE_IMGUI
 		AppState->LoadModelButton->setEnabled(false);
 		AppState->LoadModelButton->setText("Loading...");
 		AppState->LoadModelButton->repaint();
+#endif
 
 		bool Success = load_whisper_model(
 			&AppState->WhisperState, ModelIdx, AppState->CurrentInferenceDeviceIndex);
+
+#ifndef VOICETYPER_USE_IMGUI
 		AppState->LoadModelButton->setEnabled(true);
 		if (Success)
 		{
 			AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
 			AppState->LoadModelButton->setText(
 				QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
-			#ifdef DEBUG
-				printf("[control] STT model loaded successfully, button updated to blue\n");
-			#endif
 		}
 		else
 		{
 			AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
 			AppState->LoadModelButton->setText("Failed to load Model.");
-			#ifdef DEBUG
-				printf("[control] ERROR: Failed to load STT model\n");
-			#endif
 		}
+#endif
 
+		#ifdef DEBUG
+			if (Success)
+				printf("[control] STT model loaded successfully\n");
+			else
+				printf("[control] ERROR: Failed to load STT model\n");
+		#endif
 	}
 }
