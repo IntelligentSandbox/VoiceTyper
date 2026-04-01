@@ -5,3 +5,4 @@ models/
 docs/tasks.md
 .claude/settings.local.json
 dist/
+imgui.ini
