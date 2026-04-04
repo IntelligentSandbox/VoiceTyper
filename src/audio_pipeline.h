@@ -259,8 +259,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		#endif
 	}
 
-	// Restore state after recording finishes.
-	AppState->IsRecording = false;
+	AppState->PipelineActive.store(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +295,9 @@ start_record_pipeline(GlobalState *AppState)
 {
 	if (!pipeline_preflight(AppState)) return false;
 
+	if (AppState->CaptureThread.joinable())
+		AppState->CaptureThread.join();
+
 	int DeviceIndex = AppState->CurrentAudioDeviceIndex;
 
 	{
@@ -304,9 +306,8 @@ start_record_pipeline(GlobalState *AppState)
 	}
 
 	AppState->CaptureRunning.store(true);
-
-	// Detach — the thread posts back to the main thread when transcription is done.
-	std::thread(record_pipeline_thread, AppState, DeviceIndex).detach();
+	AppState->PipelineActive.store(true);
+	AppState->CaptureThread = std::thread(record_pipeline_thread, AppState, DeviceIndex);
 
 	#ifdef DEBUG
 		printf("[audio_pipeline] Record pipeline started\n");
@@ -333,6 +334,9 @@ start_streaming_pipeline(GlobalState *AppState)
 {
 	if (!pipeline_preflight(AppState)) return false;
 
+	if (AppState->CaptureThread.joinable())
+		AppState->CaptureThread.join();
+
 	int DeviceIndex = AppState->CurrentAudioDeviceIndex;
 
 	{
@@ -341,6 +345,7 @@ start_streaming_pipeline(GlobalState *AppState)
 	}
 
 	AppState->CaptureRunning.store(true);
+	AppState->PipelineActive.store(true);
 	AppState->CaptureThread = std::thread(streaming_pipeline_thread, AppState, DeviceIndex);
 
 	#ifdef DEBUG
@@ -359,6 +364,8 @@ stop_streaming_pipeline(GlobalState *AppState)
 
 	if (AppState->CaptureThread.joinable())
 		AppState->CaptureThread.join();
+
+	AppState->PipelineActive.store(false);
 
 	#ifdef DEBUG
 		printf("[audio_pipeline] Streaming pipeline stopped\n");

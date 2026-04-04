@@ -430,7 +430,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	ImVec2 BigButton = ImVec2(-1, 60);
 	ImVec2 SmallButton = ImVec2(-1, 40);
 
-	bool Busy = AppState->IsRecording || AppState->IsStreaming;
+	bool Busy = AppState->IsRecording || AppState->IsStreaming || AppState->PipelineActive.load();
 
 	// Record Button
 	{
@@ -444,7 +444,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			Label = "Stop (" + AppState->RecordHotkey.to_label() + ")";
 		}
 
-		if (AppState->CaptureRunning.load() && !AppState->IsRecording)
+		if (AppState->PipelineActive.load() && !AppState->IsRecording)
 		{
 			Color = BUTTON_COLOR_GREY;
 			Label = "Transcribing...";
@@ -468,7 +468,8 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	{
 		ImVec4 Color = BUTTON_COLOR_GREEN;
 		std::string Label = stream_button_idle_label(AppState);
-		bool Enabled = !AppState->IsRecording;
+		bool Enabled = AppState->IsStreaming ||
+			(!AppState->IsRecording && !AppState->PipelineActive.load());
 
 		if (AppState->IsStreaming)
 		{
@@ -499,7 +500,10 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 		else
 		{
-			string_combo("##AudioInput", &AppState->CurrentAudioDeviceIndex, DeviceNames);
+			if (Busy) ImGui::BeginDisabled();
+			if (string_combo("##AudioInput", &AppState->CurrentAudioDeviceIndex, DeviceNames))
+				update_audio_input_selection(AppState, AppState->CurrentAudioDeviceIndex);
+			if (Busy) ImGui::EndDisabled();
 		}
 	}
 
@@ -516,8 +520,13 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 		else
 		{
-			string_combo("##STTModel", &AppState->CurrentSTTModelIndex,
-				AppState->STTModelNames);
+			if (Busy) ImGui::BeginDisabled();
+			if (string_combo("##STTModel", &AppState->CurrentSTTModelIndex,
+				AppState->STTModelNames))
+			{
+				update_stt_model_selection(AppState, AppState->CurrentSTTModelIndex);
+			}
+			if (Busy) ImGui::EndDisabled();
 		}
 	}
 
@@ -541,8 +550,13 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	// Inference Device
 	{
 		ImGui::Text("Inference Device");
-		string_combo("##InferenceDevice", &AppState->CurrentInferenceDeviceIndex,
-			AppState->InferenceDevices);
+		if (Busy) ImGui::BeginDisabled();
+		if (string_combo("##InferenceDevice", &AppState->CurrentInferenceDeviceIndex,
+			AppState->InferenceDevices))
+		{
+			update_inference_device_selection(AppState, AppState->CurrentInferenceDeviceIndex);
+		}
+		if (Busy) ImGui::EndDisabled();
 	}
 
 	ImGui::Separator();

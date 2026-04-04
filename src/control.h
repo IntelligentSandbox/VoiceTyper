@@ -36,6 +36,10 @@ update_inference_device_selection(GlobalState *AppState, int Index)
 
 	if (PreviousIndex == Index) return;
 	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
+	if (AppState->PipelineActive.load()) return;
+
+	if (AppState->CaptureThread.joinable())
+		AppState->CaptureThread.join();
 
 	#ifdef DEBUG
 		printf("[control] Inference device changed while model loaded (%d -> %d), reloading\n",
@@ -78,6 +82,10 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 
 	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
 	if (AppState->WhisperState.LoadedModelIndex == Index) return;
+	if (AppState->PipelineActive.load()) return;
+
+	if (AppState->CaptureThread.joinable())
+		AppState->CaptureThread.join();
 
 	#ifdef DEBUG
 		printf("[control] Model index changed while loaded (%d -> %d), reloading\n",
@@ -212,13 +220,17 @@ toggle_stt_model_load(GlobalState *AppState)
 		printf("[control] toggle_stt_model_load called\n");
 	#endif
 
-	if (AppState->IsRecording || AppState->IsStreaming || AppState->CaptureRunning.load())
+	if (AppState->IsRecording || AppState->IsStreaming ||
+		AppState->CaptureRunning.load() || AppState->PipelineActive.load())
 	{
 		#ifdef DEBUG
 			printf("[control] toggle_stt_model_load: busy (recording/streaming/transcribing), ignoring\n");
 		#endif
 		return;
 	}
+
+	if (AppState->CaptureThread.joinable())
+		AppState->CaptureThread.join();
 
 	if (is_whisper_model_loaded(&AppState->WhisperState))
 	{

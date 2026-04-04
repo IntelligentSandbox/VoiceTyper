@@ -233,6 +233,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	AppStateStorage.IsRecording            = false;
 	AppStateStorage.IsStreaming            = false;
 	AppStateStorage.CaptureRunning        = false;
+	AppStateStorage.PipelineActive        = false;
 	AppStateStorage.OwnWindow              = Hwnd;
 	AppStateStorage.IsSettingsDialogOpen   = false;
 	AppStateStorage.PlayRecordSound        = false;
@@ -322,15 +323,9 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	g_ImGuiReady = false;
 
-	if (AppState->IsRecording)
-		AppState->CaptureRunning.store(false);
-
-	if (AppState->IsStreaming)
-	{
-		AppState->CaptureRunning.store(false);
-		if (AppState->CaptureThread.joinable())
-			AppState->CaptureThread.join();
-	}
+	AppState->CaptureRunning.store(false);
+	if (AppState->CaptureThread.joinable())
+		AppState->CaptureThread.join();
 
 	if (is_whisper_model_loaded(&AppState->WhisperState))
 		unload_whisper_model(&AppState->WhisperState);

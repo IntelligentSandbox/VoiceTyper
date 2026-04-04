@@ -229,6 +229,7 @@ struct GlobalState
 	// Audio capture pipeline
 	std::atomic<bool> CaptureRunning;
 	std::atomic<bool> CancelRequested;
+	std::atomic<bool> PipelineActive;
 	std::thread CaptureThread;
 	std::mutex AudioBufferMutex;
 	std::vector<float> AudioAccumBuffer;
