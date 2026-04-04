@@ -55,7 +55,18 @@ if(WIN32)
 	set(APP_ICON_RESOURCE "${CMAKE_SOURCE_DIR}/src/resources.rc")
 endif()
 
+if(VOICETYPER_CUDA)
+	set(VARIANT_SUFFIX "_cuda")
+else()
+	set(VARIANT_SUFFIX "_cpu")
+endif()
+
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${APP_ICON_RESOURCE})
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/build/Release${VARIANT_SUFFIX}"
+	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/build/Debug${VARIANT_SUFFIX}"
+)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/src/external/whisper.cpp/include

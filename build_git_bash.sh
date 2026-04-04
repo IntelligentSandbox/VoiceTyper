@@ -10,7 +10,15 @@ for arg in "$@"; do
 	esac
 done
 
-BUILD_DIR="build"
+if [ "$USE_CUDA" = "ON" ]; then
+	BUILD_DIR="build/cuda"
+	VARIANT="cuda"
+else
+	BUILD_DIR="build/cpu"
+	VARIANT="cpu"
+fi
+
+OUTPUT_DIR="build/${BUILD_TYPE}_${VARIANT}"
 
 EXTRA_FLAGS=("-DVOICETYPER_CUDA=$USE_CUDA")
 if [ "$USE_CUDA" = "ON" ]; then
@@ -20,15 +28,15 @@ fi
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
-cmake .. -G "Visual Studio 17 2022" -A x64 "${EXTRA_FLAGS[@]}"
+cmake ../.. -G "Visual Studio 17 2022" -A x64 "${EXTRA_FLAGS[@]}"
 cmake --build . --config "$BUILD_TYPE"
-cd ..
+cd ../..
 
 if [ "$USE_CUDA" = "ON" ]; then
 	CUDA_DLL_DIR="$CUDA_PATH/bin"
 	if [ -d "$CUDA_PATH/bin/x64" ]; then
 		CUDA_DLL_DIR="$CUDA_PATH/bin/x64"
 	fi
-	cp -u "$CUDA_DLL_DIR"/cublas64_*.dll "$BUILD_DIR/$BUILD_TYPE/"
-	cp -u "$CUDA_DLL_DIR"/cublasLt64_*.dll "$BUILD_DIR/$BUILD_TYPE/"
+	cp -u "$CUDA_DLL_DIR"/cublas64_*.dll "$OUTPUT_DIR/"
+	cp -u "$CUDA_DLL_DIR"/cublasLt64_*.dll "$OUTPUT_DIR/"
 fi
