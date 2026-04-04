@@ -241,40 +241,12 @@ platform_set_taskbar_icon(void *Window, const char *PngPath)
 	HWND HWnd = (HWND)Window;
 	if (!HWnd || !PngPath) return;
 
-#ifdef VOICETYPER_USE_IMGUI
 	HICON Icon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101));
 	if (Icon)
 	{
 		SendMessageW(HWnd, WM_SETICON, ICON_BIG, (LPARAM)Icon);
 		SendMessageW(HWnd, WM_SETICON, ICON_SMALL, (LPARAM)Icon);
 	}
-#else
-	QPixmap Pixmap(PngPath);
-	if (Pixmap.isNull())
-	{
-		#ifdef DEBUG
-			printf("[platform] platform_set_taskbar_icon: failed to load %s\n", PngPath);
-		#endif
-		return;
-	}
-
-	HICON BigIcon = Pixmap.scaled(
-		GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
-		Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage().toHICON();
-	HICON SmallIcon = Pixmap.scaled(
-		GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
-		Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage().toHICON();
-
-	if (BigIcon)
-		SendMessageW(HWnd, WM_SETICON, ICON_BIG, (LPARAM)BigIcon);
-	if (SmallIcon)
-		SendMessageW(HWnd, WM_SETICON, ICON_SMALL, (LPARAM)SmallIcon);
-
-	#ifdef DEBUG
-		printf("[platform] platform_set_taskbar_icon: big=%s small=%s\n",
-			BigIcon ? "ok" : "failed", SmallIcon ? "ok" : "failed");
-	#endif
-#endif
 }
 
 inline void
@@ -292,69 +264,16 @@ platform_is_key_down(int VirtualKey)
 	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
 }
 
-#ifndef VOICETYPER_USE_IMGUI
-inline int
-platform_qt_key_to_native(Qt::Key Key)
-{
-	if (Key == Qt::Key_unknown || Key == 0) return 0;
-
-	// Modifier keys
-	if (Key == Qt::Key_Control) return VK_CONTROL;
-	if (Key == Qt::Key_Alt)     return VK_MENU;
-	if (Key == Qt::Key_Shift)   return VK_SHIFT;
-	if (Key == Qt::Key_Meta)    return VK_LWIN;
-
-	// Function keys
-	if (Key >= Qt::Key_F1 && Key <= Qt::Key_F35)
-		return VK_F1 + (Key - Qt::Key_F1);
-
-	// Letters A-Z
-	if (Key >= Qt::Key_A && Key <= Qt::Key_Z)
-		return 'A' + (Key - Qt::Key_A);
-
-	// Digits 0-9
-	if (Key >= Qt::Key_0 && Key <= Qt::Key_9)
-		return '0' + (Key - Qt::Key_0);
-
-	switch (Key)
-	{
-		case Qt::Key_Space:     return VK_SPACE;
-		case Qt::Key_Return:    return VK_RETURN;
-		case Qt::Key_Escape:    return VK_ESCAPE;
-		case Qt::Key_Tab:       return VK_TAB;
-		case Qt::Key_Backspace: return VK_BACK;
-		case Qt::Key_Delete:    return VK_DELETE;
-		case Qt::Key_Insert:    return VK_INSERT;
-		case Qt::Key_Home:      return VK_HOME;
-		case Qt::Key_End:       return VK_END;
-		case Qt::Key_PageUp:    return VK_PRIOR;
-		case Qt::Key_PageDown:  return VK_NEXT;
-		case Qt::Key_Left:      return VK_LEFT;
-		case Qt::Key_Right:     return VK_RIGHT;
-		case Qt::Key_Up:        return VK_UP;
-		case Qt::Key_Down:      return VK_DOWN;
-		default:                return 0;
-	}
-}
-#endif
-
 inline
 std::string
 platform_get_exe_dir()
 {
-#ifdef VOICETYPER_USE_IMGUI
 	char ExePath[MAX_PATH] = {};
 	GetModuleFileNameA(nullptr, ExePath, MAX_PATH);
 	char *LastSlash = strrchr(ExePath, '\\');
 	if (!LastSlash) LastSlash = strrchr(ExePath, '/');
 	if (LastSlash) *LastSlash = '\0';
 	return std::string(ExePath);
-#else
-	wchar_t ExePath[MAX_PATH] = {};
-	GetModuleFileNameW(nullptr, ExePath, MAX_PATH);
-	QString ExeDir = QFileInfo(QString::fromWCharArray(ExePath)).absolutePath();
-	return ExeDir.toStdString();
-#endif
 }
 
 // ---------------------------------------------------------------------------

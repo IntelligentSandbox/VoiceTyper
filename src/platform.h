@@ -1,9 +1,5 @@
 #pragma once
 
-#ifndef VOICETYPER_USE_IMGUI
-	#include "qt.h"
-#endif
-
 #include <vector>
 #include <string>
 
@@ -18,7 +14,3 @@ void platform_set_taskbar_icon(void *Window, const char *PngPath);
 void platform_play_sound(int FreqHz, int DurationMs);
 bool platform_is_key_down(int VirtualKey);
 std::string platform_get_exe_dir();
-
-#ifndef VOICETYPER_USE_IMGUI
-int platform_qt_key_to_native(Qt::Key Key);
-#endif

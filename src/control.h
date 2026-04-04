@@ -42,30 +42,8 @@ update_inference_device_selection(GlobalState *AppState, int Index)
 			PreviousIndex, Index);
 	#endif
 
-#ifndef VOICETYPER_USE_IMGUI
-	AppState->LoadModelButton->setEnabled(false);
-	AppState->LoadModelButton->setText("Reloading...");
-	AppState->LoadModelButton->repaint();
-	QApplication::processEvents();
-#endif
-
 	bool Success = load_whisper_model(
 		&AppState->WhisperState, AppState->WhisperState.LoadedModelIndex, Index);
-
-#ifndef VOICETYPER_USE_IMGUI
-	AppState->LoadModelButton->setEnabled(true);
-	if (Success)
-	{
-		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
-		AppState->LoadModelButton->setText(
-			QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
-	}
-	else
-	{
-		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
-		AppState->LoadModelButton->setText("Failed to load Model.");
-	}
-#endif
 
 	#ifdef DEBUG
 		if (Success)
@@ -104,30 +82,8 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 			AppState->WhisperState.LoadedModelIndex, Index);
 	#endif
 
-#ifndef VOICETYPER_USE_IMGUI
-	AppState->LoadModelButton->setEnabled(false);
-	AppState->LoadModelButton->setText("Loading...");
-	AppState->LoadModelButton->repaint();
-	QApplication::processEvents();
-#endif
-
 	bool Success = load_whisper_model(
 		&AppState->WhisperState, Index, AppState->CurrentInferenceDeviceIndex);
-
-#ifndef VOICETYPER_USE_IMGUI
-	AppState->LoadModelButton->setEnabled(true);
-	if (Success)
-	{
-		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
-		AppState->LoadModelButton->setText(
-			QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
-	}
-	else
-	{
-		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
-		AppState->LoadModelButton->setText("Failed to load Model.");
-	}
-#endif
 
 	#ifdef DEBUG
 		if (Success)
@@ -171,29 +127,11 @@ toggle_recording(GlobalState *AppState)
 			return;
 		}
 		if (AppState->PlayRecordSound) play_start_recording_sound();
-
-#ifndef VOICETYPER_USE_IMGUI
-		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_RED);
-		AppState->RecordButton->setText(QString("Stop (%1)").arg(AppState->RecordHotkey.to_label()));
-		AppState->CancelRecordButton->setEnabled(true);
-		AppState->StreamButton->setEnabled(false);
-		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREY);
-		AppState->AudioInputDropdown->setEnabled(false);
-		AppState->STTModelDropdown->setEnabled(false);
-		AppState->InferenceDeviceDropdown->setEnabled(false);
-#endif
 	}
 	else
 	{
 		if (AppState->PlayRecordSound) play_stop_recording_sound();
 		signal_record_stop(AppState);
-
-#ifndef VOICETYPER_USE_IMGUI
-		AppState->RecordButton->setEnabled(false);
-		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
-		AppState->RecordButton->setText("Transcribing...");
-		AppState->CancelRecordButton->setEnabled(false);
-#endif
 	}
 
 	#ifdef DEBUG
@@ -216,16 +154,6 @@ cancel_recording(GlobalState *AppState)
 	if (AppState->PlayRecordSound) play_cancel_recording_sound();
 
 	AppState->IsRecording = false;
-
-#ifndef VOICETYPER_USE_IMGUI
-	AppState->RecordButton->setEnabled(false);
-	AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
-	AppState->RecordButton->setText("Cancelled");
-	AppState->CancelRecordButton->setEnabled(false);
-	AppState->AudioInputDropdown->setEnabled(true);
-	AppState->STTModelDropdown->setEnabled(true);
-	AppState->InferenceDeviceDropdown->setEnabled(true);
-#endif
 }
 
 inline
@@ -261,31 +189,10 @@ toggle_streaming(GlobalState *AppState)
 			#endif
 			return;
 		}
-
-#ifndef VOICETYPER_USE_IMGUI
-		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_RED);
-		AppState->StreamButton->setText(QString("Stop Streaming (%1)").arg(AppState->StreamHotkey.to_label()));
-		AppState->RecordButton->setEnabled(false);
-		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREY);
-		AppState->AudioInputDropdown->setEnabled(false);
-		AppState->STTModelDropdown->setEnabled(false);
-		AppState->InferenceDeviceDropdown->setEnabled(false);
-#endif
 	}
 	else
 	{
 		stop_streaming_pipeline(AppState);
-
-#ifndef VOICETYPER_USE_IMGUI
-		AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
-		AppState->StreamButton->setText(stream_button_idle_label(AppState));
-		AppState->RecordButton->setEnabled(true);
-		AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREEN);
-		AppState->RecordButton->setText(record_button_idle_label(AppState));
-		AppState->AudioInputDropdown->setEnabled(true);
-		AppState->STTModelDropdown->setEnabled(true);
-		AppState->InferenceDeviceDropdown->setEnabled(true);
-#endif
 	}
 
 	#ifdef DEBUG
@@ -316,11 +223,6 @@ toggle_stt_model_load(GlobalState *AppState)
 		#endif
 		unload_whisper_model(&AppState->WhisperState);
 
-#ifndef VOICETYPER_USE_IMGUI
-		AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_GREY);
-		AppState->LoadModelButton->setText(load_model_button_idle_label(AppState));
-#endif
-
 		#ifdef DEBUG
 			printf("[control] STT model unloaded\n");
 		#endif
@@ -337,29 +239,8 @@ toggle_stt_model_load(GlobalState *AppState)
 			return;
 		}
 
-#ifndef VOICETYPER_USE_IMGUI
-		AppState->LoadModelButton->setEnabled(false);
-		AppState->LoadModelButton->setText("Loading...");
-		AppState->LoadModelButton->repaint();
-#endif
-
 		bool Success = load_whisper_model(
 			&AppState->WhisperState, ModelIdx, AppState->CurrentInferenceDeviceIndex);
-
-#ifndef VOICETYPER_USE_IMGUI
-		AppState->LoadModelButton->setEnabled(true);
-		if (Success)
-		{
-			AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_BLUE);
-			AppState->LoadModelButton->setText(
-				QString("Unload STT Model (%1)").arg(AppState->LoadModelHotkey.to_label()));
-		}
-		else
-		{
-			AppState->LoadModelButton->setStyleSheet(BUTTON_STYLE_RED);
-			AppState->LoadModelButton->setText("Failed to load Model.");
-		}
-#endif
 
 		#ifdef DEBUG
 			if (Success)

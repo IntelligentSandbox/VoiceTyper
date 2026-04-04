@@ -260,26 +260,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 	}
 
 	// Restore state after recording finishes.
-#ifdef VOICETYPER_USE_IMGUI
 	AppState->IsRecording = false;
-#else
-	QMetaObject::invokeMethod(
-		AppState->QtApp,
-		[AppState]()
-		{
-			AppState->IsRecording = false;
-			AppState->RecordButton->setEnabled(true);
-			AppState->RecordButton->setStyleSheet(BUTTON_STYLE_GREEN);
-			AppState->RecordButton->setText(record_button_idle_label(AppState));
-			AppState->CancelRecordButton->setEnabled(false);
-			AppState->StreamButton->setEnabled(true);
-			AppState->StreamButton->setStyleSheet(BUTTON_STYLE_GREEN);
-			AppState->AudioInputDropdown->setEnabled(true);
-			AppState->STTModelDropdown->setEnabled(true);
-			AppState->InferenceDeviceDropdown->setEnabled(true);
-		},
-		Qt::QueuedConnection);
-#endif
 }
 
 // ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ cd build/Release && 7z a -tzip "../../$CUDA_ZIP" -r . > /dev/null && cd ../..
 echo ""
 echo "=== Building $CUDA_MSI ==="
 mkdir -p build/Release/data
-echo '{}' > build/Release/data/settings.json
+touch build/Release/data/settings.ini
 wix build -o "$CUDA_MSI" -pdbtype none -d "BuildOutput=$(pwd)/build/Release" -d "ProductVersion=$VERSION" packaging/VoiceTyper.wxs
 
 echo ""
@@ -46,7 +46,7 @@ cd build/Release && 7z a -tzip "../../$CPU_ZIP" -r . > /dev/null && cd ../..
 echo ""
 echo "=== Building $CPU_MSI ==="
 mkdir -p build/Release/data
-echo '{}' > build/Release/data/settings.json
+touch build/Release/data/settings.ini
 wix build -o "$CPU_MSI" -d "BuildOutput=$(pwd)/build/Release" -d "ProductVersion=$VERSION" packaging/VoiceTyper.wxs
 
 echo ""
