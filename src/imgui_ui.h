@@ -164,7 +164,6 @@ init_settings_state(GlobalState *AppState)
 	S->Capture.PeakModifiers = 0;
 	S->Capture.PeakVirtualKey = 0;
 	S->Capture.ReleaseFrames = 0;
-	S->HasCachedPos = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -180,22 +179,11 @@ render_settings_ui(GlobalState *AppState)
 	float SettingsW = (Display.x < 620.0f) ? Display.x : 620.0f;
 	ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), Display);
 	ImGui::SetNextWindowSize(ImVec2(SettingsW, 0));
-	if (S->HasCachedPos)
-		ImGui::SetNextWindowPos(ImVec2(S->CachedPosX, S->CachedPosY));
-	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 		return;
 
 	AppState->IsSettingsDialogOpen = true;
-
-	ImVec2 WinPos = ImGui::GetWindowPos();
-	ImVec2 WinSize = ImGui::GetWindowSize();
-	float ClampedX = (WinPos.x < 0) ? 0 : (WinPos.x + WinSize.x > Display.x) ? Display.x - WinSize.x : WinPos.x;
-	float ClampedY = (WinPos.y < 0) ? 0 : (WinPos.y + WinSize.y > Display.y) ? Display.y - WinSize.y : WinPos.y;
-	if (ClampedX != WinPos.x || ClampedY != WinPos.y)
-		ImGui::SetWindowPos(ImVec2(ClampedX, ClampedY));
-	S->CachedPosX = ClampedX;
-	S->CachedPosY = ClampedY;
-	S->HasCachedPos = true;
 
 #ifdef VOICETYPER_CUDA
 	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION);
