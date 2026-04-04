@@ -43,7 +43,9 @@ update_inference_device_selection(GlobalState *AppState, int Index)
 	#endif
 
 	bool Success = load_whisper_model(
-		&AppState->WhisperState, AppState->WhisperState.LoadedModelIndex, Index);
+		&AppState->WhisperState,
+		AppState->WhisperState.ModelPath.c_str(),
+		AppState->WhisperState.LoadedModelIndex, Index);
 
 	#ifdef DEBUG
 		if (Success)
@@ -83,7 +85,9 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 	#endif
 
 	bool Success = load_whisper_model(
-		&AppState->WhisperState, Index, AppState->CurrentInferenceDeviceIndex);
+		&AppState->WhisperState,
+		AppState->STTModelPaths[Index].c_str(),
+		Index, AppState->CurrentInferenceDeviceIndex);
 
 	#ifdef DEBUG
 		if (Success)
@@ -230,17 +234,18 @@ toggle_stt_model_load(GlobalState *AppState)
 	else
 	{
 		int ModelIdx = AppState->CurrentSTTModelIndex;
-		if (ModelIdx < 0 || ModelIdx >= (int)AppState->STTModelAvailable.size() ||
-			!AppState->STTModelAvailable[ModelIdx])
+		if (ModelIdx < 0 || ModelIdx >= (int)AppState->STTModelPaths.size())
 		{
 			#ifdef DEBUG
-				printf("[control] toggle_stt_model_load: selected model not available on disk\n");
+				printf("[control] toggle_stt_model_load: selected model index out of range\n");
 			#endif
 			return;
 		}
 
 		bool Success = load_whisper_model(
-			&AppState->WhisperState, ModelIdx, AppState->CurrentInferenceDeviceIndex);
+			&AppState->WhisperState,
+			AppState->STTModelPaths[ModelIdx].c_str(),
+			ModelIdx, AppState->CurrentInferenceDeviceIndex);
 
 		#ifdef DEBUG
 			if (Success)

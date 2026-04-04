@@ -2,7 +2,8 @@ build/
 build-imgui/
 notes/
 compile_commands.json
-models/
+stt_models/
+vad_models/
 docs/tasks.md
 .claude/settings.local.json
 dist/

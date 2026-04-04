@@ -506,7 +506,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	// STT Model
 	{
 		ImGui::Text("STT Model");
-		if (!AppState->AnySTTModelAvailable)
+		if (AppState->STTModelNames.empty())
 		{
 			std::vector<std::string> NoModels = { "No Models Found" };
 			int Dummy = 0;
@@ -516,7 +516,8 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 		else
 		{
-			string_combo("##STTModel", &AppState->CurrentSTTModelIndex, AppState->STTModels);
+			string_combo("##STTModel", &AppState->CurrentSTTModelIndex,
+				AppState->STTModelNames);
 		}
 	}
 
@@ -525,7 +526,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		bool ModelLoaded = is_whisper_model_loaded(&AppState->WhisperState);
 		ImVec4 Color = BUTTON_COLOR_GREY;
 		std::string Label = load_model_button_idle_label(AppState);
-		bool Enabled = AppState->AnySTTModelAvailable && !Busy;
+		bool Enabled = !AppState->STTModelNames.empty() && !Busy;
 
 		if (ModelLoaded)
 		{

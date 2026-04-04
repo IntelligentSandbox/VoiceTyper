@@ -13,7 +13,7 @@
 #include <vector>
 #include <string>
 
-#define VAD_MODEL_PATH "models/ggml-silero-v5.1.2.bin"
+#define VAD_MODEL_PATH "vad_models/ggml-silero-v5.1.2.bin"
 
 // Minimum RMS energy to bother sending a chunk to whisper.
 #define PIPELINE_SILENCE_RMS_THRESHOLD 0.002f

@@ -95,11 +95,19 @@ endif()
 if(WIN32)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND cmd /c robocopy
-			"${CMAKE_SOURCE_DIR}\\models"
-			"$<TARGET_FILE_DIR:${PROJECT_NAME}>\\models"
+			"${CMAKE_SOURCE_DIR}\\stt_models"
+			"$<TARGET_FILE_DIR:${PROJECT_NAME}>\\stt_models"
 			/E /NJH /NJS /NFL /NDL
 			"||" exit 0
-		COMMENT "Copying models to output directory"
+		COMMENT "Copying STT models to output directory"
+	)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND cmd /c robocopy
+			"${CMAKE_SOURCE_DIR}\\vad_models"
+			"$<TARGET_FILE_DIR:${PROJECT_NAME}>\\vad_models"
+			/E /NJH /NJS /NFL /NDL
+			"||" exit 0
+		COMMENT "Copying VAD models to output directory"
 	)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND cmd /c robocopy

@@ -11,24 +11,6 @@
 static void whisper_log_suppress(ggml_log_level, const char *, void *) {}
 #endif
 
-enum WhisperModelIndex
-{
-	WHISPER_MODEL_TINY_EN = 0,
-	WHISPER_MODEL_BASE_EN = 1,
-	// WHISPER_MODEL_SMALL_EN = 2,
-	// WHISPER_MODEL_MEDIUM_EN = 3,
-	// WHISPER_MODEL_LARGE_V3_TURBO = 4,
-	WHISPER_MODEL_COUNT = 2
-};
-
-static const char* WHISPER_MODEL_PATHS[WHISPER_MODEL_COUNT] = {
-	"models/ggml-tiny.en.bin",
-	"models/ggml-base.en.bin",
-	// "models/ggml-small.en.bin",
-	// "models/ggml-medium.en.bin",
-	// "models/ggml-large-v3-turbo.bin"
-};
-
 struct WhisperModelState
 {
 	whisper_context *Context;
@@ -52,28 +34,13 @@ init_whisper_state(WhisperModelState *State)
 	#endif
 }
 
-inline
-const char*
-get_model_path_for_index(int ModelIndex)
-{
-	if (ModelIndex < 0 || ModelIndex >= WHISPER_MODEL_COUNT)
-	{
-		#ifdef DEBUG
-			printf("[whisper_wrapper] Invalid model index %d, defaulting to base.en\n", ModelIndex);
-		#endif
-		ModelIndex = WHISPER_MODEL_BASE_EN;
-	}
-	return WHISPER_MODEL_PATHS[ModelIndex];
-}
-
 // Returns true on success, false on failure.
 // InferenceDeviceIndex: 0 = CPU, >= 1 = GPU (CUDA device = InferenceDeviceIndex - 1)
 inline
 bool
-load_whisper_model(WhisperModelState *State, int ModelIndex, int InferenceDeviceIndex)
+load_whisper_model(WhisperModelState *State, const char *ModelPath,
+	int ModelIndex, int InferenceDeviceIndex)
 {
-	const char *ModelPath = get_model_path_for_index(ModelIndex);
-
 	#ifdef DEBUG
 		printf("[control] Loading STT model from: %s\n", ModelPath);
 	#endif

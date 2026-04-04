@@ -234,40 +234,61 @@ inline
 void
 query_available_stt_models(GlobalState *AppState)
 {
-	AppState->STTModels.clear();
-	AppState->STTModelAvailable.clear();
+	AppState->STTModelNames.clear();
+	AppState->STTModelPaths.clear();
 
-	AppState->STTModels.push_back("Whisper tiny.en (75 MB)");
-	AppState->STTModels.push_back("Whisper base.en (142 MB)");
-	// AppState->STTModels.push_back("Whisper small.en (466 MB)");
-	// AppState->STTModels.push_back("Whisper medium.en (1.5 GB)");
-	// AppState->STTModels.push_back("Whisper large-v3-turbo (1.5 GB)");
+	std::string Dir = platform_get_exe_dir() + "\\stt_models";
+	WIN32_FIND_DATAA Fd;
+	std::string Pattern = Dir + "\\ggml-*.bin";
+	HANDLE Hf = FindFirstFileA(Pattern.c_str(), &Fd);
 
-	AppState->AnySTTModelAvailable = false;
-	int FirstAvailableIndex = -1;
-	for (int i = 0; i < WHISPER_MODEL_COUNT; i++)
+	if (Hf != INVALID_HANDLE_VALUE)
 	{
-		bool Exists = file_exists(WHISPER_MODEL_PATHS[i]);
-		AppState->STTModelAvailable.push_back(Exists);
-		if (Exists && FirstAvailableIndex == -1) FirstAvailableIndex = i;
-		if (Exists) AppState->AnySTTModelAvailable = true;
-		#ifdef DEBUG
-			printf("[system] Model '%s' (%s): %s\n",
-				AppState->STTModels[i].c_str(),
-				WHISPER_MODEL_PATHS[i],
-				Exists ? "found" : "NOT FOUND");
-		#endif
+		do
+		{
+			if (Fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+
+			std::string FileName = Fd.cFileName;
+			std::string FilePath = Dir + "\\" + FileName;
+
+			std::string DisplayName = FileName;
+			if (DisplayName.rfind("ggml-", 0) == 0)
+				DisplayName = DisplayName.substr(5);
+			if (DisplayName.size() > 4 &&
+				DisplayName.substr(DisplayName.size() - 4) == ".bin")
+			{
+				DisplayName = DisplayName.substr(0, DisplayName.size() - 4);
+			}
+
+			LARGE_INTEGER FileSize;
+			FileSize.LowPart = Fd.nFileSizeLow;
+			FileSize.HighPart = Fd.nFileSizeHigh;
+			int64_t Bytes = FileSize.QuadPart;
+
+			char SizeBuf[32];
+			if (Bytes >= 1073741824)
+				snprintf(SizeBuf, sizeof(SizeBuf), "%.1f GB", Bytes / 1073741824.0);
+			else
+				snprintf(SizeBuf, sizeof(SizeBuf), "%d MB", (int)(Bytes / 1048576));
+
+			std::string Label = DisplayName + " (" + SizeBuf + ")";
+
+			AppState->STTModelNames.push_back(Label);
+			AppState->STTModelPaths.push_back(FilePath);
+
+			#ifdef DEBUG
+				printf("[system] Found STT model: %s -> %s\n",
+					Label.c_str(), FilePath.c_str());
+			#endif
+		} while (FindNextFileA(Hf, &Fd));
+
+		FindClose(Hf);
 	}
 
-	if (FirstAvailableIndex != -1)
-	{
-		AppState->CurrentSTTModelIndex =
-			(FirstAvailableIndex <= WHISPER_MODEL_BASE_EN &&
-			 AppState->STTModelAvailable[WHISPER_MODEL_BASE_EN])
-			? WHISPER_MODEL_BASE_EN : FirstAvailableIndex;
-	}
-	else
-	{
-		AppState->CurrentSTTModelIndex = 0;
-	}
+	AppState->CurrentSTTModelIndex = 0;
+
+	#ifdef DEBUG
+		printf("[system] %d STT model(s) found\n",
+			(int)AppState->STTModelNames.size());
+	#endif
 }
