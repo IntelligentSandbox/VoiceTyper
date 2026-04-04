@@ -90,13 +90,25 @@ query_audio_input_devices(GlobalState *AppState)
 	AppState->AudioInputDevices = NativeDevices;
 
 	if (AppState->AudioInputDevices.size() > 0)
+	{
 		AppState->CurrentAudioDeviceIndex = 0;
+		for (int i = 0; i < (int)AppState->AudioInputDevices.size(); i++)
+		{
+			if (AppState->AudioInputDevices[i].IsDefault)
+			{
+				AppState->CurrentAudioDeviceIndex = i;
+				break;
+			}
+		}
+	}
 
 	#ifdef DEBUG
 		printf("[system] Audio input devices found: %d\n", (int)AppState->AudioInputDevices.size());
 		for (const auto &Info : AppState->AudioInputDevices)
 		{
-			printf("[system]   Device: %s (index %d)\n", Info.Name.c_str(), Info.Index);
+			printf("[system]   Device: %s (index %d%s)\n",
+				Info.Name.c_str(), Info.Index,
+				Info.IsDefault ? ", DEFAULT" : "");
 		}
 	#endif
 }

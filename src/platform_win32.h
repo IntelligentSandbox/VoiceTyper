@@ -43,6 +43,17 @@ platform_query_audio_devices()
 		pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
 	}
 
+	LPWSTR DefaultEndpointId = nullptr;
+	if (hasWASAPI && pEnumerator)
+	{
+		IMMDevice *pDefault = nullptr;
+		if (pEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &pDefault) == S_OK)
+		{
+			pDefault->GetId(&DefaultEndpointId);
+			pDefault->Release();
+		}
+	}
+
 	if (hasWASAPI && pCollection)
 	{
 		UINT deviceCount = 0;
@@ -51,52 +62,63 @@ platform_query_audio_devices()
 		for (UINT i = 0; i < NumDevices && i < deviceCount; i++)
 		{
 			Result = waveInGetDevCapsW(i, (LPWAVEINCAPSW)&Caps, sizeof(Caps));
-			if (Result != MMSYSERR_NOERROR) continue; // TODO(warren): Could have better error handling.
+			if (Result != MMSYSERR_NOERROR) continue;
 
-            AudioInputDeviceInfo Info;
-            Info.Index = i;
-            Info.Id = std::to_string(i);
+			AudioInputDeviceInfo Info;
+			Info.Index = i;
+			Info.Id = std::to_string(i);
+			Info.IsDefault = false;
 
-            IMMDevice* pDevice = nullptr;
-            IPropertyStore* pProps = nullptr;
-            PROPVARIANT varName;
+			IMMDevice* pDevice = nullptr;
+			IPropertyStore* pProps = nullptr;
+			PROPVARIANT varName;
 
-            PropVariantInit(&varName);
+			PropVariantInit(&varName);
 
-            BOOL gotName = FALSE;
-            if (pCollection->Item(i, &pDevice) == S_OK)
-            {
-                if (pDevice->OpenPropertyStore(STGM_READ, &pProps) == S_OK)
-                {
-                    if (pProps->GetValue(PKEY_Device_FriendlyName, &varName) == S_OK)
-                    {
-                        if (varName.vt == VT_LPWSTR && varName.pwszVal)
-                        {
-                            char fullName[MAX_AUDIO_DEVICE_NAME_LENGTH];
-                            WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1, fullName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
-                            Info.Name = fullName;
-                            gotName = TRUE;
-                        }
-                        PropVariantClear(&varName);
-                    }
-                    pProps->Release();
-                }
-                pDevice->Release();
-            }
+			BOOL gotName = FALSE;
+			if (pCollection->Item(i, &pDevice) == S_OK)
+			{
+				if (DefaultEndpointId)
+				{
+					LPWSTR DeviceId = nullptr;
+					if (pDevice->GetId(&DeviceId) == S_OK)
+					{
+						if (wcscmp(DeviceId, DefaultEndpointId) == 0)
+							Info.IsDefault = true;
+						CoTaskMemFree(DeviceId);
+					}
+				}
 
-            if (!gotName)
-            {
-                char DeviceName[MAX_AUDIO_DEVICE_NAME_LENGTH];
-                int converted = WideCharToMultiByte(CP_UTF8, 0, Caps.szPname, -1, DeviceName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
-                if (converted == 0)
-                {
-                    DeviceName[0] = 0;
-                }
-                Info.Name = DeviceName;
-            }
+				if (pDevice->OpenPropertyStore(STGM_READ, &pProps) == S_OK)
+				{
+					if (pProps->GetValue(PKEY_Device_FriendlyName, &varName) == S_OK)
+					{
+						if (varName.vt == VT_LPWSTR && varName.pwszVal)
+						{
+							char fullName[MAX_AUDIO_DEVICE_NAME_LENGTH];
+							WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1,
+								fullName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
+							Info.Name = fullName;
+							gotName = TRUE;
+						}
+						PropVariantClear(&varName);
+					}
+					pProps->Release();
+				}
+				pDevice->Release();
+			}
 
-            Info.IsDefault = false;
-            Devices.push_back(Info);
+			if (!gotName)
+			{
+				char DeviceName[MAX_AUDIO_DEVICE_NAME_LENGTH];
+				int converted = WideCharToMultiByte(CP_UTF8, 0, Caps.szPname, -1,
+					DeviceName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
+				if (converted == 0)
+					DeviceName[0] = 0;
+				Info.Name = DeviceName;
+			}
+
+			Devices.push_back(Info);
 		}
 
 		pCollection->Release();
@@ -123,10 +145,11 @@ platform_query_audio_devices()
 		}
 	}
 
+	if (DefaultEndpointId)
+		CoTaskMemFree(DefaultEndpointId);
+
 	if (pEnumerator)
-	{
 		pEnumerator->Release();
-	}
 
 	CoUninitialize();
 
