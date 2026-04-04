@@ -179,6 +179,9 @@ struct SettingsWindowState
 	SoundConfig TempCancelSound;
 	bool TempUseCharByCharInjection;
 	int TempWhisperThreadCount;
+	bool HasCachedPos;
+	float CachedPosX;
+	float CachedPosY;
 };
 
 
