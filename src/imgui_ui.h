@@ -175,7 +175,9 @@ render_settings_ui(GlobalState *AppState)
 {
 	SettingsWindowState *S = &AppState->SettingsState;
 
-	ImGui::SetNextWindowSize(ImVec2(620, 0));
+	float DisplayW = ImGui::GetIO().DisplaySize.x;
+	float SettingsW = (DisplayW < 620.0f) ? DisplayW : 620.0f;
+	ImGui::SetNextWindowSize(ImVec2(SettingsW, 0));
 	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		return;
 
