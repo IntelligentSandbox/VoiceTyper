@@ -181,6 +181,15 @@ render_settings_ui(GlobalState *AppState)
 
 	AppState->IsSettingsDialogOpen = true;
 
+	ImVec2 WinPos = ImGui::GetWindowPos();
+	ImVec2 WinSize = ImGui::GetWindowSize();
+	ImVec2 Display = ImGui::GetIO().DisplaySize;
+	ImVec2 Clamped;
+	Clamped.x = (WinPos.x < 0) ? 0 : (WinPos.x + WinSize.x > Display.x) ? Display.x - WinSize.x : WinPos.x;
+	Clamped.y = (WinPos.y < 0) ? 0 : (WinPos.y + WinSize.y > Display.y) ? Display.y - WinSize.y : WinPos.y;
+	if (Clamped.x != WinPos.x || Clamped.y != WinPos.y)
+		ImGui::SetWindowPos(Clamped);
+
 #ifdef VOICETYPER_CUDA
 	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION);
 #else
