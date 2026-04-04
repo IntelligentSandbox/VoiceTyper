@@ -204,6 +204,20 @@ query_hotkey_settings(GlobalState *AppState)
 	if (load_bool_setting("play_record_sound", &SoundEnabled))
 		AppState->PlayRecordSound = SoundEnabled;
 
+	int IntVal = 0;
+	if (load_int_setting("start_sound_freq", &IntVal))
+		AppState->StartSound.FreqHz = IntVal;
+	if (load_int_setting("start_sound_volume", &IntVal))
+		AppState->StartSound.Volume = IntVal;
+	if (load_int_setting("stop_sound_freq", &IntVal))
+		AppState->StopSound.FreqHz = IntVal;
+	if (load_int_setting("stop_sound_volume", &IntVal))
+		AppState->StopSound.Volume = IntVal;
+	if (load_int_setting("cancel_sound_freq", &IntVal))
+		AppState->CancelSound.FreqHz = IntVal;
+	if (load_int_setting("cancel_sound_volume", &IntVal))
+		AppState->CancelSound.Volume = IntVal;
+
 	bool CharByChar = false;
 	if (load_bool_setting("use_char_by_char_injection", &CharByChar))
 		AppState->UseCharByCharInjection = CharByChar;

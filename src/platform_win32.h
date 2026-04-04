@@ -250,9 +250,56 @@ platform_set_taskbar_icon(void *Window, const char *PngPath)
 }
 
 inline void
-platform_play_sound(int FreqHz, int DurationMs)
+platform_play_sound(int FreqHz, int DurationMs, int Volume)
 {
-	Beep(FreqHz, DurationMs);
+	if (Volume <= 0) return;
+	if (Volume > 100) Volume = 100;
+
+	const int SampleRate = 44100;
+	const int NumSamples = (SampleRate * DurationMs) / 1000;
+	const int FadeMs = 5;
+	const int FadeSamples = (SampleRate * FadeMs) / 1000;
+
+	WAVEFORMATEX Wfx = {};
+	Wfx.wFormatTag = WAVE_FORMAT_PCM;
+	Wfx.nChannels = 1;
+	Wfx.nSamplesPerSec = SampleRate;
+	Wfx.wBitsPerSample = 16;
+	Wfx.nBlockAlign = Wfx.nChannels * Wfx.wBitsPerSample / 8;
+	Wfx.nAvgBytesPerSec = Wfx.nSamplesPerSec * Wfx.nBlockAlign;
+
+	HWAVEOUT HWaveOut = nullptr;
+	if (waveOutOpen(&HWaveOut, WAVE_MAPPER, &Wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
+		return;
+
+	short *Buffer = new short[NumSamples];
+	float Amplitude = (Volume / 100.0f) * 32767.0f;
+	const float Pi2 = 6.2831853f;
+
+	for (int i = 0; i < NumSamples; i++)
+	{
+		float t = (float)i / (float)SampleRate;
+		float Sample = Amplitude * sinf(Pi2 * FreqHz * t);
+		if (i < FadeSamples)
+			Sample *= (float)i / (float)FadeSamples;
+		else if (i >= NumSamples - FadeSamples)
+			Sample *= (float)(NumSamples - 1 - i) / (float)FadeSamples;
+		Buffer[i] = (short)Sample;
+	}
+
+	WAVEHDR Hdr = {};
+	Hdr.lpData = (LPSTR)Buffer;
+	Hdr.dwBufferLength = NumSamples * sizeof(short);
+
+	waveOutPrepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
+	waveOutWrite(HWaveOut, &Hdr, sizeof(Hdr));
+
+	while (!(Hdr.dwFlags & WHDR_DONE))
+		Sleep(1);
+
+	waveOutUnprepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
+	waveOutClose(HWaveOut);
+	delete[] Buffer;
 }
 
 inline bool

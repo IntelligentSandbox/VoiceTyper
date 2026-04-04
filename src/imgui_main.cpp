@@ -236,6 +236,9 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	AppStateStorage.OwnWindow              = Hwnd;
 	AppStateStorage.IsSettingsDialogOpen   = false;
 	AppStateStorage.PlayRecordSound        = false;
+	AppStateStorage.StartSound             = { SOUND_DEFAULT_START_FREQ, SOUND_DEFAULT_VOLUME };
+	AppStateStorage.StopSound              = { SOUND_DEFAULT_STOP_FREQ, SOUND_DEFAULT_VOLUME };
+	AppStateStorage.CancelSound            = { SOUND_DEFAULT_CANCEL_FREQ, SOUND_DEFAULT_VOLUME };
 	AppStateStorage.UseCharByCharInjection = false;
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;

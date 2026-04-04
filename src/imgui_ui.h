@@ -153,6 +153,9 @@ init_settings_state(GlobalState *AppState)
 	S->TempHotkeys[2] = AppState->StreamHotkey;
 	S->TempHotkeys[3] = AppState->LoadModelHotkey;
 	S->TempPlayRecordSound = AppState->PlayRecordSound;
+	S->TempStartSound = AppState->StartSound;
+	S->TempStopSound = AppState->StopSound;
+	S->TempCancelSound = AppState->CancelSound;
 	S->TempUseCharByCharInjection = AppState->UseCharByCharInjection;
 	S->TempWhisperThreadCount = AppState->WhisperThreadCount;
 	S->Capture.Captured = AppState->RecordHotkey;
@@ -186,6 +189,37 @@ render_settings_ui(GlobalState *AppState)
 
 	ImGui::Checkbox("Play sound when starting/stopping recording",
 		&S->TempPlayRecordSound);
+
+	if (S->TempPlayRecordSound)
+	{
+		ImGui::Indent(20.0f);
+
+		ImGui::Text("Start Sound");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::SliderInt("##StartPitch", &S->TempStartSound.FreqHz,
+			SOUND_MIN_FREQ, SOUND_MAX_FREQ, "Pitch: %d Hz");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::SliderInt("##StartVolume", &S->TempStartSound.Volume,
+			1, 100, "Volume: %d%%");
+
+		ImGui::Text("Stop Sound");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::SliderInt("##StopPitch", &S->TempStopSound.FreqHz,
+			SOUND_MIN_FREQ, SOUND_MAX_FREQ, "Pitch: %d Hz");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::SliderInt("##StopVolume", &S->TempStopSound.Volume,
+			1, 100, "Volume: %d%%");
+
+		ImGui::Text("Cancel Sound");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::SliderInt("##CancelPitch", &S->TempCancelSound.FreqHz,
+			SOUND_MIN_FREQ, SOUND_MAX_FREQ, "Pitch: %d Hz");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::SliderInt("##CancelVolume", &S->TempCancelSound.Volume,
+			1, 100, "Volume: %d%%");
+
+		ImGui::Unindent(20.0f);
+	}
 
 	ImGui::Checkbox("Use character-by-character text injection (instead of paste)",
 		&S->TempUseCharByCharInjection);
@@ -349,6 +383,16 @@ render_settings_ui(GlobalState *AppState)
 
 		AppState->PlayRecordSound = S->TempPlayRecordSound;
 		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
+
+		AppState->StartSound = S->TempStartSound;
+		AppState->StopSound = S->TempStopSound;
+		AppState->CancelSound = S->TempCancelSound;
+		save_int_setting("start_sound_freq", AppState->StartSound.FreqHz);
+		save_int_setting("start_sound_volume", AppState->StartSound.Volume);
+		save_int_setting("stop_sound_freq", AppState->StopSound.FreqHz);
+		save_int_setting("stop_sound_volume", AppState->StopSound.Volume);
+		save_int_setting("cancel_sound_freq", AppState->CancelSound.FreqHz);
+		save_int_setting("cancel_sound_volume", AppState->CancelSound.Volume);
 
 		AppState->UseCharByCharInjection = S->TempUseCharByCharInjection;
 		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);

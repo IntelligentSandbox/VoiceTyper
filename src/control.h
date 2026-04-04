@@ -126,11 +126,11 @@ toggle_recording(GlobalState *AppState)
 			#endif
 			return;
 		}
-		if (AppState->PlayRecordSound) play_start_recording_sound();
+		if (AppState->PlayRecordSound) play_start_recording_sound(&AppState->StartSound);
 	}
 	else
 	{
-		if (AppState->PlayRecordSound) play_stop_recording_sound();
+		if (AppState->PlayRecordSound) play_stop_recording_sound(&AppState->StopSound);
 		signal_record_stop(AppState);
 	}
 
@@ -151,7 +151,7 @@ cancel_recording(GlobalState *AppState)
 
 	AppState->CancelRequested.store(true);
 	signal_record_stop(AppState);
-	if (AppState->PlayRecordSound) play_cancel_recording_sound();
+	if (AppState->PlayRecordSound) play_cancel_recording_sound(&AppState->CancelSound);
 
 	AppState->IsRecording = false;
 }

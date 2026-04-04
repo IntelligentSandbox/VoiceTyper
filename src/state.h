@@ -139,6 +139,25 @@ inline HotkeyConfig default_load_model_hotkey()
 	return H;
 }
 
+// ---------------------------------------------------------------------------
+// Sound Config
+// ---------------------------------------------------------------------------
+#define SOUND_DEFAULT_START_FREQ   1000
+#define SOUND_DEFAULT_STOP_FREQ    800
+#define SOUND_DEFAULT_CANCEL_FREQ  400
+#define SOUND_DEFAULT_VOLUME       50
+#define SOUND_MIN_FREQ             200
+#define SOUND_MAX_FREQ             2000
+#define SOUND_START_DURATION_MS    200
+#define SOUND_STOP_DURATION_MS     200
+#define SOUND_CANCEL_DURATION_MS   300
+
+struct SoundConfig
+{
+	int FreqHz;
+	int Volume;
+};
+
 struct HotkeyCaptureState
 {
 	HotkeyConfig Captured;
@@ -155,6 +174,9 @@ struct SettingsWindowState
 	HotkeyCaptureState Capture;
 	HotkeyConfig TempHotkeys[4];
 	bool TempPlayRecordSound;
+	SoundConfig TempStartSound;
+	SoundConfig TempStopSound;
+	SoundConfig TempCancelSound;
 	bool TempUseCharByCharInjection;
 	int TempWhisperThreadCount;
 };
@@ -185,6 +207,9 @@ struct GlobalState
 	bool IsStreaming;
 	bool IsSettingsDialogOpen;
 	bool PlayRecordSound;
+	SoundConfig StartSound;
+	SoundConfig StopSound;
+	SoundConfig CancelSound;
 	bool UseCharByCharInjection;
 
 	// Audio - platform-agnostic

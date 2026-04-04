@@ -127,3 +127,23 @@ load_string_setting(const char *Name, std::string *OutValue)
 	return true;
 }
 
+inline
+bool
+save_int_setting(const char *Name, int Value)
+{
+	auto Map = read_settings_map();
+	Map[Name] = std::to_string(Value);
+	return write_settings_map(Map);
+}
+
+inline
+bool
+load_int_setting(const char *Name, int *OutValue)
+{
+	auto Map = read_settings_map();
+	auto It = Map.find(Name);
+	if (It == Map.end()) return false;
+	*OutValue = std::stoi(It->second);
+	return true;
+}
+
