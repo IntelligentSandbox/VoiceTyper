@@ -431,9 +431,6 @@ platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 	}
 
 	waveInStart(PipeCtx.WaveInHandle);
-	#ifdef DEBUG
-		printf("[audio_pipeline] Capture started on device index %d\n", DeviceIndex);
-	#endif
 
 	while (AppState->CaptureRunning.load())
 	{
@@ -476,8 +473,5 @@ platform_audio_capture(GlobalState *AppState, int DeviceIndex)
 	waveInClose(PipeCtx.WaveInHandle);
 	CloseHandle(PipeCtx.ReadyEvent);
 
-	#ifdef DEBUG
-		printf("[audio_pipeline] Capture stopped\n");
-	#endif
 	return true;
 }

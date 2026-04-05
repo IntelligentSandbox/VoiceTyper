@@ -577,5 +577,31 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 
 	render_settings_ui(AppState);
 
+	if (!AppState->ToastMessage.empty() && ImGui::GetTime() < AppState->ToastExpireTime)
+	{
+		float Padding = 12.0f;
+		ImVec2 Display = Io.DisplaySize;
+		ImGui::SetNextWindowPos(
+			ImVec2(Display.x * 0.5f, Display.y - 40.0f), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+		ImGui::SetNextWindowBgAlpha(0.85f);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.70f, 0.10f, 0.10f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Padding, Padding));
+		ImGui::Begin("##Toast", nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav |
+			ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings);
+		ImGui::TextUnformatted(AppState->ToastMessage.c_str());
+		ImGui::End();
+		ImGui::PopStyleVar(2);
+		ImGui::PopStyleColor(2);
+	}
+	else if (!AppState->ToastMessage.empty())
+	{
+		AppState->ToastMessage.clear();
+	}
+
 	ImGui::End();
 }

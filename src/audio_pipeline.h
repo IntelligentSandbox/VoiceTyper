@@ -91,17 +91,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 {
 	float Rms = compute_rms(Chunk.data(), (int)Chunk.size());
 	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD)
-	{
-		#ifdef DEBUG
-			printf("[audio_pipeline] Chunk silent (rms=%.5f), skipping\n", Rms);
-		#endif
 		return;
-	}
-
-	#ifdef DEBUG
-		printf("[audio_pipeline] Running inference on %d samples (rms=%.5f)...\n",
-			(int)Chunk.size(), Rms);
-	#endif
 
 	int Ret = whisper_full(
 		AppState->WhisperState.Context,
@@ -130,12 +120,8 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	{
 		void *TargetWindow = platform_get_foreground_window();
 		if (TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
-		#ifdef DEBUG
+		if (!TargetWindow)
 			printf("[transcription] %s\n", Transcription.c_str());
-		#else
-			if (!TargetWindow)
-				printf("[transcription] %s\n", Transcription.c_str());
-		#endif
 		platform_inject_text(TargetWindow, Transcription.c_str(), AppState->UseCharByCharInjection);
 	}
 }
@@ -151,10 +137,6 @@ stream_infer_thread(GlobalState *AppState)
 	Params.single_segment      = true;
 
 	int SilenceMs = 0;
-
-	#ifdef DEBUG
-		printf("[audio_pipeline] Stream inference thread started\n");
-	#endif
 
 	while (AppState->CaptureRunning.load())
 	{
@@ -198,10 +180,6 @@ stream_infer_thread(GlobalState *AppState)
 
 		run_whisper_on_chunk(AppState, Params, Chunk);
 	}
-
-	#ifdef DEBUG
-		printf("[audio_pipeline] Stream inference thread stopped\n");
-	#endif
 }
 
 static void
@@ -231,9 +209,6 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		if (Cancelled)
 		{
 			AppState->AudioAccumBuffer.clear();
-			#ifdef DEBUG
-				printf("[audio_pipeline] Record: cancelled, discarding audio\n");
-			#endif
 		}
 		else
 		{
@@ -247,16 +222,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		whisper_full_params Params = make_whisper_params(AppState);
 		Params.single_segment      = false;
 
-		#ifdef DEBUG
-			printf("[audio_pipeline] Record: transcribing %d samples...\n", (int)Chunk.size());
-		#endif
 		run_whisper_on_chunk(AppState, Params, Chunk);
-	}
-	else if (!Cancelled)
-	{
-		#ifdef DEBUG
-			printf("[audio_pipeline] Record: no audio captured\n");
-		#endif
 	}
 
 	AppState->PipelineActive.store(false);
@@ -270,21 +236,11 @@ static bool
 pipeline_preflight(GlobalState *AppState)
 {
 	if (!is_whisper_model_loaded(&AppState->WhisperState))
-	{
-		#ifdef DEBUG
-			printf("[audio_pipeline] Cannot start: no model loaded\n");
-		#endif
 		return false;
-	}
 
 	int DeviceIndex = AppState->CurrentAudioDeviceIndex;
 	if (DeviceIndex < 0 || DeviceIndex >= (int)AppState->AudioInputDevices.size())
-	{
-		#ifdef DEBUG
-			printf("[audio_pipeline] Cannot start: invalid device index %d\n", DeviceIndex);
-		#endif
 		return false;
-	}
 
 	return true;
 }
@@ -309,9 +265,6 @@ start_record_pipeline(GlobalState *AppState)
 	AppState->PipelineActive.store(true);
 	AppState->CaptureThread = std::thread(record_pipeline_thread, AppState, DeviceIndex);
 
-	#ifdef DEBUG
-		printf("[audio_pipeline] Record pipeline started\n");
-	#endif
 	return true;
 }
 
@@ -322,9 +275,6 @@ void
 signal_record_stop(GlobalState *AppState)
 {
 	AppState->CaptureRunning.store(false);
-	#ifdef DEBUG
-		printf("[audio_pipeline] Record capture stop signalled\n");
-	#endif
 }
 
 // TODO(warren): kinda janky still.
@@ -348,9 +298,6 @@ start_streaming_pipeline(GlobalState *AppState)
 	AppState->PipelineActive.store(true);
 	AppState->CaptureThread = std::thread(streaming_pipeline_thread, AppState, DeviceIndex);
 
-	#ifdef DEBUG
-		printf("[audio_pipeline] Streaming pipeline started\n");
-	#endif
 	return true;
 }
 
@@ -366,8 +313,4 @@ stop_streaming_pipeline(GlobalState *AppState)
 		AppState->CaptureThread.join();
 
 	AppState->PipelineActive.store(false);
-
-	#ifdef DEBUG
-		printf("[audio_pipeline] Streaming pipeline stopped\n");
-	#endif
 }

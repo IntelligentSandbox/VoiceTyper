@@ -241,6 +241,10 @@ struct GlobalState
 	HWND OwnWindow;
 	SettingsWindowState SettingsState;
 
+	// Toast notification
+	std::string ToastMessage;
+	double ToastExpireTime;
+
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;
 };

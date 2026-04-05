@@ -185,12 +185,6 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /*ShowCmd*/)
 {
-#if defined(DEBUG) && defined(_WIN32)
-	if (!AttachConsole(ATTACH_PARENT_PROCESS)) AllocConsole();
-	freopen("CONOUT$", "w", stdout);
-	freopen("CONOUT$", "w", stderr);
-#endif
-
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	HICON AppIcon = LoadIconW(Instance, MAKEINTRESOURCEW(101));

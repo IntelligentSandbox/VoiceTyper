@@ -101,16 +101,6 @@ query_audio_input_devices(GlobalState *AppState)
 			}
 		}
 	}
-
-	#ifdef DEBUG
-		printf("[system] Audio input devices found: %d\n", (int)AppState->AudioInputDevices.size());
-		for (const auto &Info : AppState->AudioInputDevices)
-		{
-			printf("[system]   Device: %s (index %d%s)\n",
-				Info.Name.c_str(), Info.Index,
-				Info.IsDefault ? ", DEFAULT" : "");
-		}
-	#endif
 }
 
 inline
@@ -131,15 +121,6 @@ query_inference_devices(GlobalState *AppState)
 		std::string Label = "GPU: ";
 		Label += Description;
 		AppState->InferenceDevices.push_back(Label);
-
-		#ifdef DEBUG
-			size_t FreeMem = 0, TotalMem = 0;
-			ggml_backend_cuda_get_device_memory(i, &FreeMem, &TotalMem);
-			printf("[system] CUDA device %d: %s (%.0f MB free / %.0f MB total)\n",
-				i, Description,
-				(double)FreeMem / (1024.0 * 1024.0),
-				(double)TotalMem / (1024.0 * 1024.0));
-		#endif
 	}
 #endif
 
@@ -151,10 +132,6 @@ query_inference_devices(GlobalState *AppState)
 			if (AppState->InferenceDevices[i] == SavedDevice)
 			{
 				AppState->CurrentInferenceDeviceIndex = i;
-				#ifdef DEBUG
-					printf("[system] Restored inference device: %s (index %d)\n",
-						SavedDevice.c_str(), i);
-				#endif
 				break;
 			}
 		}
@@ -170,11 +147,6 @@ query_whisper_thread_count(GlobalState *AppState)
 	if (ThreadCount < 1) ThreadCount = 1;
 
 	AppState->WhisperThreadCount = ThreadCount;
-
-	#ifdef DEBUG
-		printf("[system] Logical processors: %d, whisper thread count: %d\n",
-			LogicalCores, ThreadCount);
-	#endif
 }
 
 inline
@@ -233,13 +205,6 @@ query_hotkey_settings(GlobalState *AppState)
 	bool CharByChar = false;
 	if (load_bool_setting("use_char_by_char_injection", &CharByChar))
 		AppState->UseCharByCharInjection = CharByChar;
-
-	#ifdef DEBUG
-		printf("[system] Record hotkey:     %s\n", AppState->RecordHotkey.to_label().c_str());
-		printf("[system] Stream hotkey:     %s\n", AppState->StreamHotkey.to_label().c_str());
-		printf("[system] Load model hotkey: %s\n", AppState->LoadModelHotkey.to_label().c_str());
-		printf("[system] Play record sound: %s\n", AppState->PlayRecordSound ? "true" : "false");
-	#endif
 }
 
 inline
@@ -287,20 +252,10 @@ query_available_stt_models(GlobalState *AppState)
 
 			AppState->STTModelNames.push_back(Label);
 			AppState->STTModelPaths.push_back(FilePath);
-
-			#ifdef DEBUG
-				printf("[system] Found STT model: %s -> %s\n",
-					Label.c_str(), FilePath.c_str());
-			#endif
 		} while (FindNextFileA(Hf, &Fd));
 
 		FindClose(Hf);
 	}
 
 	AppState->CurrentSTTModelIndex = 0;
-
-	#ifdef DEBUG
-		printf("[system] %d STT model(s) found\n",
-			(int)AppState->STTModelNames.size());
-	#endif
 }
