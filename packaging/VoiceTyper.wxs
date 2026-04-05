@@ -23,7 +23,7 @@
 
 		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
 			<Files Include="$(var.BuildOutput)\**">
-				<Exclude Files="$(var.BuildOutput)\data\settings.json" />
+				<Exclude Files="$(var.BuildOutput)\data\settings.ini" />
 				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-small.en.bin" />
 				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-medium.en.bin" />
 				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-large-v3-turbo.bin" />
@@ -31,7 +31,7 @@
 		</ComponentGroup>
 
 		<Component Id="SettingsFile" Directory="DataFolder" NeverOverwrite="yes" Permanent="yes" Guid="ADC30D4C-1E7A-473C-A996-34683840F96A">
-			<File Source="$(var.BuildOutput)\data\settings.json" />
+			<File Source="$(var.BuildOutput)\data\settings.ini" />
 			<RemoveFolder Id="RemoveDataFolder" Directory="DataFolder" On="uninstall" />
 		</Component>
 

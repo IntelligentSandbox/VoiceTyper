@@ -36,7 +36,7 @@ cp -r stt_models "$OUTPUT_DIR/"
 cp -r vad_models "$OUTPUT_DIR/"
 cp -r media "$OUTPUT_DIR/"
 mkdir -p "$OUTPUT_DIR/data"
-echo "{}" > "$OUTPUT_DIR/data/settings.json"
+touch "$OUTPUT_DIR/data/settings.ini"
 
 if [ "$USE_CUDA" = "ON" ]; then
 	CUDA_DLL_DIR="$CUDA_PATH/bin"

@@ -13,7 +13,7 @@
 #include <vector>
 #include <string>
 
-#define VAD_MODEL_PATH "vad_models/ggml-silero-v5.1.2.bin"
+#define VAD_MODEL_RELATIVE "vad_models\\ggml-silero-v5.1.2.bin"
 
 // Minimum RMS energy to bother sending a chunk to whisper.
 #define PIPELINE_SILENCE_RMS_THRESHOLD 0.002f
@@ -75,7 +75,7 @@ make_whisper_params(GlobalState *AppState)
 	Params.print_timestamps     = false;
 	Params.n_threads            = AppState->WhisperThreadCount;
 	Params.vad                  = true;
-	Params.vad_model_path       = VAD_MODEL_PATH;
+	Params.vad_model_path       = AppState->VadModelPath.c_str();
 
 	whisper_vad_params VadParams      = whisper_vad_default_params();
 	VadParams.threshold               = 0.5f;

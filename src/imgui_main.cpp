@@ -238,6 +238,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;
 
+	AppState->VadModelPath = platform_get_exe_dir() + "\\" + VAD_MODEL_RELATIVE;
+
 	init_whisper_state(&AppState->WhisperState);
 
 	query_audio_input_devices(AppState);

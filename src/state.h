@@ -226,6 +226,9 @@ struct GlobalState
 	std::vector<std::string> STTModelPaths;
 	WhisperModelState WhisperState;
 
+	// VAD model (absolute path, built at startup)
+	std::string VadModelPath;
+
 	// Audio capture pipeline
 	std::atomic<bool> CaptureRunning;
 	std::atomic<bool> CancelRequested;

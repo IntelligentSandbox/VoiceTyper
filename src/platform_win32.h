@@ -28,24 +28,22 @@ platform_query_audio_devices()
 
 	UINT NumDevices = waveInGetNumDevs();
 
-	WAVEINCAPS2W Caps = {};
-	MMRESULT Result;
+	HRESULT CoHr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+	if (CoHr == RPC_E_CHANGED_MODE)
+		CoHr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+	bool ComOwned = (CoHr == S_OK);
 
-	IMMDeviceEnumerator* pEnumerator = nullptr;
-	IMMDeviceCollection* pCollection = nullptr;
-	BOOL hasWASAPI = FALSE;
-
-	CoInitializeEx(NULL, COINIT_MULTITHREADED);
-	hasWASAPI = (CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator) == S_OK);
-
-	if (hasWASAPI && pEnumerator)
-	{
-		pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
-	}
+	IMMDeviceEnumerator *pEnumerator = nullptr;
+	IMMDeviceCollection *pCollection = nullptr;
+	bool HasWASAPI = (CoCreateInstance(
+		__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+		__uuidof(IMMDeviceEnumerator), (void **)&pEnumerator) == S_OK);
 
 	LPWSTR DefaultEndpointId = nullptr;
-	if (hasWASAPI && pEnumerator)
+	if (HasWASAPI && pEnumerator)
 	{
+		pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
+
 		IMMDevice *pDefault = nullptr;
 		if (pEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &pDefault) == S_OK)
 		{
@@ -54,104 +52,96 @@ platform_query_audio_devices()
 		}
 	}
 
-	if (hasWASAPI && pCollection)
+	struct WasapiEndpoint { std::wstring Id; std::wstring Name; };
+	std::vector<WasapiEndpoint> Endpoints;
+
+	if (pCollection)
 	{
-		UINT deviceCount = 0;
-		pCollection->GetCount(&deviceCount);
+		UINT Count = 0;
+		pCollection->GetCount(&Count);
 
-		for (UINT i = 0; i < NumDevices && i < deviceCount; i++)
+		for (UINT i = 0; i < Count; i++)
 		{
-			Result = waveInGetDevCapsW(i, (LPWAVEINCAPSW)&Caps, sizeof(Caps));
-			if (Result != MMSYSERR_NOERROR) continue;
+			IMMDevice *pDevice = nullptr;
+			if (pCollection->Item(i, &pDevice) != S_OK) continue;
 
-			AudioInputDeviceInfo Info;
-			Info.Index = i;
-			Info.Id = std::to_string(i);
-			Info.IsDefault = false;
-
-			IMMDevice* pDevice = nullptr;
-			IPropertyStore* pProps = nullptr;
-			PROPVARIANT varName;
-
-			PropVariantInit(&varName);
-
-			BOOL gotName = FALSE;
-			if (pCollection->Item(i, &pDevice) == S_OK)
+			WasapiEndpoint Ep;
+			LPWSTR DeviceId = nullptr;
+			if (pDevice->GetId(&DeviceId) == S_OK)
 			{
-				if (DefaultEndpointId)
-				{
-					LPWSTR DeviceId = nullptr;
-					if (pDevice->GetId(&DeviceId) == S_OK)
-					{
-						if (wcscmp(DeviceId, DefaultEndpointId) == 0)
-							Info.IsDefault = true;
-						CoTaskMemFree(DeviceId);
-					}
-				}
-
-				if (pDevice->OpenPropertyStore(STGM_READ, &pProps) == S_OK)
-				{
-					if (pProps->GetValue(PKEY_Device_FriendlyName, &varName) == S_OK)
-					{
-						if (varName.vt == VT_LPWSTR && varName.pwszVal)
-						{
-							char fullName[MAX_AUDIO_DEVICE_NAME_LENGTH];
-							WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1,
-								fullName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
-							Info.Name = fullName;
-							gotName = TRUE;
-						}
-						PropVariantClear(&varName);
-					}
-					pProps->Release();
-				}
-				pDevice->Release();
+				Ep.Id = DeviceId;
+				CoTaskMemFree(DeviceId);
 			}
 
-			if (!gotName)
+			IPropertyStore *pProps = nullptr;
+			if (pDevice->OpenPropertyStore(STGM_READ, &pProps) == S_OK)
 			{
-				char DeviceName[MAX_AUDIO_DEVICE_NAME_LENGTH];
-				int converted = WideCharToMultiByte(CP_UTF8, 0, Caps.szPname, -1,
-					DeviceName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
-				if (converted == 0)
-					DeviceName[0] = 0;
-				Info.Name = DeviceName;
+				PROPVARIANT VarName;
+				PropVariantInit(&VarName);
+				if (pProps->GetValue(PKEY_Device_FriendlyName, &VarName) == S_OK)
+				{
+					if (VarName.vt == VT_LPWSTR && VarName.pwszVal)
+						Ep.Name = VarName.pwszVal;
+					PropVariantClear(&VarName);
+				}
+				pProps->Release();
 			}
 
-			Devices.push_back(Info);
+			pDevice->Release();
+			Endpoints.push_back(Ep);
 		}
 
 		pCollection->Release();
 	}
-	else
-	{
-		for (UINT i = 0; i < NumDevices; i++)
-		{
-			Result = waveInGetDevCapsW(i, (LPWAVEINCAPSW)&Caps, sizeof(Caps));
-			if (Result != MMSYSERR_NOERROR) continue; // TODO(warren): Could have better error handling.
 
-            AudioInputDeviceInfo Info;
-            Info.Index = i;
-            Info.Id = std::to_string(i);
-            char DeviceName[MAX_AUDIO_DEVICE_NAME_LENGTH];
-            int converted = WideCharToMultiByte(CP_UTF8, 0, Caps.szPname, -1, DeviceName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
-            if (converted == 0)
-            {
-                DeviceName[0] = 0;
-            }
-            Info.Name = DeviceName;
-            Info.IsDefault = false;
-            Devices.push_back(Info);
+	for (UINT i = 0; i < NumDevices; i++)
+	{
+		WAVEINCAPS2W Caps = {};
+		if (waveInGetDevCapsW(i, (LPWAVEINCAPSW)&Caps, sizeof(Caps)) != MMSYSERR_NOERROR)
+			continue;
+
+		AudioInputDeviceInfo Info;
+		Info.Index = (int)i;
+		Info.Id = std::to_string(i);
+		Info.IsDefault = false;
+
+		int WaveNameLen = (int)wcslen(Caps.szPname);
+		bool GotName = false;
+
+		for (auto &Ep : Endpoints)
+		{
+			if (Ep.Name.empty()) continue;
+			if (wcsncmp(Ep.Name.c_str(), Caps.szPname, WaveNameLen) != 0) continue;
+
+			char FullName[MAX_AUDIO_DEVICE_NAME_LENGTH];
+			WideCharToMultiByte(CP_UTF8, 0, Ep.Name.c_str(), -1,
+				FullName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
+			Info.Name = FullName;
+			GotName = true;
+
+			if (DefaultEndpointId && Ep.Id == DefaultEndpointId)
+				Info.IsDefault = true;
+			break;
 		}
+
+		if (!GotName)
+		{
+			char DeviceName[MAX_AUDIO_DEVICE_NAME_LENGTH];
+			int Converted = WideCharToMultiByte(CP_UTF8, 0, Caps.szPname, -1,
+				DeviceName, MAX_AUDIO_DEVICE_NAME_LENGTH, NULL, NULL);
+			if (Converted == 0) DeviceName[0] = 0;
+			Info.Name = DeviceName;
+		}
+
+		Devices.push_back(Info);
 	}
 
 	if (DefaultEndpointId)
 		CoTaskMemFree(DefaultEndpointId);
-
 	if (pEnumerator)
 		pEnumerator->Release();
-
-	CoUninitialize();
+	if (ComOwned)
+		CoUninitialize();
 
 	return Devices;
 }
