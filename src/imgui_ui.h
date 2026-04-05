@@ -6,6 +6,10 @@
 #include "settings.h"
 #include "control.h"
 
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+
 // ---------------------------------------------------------------------------
 // Styled button helper
 // ---------------------------------------------------------------------------
@@ -78,6 +82,71 @@ string_combo(const char *Label, int *CurrentIndex, const std::vector<std::string
 	}
 
 	return Changed;
+}
+
+static
+void
+format_int_text(char *Buffer, size_t BufferSize, int Value)
+{
+	snprintf(Buffer, BufferSize, "%d", Value);
+}
+
+static
+bool
+parse_bounded_int_text(const char *Text, int Min, int Max, int *OutValue)
+{
+	if (!Text || Text[0] == '\0')
+		return false;
+
+	errno = 0;
+	char *End = nullptr;
+	long Value = strtol(Text, &End, 10);
+	if (errno != 0 || End == Text || *End != '\0')
+		return false;
+
+	if (Value < Min || Value > Max)
+		return false;
+
+	*OutValue = (int)Value;
+	return true;
+}
+
+static
+bool
+validate_bounded_int_text(GlobalState *AppState, const char *FieldName,
+	const char *Text, int Min, int Max, int *OutValue)
+{
+	if (parse_bounded_int_text(Text, Min, Max, OutValue))
+		return true;
+
+	char Message[128];
+	snprintf(Message, sizeof(Message), "%s must be a number between %d and %d.",
+		FieldName, Min, Max);
+	show_toast(AppState, Message);
+	return false;
+}
+
+static
+void
+render_numeric_text_input(const char *Id, char *Buffer, size_t BufferSize,
+	int Min, int Max, int WheelStep)
+{
+	ImGui::InputText(Id, Buffer, BufferSize, ImGuiInputTextFlags_CharsDecimal);
+	if (!ImGui::IsItemActive())
+		return;
+
+	float Wheel = ImGui::GetIO().MouseWheel;
+	if (Wheel == 0.0f)
+		return;
+
+	int Value = 0;
+	if (!parse_bounded_int_text(Buffer, Min, Max, &Value))
+		return;
+
+	Value += (Wheel > 0.0f) ? WheelStep : -WheelStep;
+	if (Value < Min) Value = Min;
+	if (Value > Max) Value = Max;
+	format_int_text(Buffer, BufferSize, Value);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +227,18 @@ init_settings_state(GlobalState *AppState)
 	S->TempCancelSound = AppState->CancelSound;
 	S->TempUseCharByCharInjection = AppState->UseCharByCharInjection;
 	S->TempWhisperThreadCount = AppState->WhisperThreadCount;
+	format_int_text(S->TempStartSoundFreqText, sizeof(S->TempStartSoundFreqText),
+		S->TempStartSound.FreqHz);
+	format_int_text(S->TempStartSoundVolumeText, sizeof(S->TempStartSoundVolumeText),
+		S->TempStartSound.Volume);
+	format_int_text(S->TempStopSoundFreqText, sizeof(S->TempStopSoundFreqText),
+		S->TempStopSound.FreqHz);
+	format_int_text(S->TempStopSoundVolumeText, sizeof(S->TempStopSoundVolumeText),
+		S->TempStopSound.Volume);
+	format_int_text(S->TempCancelSoundFreqText, sizeof(S->TempCancelSoundFreqText),
+		S->TempCancelSound.FreqHz);
+	format_int_text(S->TempCancelSoundVolumeText,
+		sizeof(S->TempCancelSoundVolumeText), S->TempCancelSound.Volume);
 	S->Capture.Captured = AppState->RecordHotkey;
 	S->Capture.HasCapture = AppState->RecordHotkey.is_valid();
 	S->Capture.IsCapturing = false;
@@ -191,36 +272,63 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION);
 #endif
 
-	ImGui::Checkbox("Play sound when starting/stopping recording",
+	ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
 		&S->TempPlayRecordSound);
 
 	if (S->TempPlayRecordSound)
 	{
 		ImGui::Indent(20.0f);
 
-		ImGui::Text("Start Sound");
-		ImGui::SetNextItemWidth(-1);
-		ImGui::SliderInt("##StartPitch", &S->TempStartSound.FreqHz,
-			SOUND_MIN_FREQ, SOUND_MAX_FREQ, "Pitch: %d Hz");
-		ImGui::SetNextItemWidth(-1);
-		ImGui::SliderInt("##StartVolume", &S->TempStartSound.Volume,
-			1, 100, "Volume: %d%%");
+		if (ImGui::BeginTable("##SoundSettings", 3,
+			ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame))
+		{
+			ImGui::TableSetupColumn("Sound");
+			ImGui::TableSetupColumn("Pitch\n(200-2000 Hz)");
+			ImGui::TableSetupColumn("Volume\n(1-100%)");
+			ImGui::TableHeadersRow();
 
-		ImGui::Text("Stop Sound");
-		ImGui::SetNextItemWidth(-1);
-		ImGui::SliderInt("##StopPitch", &S->TempStopSound.FreqHz,
-			SOUND_MIN_FREQ, SOUND_MAX_FREQ, "Pitch: %d Hz");
-		ImGui::SetNextItemWidth(-1);
-		ImGui::SliderInt("##StopVolume", &S->TempStopSound.Volume,
-			1, 100, "Volume: %d%%");
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Start");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1.0f);
+			render_numeric_text_input("##StartPitch", S->TempStartSoundFreqText,
+				sizeof(S->TempStartSoundFreqText), SOUND_MIN_FREQ,
+				SOUND_MAX_FREQ, 10);
+			ImGui::TableSetColumnIndex(2);
+			ImGui::SetNextItemWidth(-1.0f);
+			render_numeric_text_input("##StartVolume", S->TempStartSoundVolumeText,
+				sizeof(S->TempStartSoundVolumeText), 1, 100, 1);
 
-		ImGui::Text("Cancel Sound");
-		ImGui::SetNextItemWidth(-1);
-		ImGui::SliderInt("##CancelPitch", &S->TempCancelSound.FreqHz,
-			SOUND_MIN_FREQ, SOUND_MAX_FREQ, "Pitch: %d Hz");
-		ImGui::SetNextItemWidth(-1);
-		ImGui::SliderInt("##CancelVolume", &S->TempCancelSound.Volume,
-			1, 100, "Volume: %d%%");
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Stop");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1.0f);
+			render_numeric_text_input("##StopPitch", S->TempStopSoundFreqText,
+				sizeof(S->TempStopSoundFreqText), SOUND_MIN_FREQ,
+				SOUND_MAX_FREQ, 10);
+			ImGui::TableSetColumnIndex(2);
+			ImGui::SetNextItemWidth(-1.0f);
+			render_numeric_text_input("##StopVolume", S->TempStopSoundVolumeText,
+				sizeof(S->TempStopSoundVolumeText), 1, 100, 1);
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Cancel");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1.0f);
+			render_numeric_text_input("##CancelPitch", S->TempCancelSoundFreqText,
+				sizeof(S->TempCancelSoundFreqText), SOUND_MIN_FREQ,
+				SOUND_MAX_FREQ, 10);
+			ImGui::TableSetColumnIndex(2);
+			ImGui::SetNextItemWidth(-1.0f);
+			render_numeric_text_input("##CancelVolume",
+				S->TempCancelSoundVolumeText,
+				sizeof(S->TempCancelSoundVolumeText), 1, 100, 1);
+
+			ImGui::EndTable();
+		}
 
 		ImGui::Unindent(20.0f);
 	}
@@ -371,6 +479,47 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::SameLine();
 	if (colored_button("Save##Settings", BottomSize, BUTTON_COLOR_GREEN))
 	{
+		SoundConfig StartSound = AppState->StartSound;
+		SoundConfig StopSound = AppState->StopSound;
+		SoundConfig CancelSound = AppState->CancelSound;
+
+		if (S->TempPlayRecordSound)
+		{
+			if (!validate_bounded_int_text(AppState, "Start sound pitch",
+				S->TempStartSoundFreqText, SOUND_MIN_FREQ, SOUND_MAX_FREQ,
+				&StartSound.FreqHz))
+			{
+				return;
+			}
+			if (!validate_bounded_int_text(AppState, "Start sound volume",
+				S->TempStartSoundVolumeText, 1, 100, &StartSound.Volume))
+			{
+				return;
+			}
+			if (!validate_bounded_int_text(AppState, "Stop sound pitch",
+				S->TempStopSoundFreqText, SOUND_MIN_FREQ, SOUND_MAX_FREQ,
+				&StopSound.FreqHz))
+			{
+				return;
+			}
+			if (!validate_bounded_int_text(AppState, "Stop sound volume",
+				S->TempStopSoundVolumeText, 1, 100, &StopSound.Volume))
+			{
+				return;
+			}
+			if (!validate_bounded_int_text(AppState, "Cancel sound pitch",
+				S->TempCancelSoundFreqText, SOUND_MIN_FREQ, SOUND_MAX_FREQ,
+				&CancelSound.FreqHz))
+			{
+				return;
+			}
+			if (!validate_bounded_int_text(AppState, "Cancel sound volume",
+				S->TempCancelSoundVolumeText, 1, 100, &CancelSound.Volume))
+			{
+				return;
+			}
+		}
+
 		AppState->RecordHotkey       = S->TempHotkeys[0];
 		AppState->CancelRecordHotkey = S->TempHotkeys[1];
 		AppState->StreamHotkey       = S->TempHotkeys[2];
@@ -388,6 +537,9 @@ render_settings_ui(GlobalState *AppState)
 		AppState->PlayRecordSound = S->TempPlayRecordSound;
 		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
 
+		S->TempStartSound = StartSound;
+		S->TempStopSound = StopSound;
+		S->TempCancelSound = CancelSound;
 		AppState->StartSound = S->TempStartSound;
 		AppState->StopSound = S->TempStopSound;
 		AppState->CancelSound = S->TempCancelSound;
@@ -434,7 +586,9 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	ImVec2 BigButton = ImVec2(-1, 60);
 	ImVec2 SmallButton = ImVec2(-1, 40);
 
-	bool Busy = AppState->IsRecording || AppState->IsStreaming || AppState->PipelineActive.load();
+	bool IsModelTransitioning = AppState->IsModelTransitioning.load();
+	bool Busy = AppState->IsRecording || AppState->IsStreaming ||
+		AppState->PipelineActive.load() || IsModelTransitioning;
 
 	// Record Button
 	{
@@ -452,6 +606,12 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		{
 			Color = BUTTON_COLOR_GREY;
 			Label = "Transcribing...";
+			Enabled = false;
+		}
+		else if (IsModelTransitioning)
+		{
+			Color = BUTTON_COLOR_GREY;
+			Label = "Loading model...";
 			Enabled = false;
 		}
 
@@ -480,6 +640,11 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			Color = BUTTON_COLOR_RED;
 			Label = "Stop Streaming (" + AppState->StreamHotkey.to_label() + ")";
 		}
+		else if (IsModelTransitioning)
+		{
+			Color = BUTTON_COLOR_GREY;
+			Label = "Loading model...";
+		}
 
 		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
 			toggle_streaming(AppState);
@@ -504,9 +669,10 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 		else
 		{
+			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
 			if (Busy) ImGui::BeginDisabled();
-			if (string_combo("##AudioInput", &AppState->CurrentAudioDeviceIndex, DeviceNames))
-				update_audio_input_selection(AppState, AppState->CurrentAudioDeviceIndex);
+			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, DeviceNames))
+				update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
 			if (Busy) ImGui::EndDisabled();
 		}
 	}
@@ -536,7 +702,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 
 	// Load Model Button
 	{
-		bool ModelLoaded = is_whisper_model_loaded(&AppState->WhisperState);
+		bool ModelLoaded = !IsModelTransitioning && is_whisper_model_loaded(&AppState->WhisperState);
 		ImVec4 Color = BUTTON_COLOR_GREY;
 		std::string Label = load_model_button_idle_label(AppState);
 		bool Enabled = !AppState->STTModelNames.empty() && !Busy;
@@ -546,6 +712,11 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			Color = BUTTON_COLOR_BLUE;
 			Label = "Unload STT Model (" + AppState->LoadModelHotkey.to_label() + ")";
 		}
+		if (IsModelTransitioning)
+		{
+			Color = BUTTON_COLOR_GREY;
+			Label = "Transferring model...";
+		}
 
 		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
 			toggle_stt_model_load(AppState);
@@ -554,11 +725,12 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	// Inference Device
 	{
 		ImGui::Text("Inference Device");
+		int SelectedInferenceDeviceIndex = AppState->CurrentInferenceDeviceIndex;
 		if (Busy) ImGui::BeginDisabled();
-		if (string_combo("##InferenceDevice", &AppState->CurrentInferenceDeviceIndex,
+		if (string_combo("##InferenceDevice", &SelectedInferenceDeviceIndex,
 			AppState->InferenceDevices))
 		{
-			update_inference_device_selection(AppState, AppState->CurrentInferenceDeviceIndex);
+			update_inference_device_selection(AppState, SelectedInferenceDeviceIndex);
 		}
 		if (Busy) ImGui::EndDisabled();
 	}

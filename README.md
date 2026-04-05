@@ -11,7 +11,6 @@ We try our best to make something that is fast, usable, fully offline with minim
 Let the results and code quality speak for themselves...the sloppening...
 AI Coding programs used include but are not limited to:
 - [opencode](https://github.com/anomalyco/opencode)
-    - An open source AI coding agent that we have tried experimenting with to aid development in this project.
 - [claude code](https://code.claude.com/docs/en/overview)
 
 ## Dependencies
@@ -20,3 +19,6 @@ AI Coding programs used include but are not limited to:
 - Anytime we update our snapshot of whisper.cpp we will make a copy of their sourcetree into this repo.
 - Notably, whisper.cpp also depends on [ggml](https://github.com/ggml-org/ggml)
     - ggml version of the whisper and vad models are used
+[Dear ImGui](https://github.com/ocornut/imgui)
+- Our UI lib of choice.
+- Originally used [Qt](https://www.qt.io/development/qt-framework) for the ui, but wanted something simpler that we could just embed into the project source.

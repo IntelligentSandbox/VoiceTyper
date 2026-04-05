@@ -179,6 +179,20 @@ struct SettingsWindowState
 	SoundConfig TempCancelSound;
 	bool TempUseCharByCharInjection;
 	int TempWhisperThreadCount;
+	char TempStartSoundFreqText[16];
+	char TempStartSoundVolumeText[16];
+	char TempStopSoundFreqText[16];
+	char TempStopSoundVolumeText[16];
+	char TempCancelSoundFreqText[16];
+	char TempCancelSoundVolumeText[16];
+};
+
+enum ModelTransitionFailure
+{
+	MODEL_TRANSITION_FAILURE_NONE = 0,
+	MODEL_TRANSITION_FAILURE_LOAD,
+	MODEL_TRANSITION_FAILURE_RELOAD,
+	MODEL_TRANSITION_FAILURE_TRANSFER,
 };
 
 
@@ -206,6 +220,7 @@ struct GlobalState
 	bool IsRecording;
 	bool IsStreaming;
 	bool IsSettingsDialogOpen;
+	std::atomic<bool> IsModelTransitioning;
 	bool PlayRecordSound;
 	SoundConfig StartSound;
 	SoundConfig StopSound;
@@ -233,7 +248,9 @@ struct GlobalState
 	std::atomic<bool> CaptureRunning;
 	std::atomic<bool> CancelRequested;
 	std::atomic<bool> PipelineActive;
+	std::atomic<int> ModelTransitionFailureCode;
 	std::thread CaptureThread;
+	std::thread ModelTransitionThread;
 	std::mutex AudioBufferMutex;
 	std::vector<float> AudioAccumBuffer;
 

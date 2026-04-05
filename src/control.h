@@ -22,29 +22,129 @@ update_audio_input_selection(GlobalState *AppState, int Index)
 	AppState->CurrentAudioDeviceIndex = Index;
 }
 
+static
+void
+model_transition_thread(GlobalState *AppState, int ModelIndex,
+	int InferenceDeviceIndex, bool UnloadCurrentModel,
+	ModelTransitionFailure FailureCode)
+{
+	bool Success = true;
+
+	if (UnloadCurrentModel)
+		unload_whisper_model(&AppState->WhisperState);
+
+	if (ModelIndex >= 0)
+	{
+		Success = load_whisper_model(
+			&AppState->WhisperState,
+			AppState->STTModelPaths[ModelIndex].c_str(),
+			ModelIndex, InferenceDeviceIndex);
+	}
+
+	if (!Success)
+		AppState->ModelTransitionFailureCode.store((int)FailureCode);
+
+	AppState->IsModelTransitioning.store(false);
+}
+
+inline
+void
+finish_model_transition(GlobalState *AppState)
+{
+	if (AppState->IsModelTransitioning.load())
+		return;
+
+	if (!AppState->ModelTransitionThread.joinable())
+		return;
+
+	AppState->ModelTransitionThread.join();
+
+	ModelTransitionFailure FailureCode =
+		(ModelTransitionFailure)AppState->ModelTransitionFailureCode.exchange(
+			(int)MODEL_TRANSITION_FAILURE_NONE);
+
+	switch (FailureCode)
+	{
+	case MODEL_TRANSITION_FAILURE_LOAD:
+		show_toast(AppState, "Failed to load STT model");
+		break;
+	case MODEL_TRANSITION_FAILURE_RELOAD:
+		show_toast(AppState, "Failed to reload STT model");
+		break;
+	case MODEL_TRANSITION_FAILURE_TRANSFER:
+		show_toast(AppState, "Failed to reload model on new inference device");
+		break;
+	case MODEL_TRANSITION_FAILURE_NONE:
+	default:
+		break;
+	}
+}
+
+inline
+bool
+start_model_transition(GlobalState *AppState, int ModelIndex,
+	int InferenceDeviceIndex, bool UnloadCurrentModel,
+	ModelTransitionFailure FailureCode)
+{
+	finish_model_transition(AppState);
+
+	if (AppState->IsModelTransitioning.load())
+		return false;
+
+	if (AppState->ModelTransitionThread.joinable())
+		AppState->ModelTransitionThread.join();
+
+	AppState->ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
+	AppState->IsModelTransitioning.store(true);
+	AppState->ModelTransitionThread = std::thread(
+		model_transition_thread,
+		AppState,
+		ModelIndex,
+		InferenceDeviceIndex,
+		UnloadCurrentModel,
+		FailureCode);
+
+	return true;
+}
+
 inline
 void
 update_inference_device_selection(GlobalState *AppState, int Index)
 {
+	if (Index < 0 || Index >= (int)AppState->InferenceDevices.size())
+		return;
+
 	int PreviousIndex = AppState->CurrentInferenceDeviceIndex;
+	if (PreviousIndex == Index)
+		return;
+
 	AppState->CurrentInferenceDeviceIndex = Index;
+	save_string_setting("inference_device", AppState->InferenceDevices[Index].c_str());
 
-	if (Index >= 0 && Index < (int)AppState->InferenceDevices.size())
-		save_string_setting("inference_device", AppState->InferenceDevices[Index].c_str());
+	if (!is_whisper_model_loaded(&AppState->WhisperState))
+		return;
 
-	if (PreviousIndex == Index) return;
-	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
-	if (AppState->PipelineActive.load()) return;
+	if (AppState->IsModelTransitioning.load() || AppState->PipelineActive.load())
+		return;
 
 	if (AppState->CaptureThread.joinable())
 		AppState->CaptureThread.join();
 
-	bool Success = load_whisper_model(
-		&AppState->WhisperState,
-		AppState->WhisperState.ModelPath.c_str(),
-		AppState->WhisperState.LoadedModelIndex, Index);
-	if (!Success)
+	int ModelIndex = AppState->CurrentSTTModelIndex;
+	if (ModelIndex < 0 || ModelIndex >= (int)AppState->STTModelPaths.size())
+		ModelIndex = AppState->WhisperState.LoadedModelIndex;
+
+	if (ModelIndex < 0 || ModelIndex >= (int)AppState->STTModelPaths.size())
+	{
 		show_toast(AppState, "Failed to reload model on new inference device");
+		return;
+	}
+
+	if (!start_model_transition(AppState, ModelIndex, Index,
+		true, MODEL_TRANSITION_FAILURE_TRANSFER))
+	{
+		show_toast(AppState, "Failed to reload model on new inference device");
+	}
 }
 
 inline
@@ -63,23 +163,27 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 
 	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
 	if (AppState->WhisperState.LoadedModelIndex == Index) return;
+	if (AppState->IsModelTransitioning.load()) return;
 	if (AppState->PipelineActive.load()) return;
 
 	if (AppState->CaptureThread.joinable())
 		AppState->CaptureThread.join();
 
-	bool Success = load_whisper_model(
-		&AppState->WhisperState,
-		AppState->STTModelPaths[Index].c_str(),
-		Index, AppState->CurrentInferenceDeviceIndex);
-	if (!Success)
+	if (!start_model_transition(AppState, Index,
+		AppState->CurrentInferenceDeviceIndex,
+		false, MODEL_TRANSITION_FAILURE_RELOAD))
+	{
 		show_toast(AppState, "Failed to reload STT model");
+	}
 }
 
 inline
 void
 toggle_recording(GlobalState *AppState)
 {
+	if (AppState->IsModelTransitioning.load())
+		return;
+
 	if (!is_whisper_model_loaded(&AppState->WhisperState))
 		return;
 
@@ -122,6 +226,9 @@ inline
 void
 toggle_streaming(GlobalState *AppState)
 {
+	if (AppState->IsModelTransitioning.load())
+		return;
+
 	if (!is_whisper_model_loaded(&AppState->WhisperState))
 		return;
 
@@ -149,6 +256,11 @@ inline
 void
 toggle_stt_model_load(GlobalState *AppState)
 {
+	if (AppState->IsModelTransitioning.load())
+	{
+		return;
+	}
+
 	if (AppState->IsRecording || AppState->IsStreaming ||
 		AppState->CaptureRunning.load() || AppState->PipelineActive.load())
 	{
@@ -168,11 +280,11 @@ toggle_stt_model_load(GlobalState *AppState)
 		if (ModelIdx < 0 || ModelIdx >= (int)AppState->STTModelPaths.size())
 			return;
 
-		bool Success = load_whisper_model(
-			&AppState->WhisperState,
-			AppState->STTModelPaths[ModelIdx].c_str(),
-			ModelIdx, AppState->CurrentInferenceDeviceIndex);
-		if (!Success)
+		if (!start_model_transition(AppState, ModelIdx,
+			AppState->CurrentInferenceDeviceIndex,
+			false, MODEL_TRANSITION_FAILURE_LOAD))
+		{
 			show_toast(AppState, "Failed to load STT model");
+		}
 	}
 }

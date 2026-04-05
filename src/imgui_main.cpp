@@ -228,6 +228,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	AppStateStorage.IsStreaming            = false;
 	AppStateStorage.CaptureRunning        = false;
 	AppStateStorage.PipelineActive        = false;
+	AppStateStorage.IsModelTransitioning.store(false);
+	AppStateStorage.ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
 	AppStateStorage.OwnWindow              = Hwnd;
 	AppStateStorage.IsSettingsDialogOpen   = false;
 	AppStateStorage.PlayRecordSound        = false;
@@ -289,7 +291,9 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		}
 		g_SwapChainOccluded = false;
 
-		if (!AppState->IsSettingsDialogOpen)
+		finish_model_transition(AppState);
+
+		if (!AppState->IsSettingsDialogOpen && !AppState->IsModelTransitioning.load())
 		{
 			bool RecordKeyIsDown       = is_hotkey_down(AppState->RecordHotkey);
 			bool CancelRecordKeyIsDown = is_hotkey_down(AppState->CancelRecordHotkey);
@@ -322,6 +326,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	AppState->CaptureRunning.store(false);
 	if (AppState->CaptureThread.joinable())
 		AppState->CaptureThread.join();
+	if (AppState->ModelTransitionThread.joinable())
+		AppState->ModelTransitionThread.join();
 
 	if (is_whisper_model_loaded(&AppState->WhisperState))
 		unload_whisper_model(&AppState->WhisperState);
