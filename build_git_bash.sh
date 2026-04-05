@@ -32,6 +32,12 @@ cmake ../.. -G "Visual Studio 17 2022" -A x64 "${EXTRA_FLAGS[@]}"
 cmake --build . --config "$BUILD_TYPE"
 cd ../..
 
+cp -r stt_models "$OUTPUT_DIR/"
+cp -r vad_models "$OUTPUT_DIR/"
+cp -r media "$OUTPUT_DIR/"
+mkdir -p "$OUTPUT_DIR/data"
+echo "{}" > "$OUTPUT_DIR/data/settings.json"
+
 if [ "$USE_CUDA" = "ON" ]; then
 	CUDA_DLL_DIR="$CUDA_PATH/bin"
 	if [ -d "$CUDA_PATH/bin/x64" ]; then

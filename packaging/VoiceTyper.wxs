@@ -24,9 +24,9 @@
 		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
 			<Files Include="$(var.BuildOutput)\**">
 				<Exclude Files="$(var.BuildOutput)\data\settings.json" />
-				<Exclude Files="$(var.BuildOutput)\models\ggml-small.en.bin" />
-				<Exclude Files="$(var.BuildOutput)\models\ggml-medium.en.bin" />
-				<Exclude Files="$(var.BuildOutput)\models\ggml-large-v3-turbo.bin" />
+				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-small.en.bin" />
+				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-medium.en.bin" />
+				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-large-v3-turbo.bin" />
 			</Files>
 		</ComponentGroup>
 
