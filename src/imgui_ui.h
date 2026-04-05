@@ -664,6 +664,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			DeviceNames.push_back("No Devices Found");
 			int Dummy = 0;
 			ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
 			string_combo("##AudioInput", &Dummy, DeviceNames);
 			ImGui::EndDisabled();
 		}
@@ -671,6 +672,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		{
 			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
 			if (Busy) ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
 			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, DeviceNames))
 				update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
 			if (Busy) ImGui::EndDisabled();
@@ -685,12 +687,14 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			std::vector<std::string> NoModels = { "No Models Found" };
 			int Dummy = 0;
 			ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
 			string_combo("##STTModel", &Dummy, NoModels);
 			ImGui::EndDisabled();
 		}
 		else
 		{
 			if (Busy) ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
 			if (string_combo("##STTModel", &AppState->CurrentSTTModelIndex,
 				AppState->STTModelNames))
 			{
@@ -727,6 +731,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		ImGui::Text("Inference Device");
 		int SelectedInferenceDeviceIndex = AppState->CurrentInferenceDeviceIndex;
 		if (Busy) ImGui::BeginDisabled();
+		ImGui::SetNextItemWidth(FullWidth.x);
 		if (string_combo("##InferenceDevice", &SelectedInferenceDeviceIndex,
 			AppState->InferenceDevices))
 		{

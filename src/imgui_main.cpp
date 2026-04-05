@@ -240,7 +240,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;
 
-	AppState->VadModelPath = platform_get_exe_dir() + "\\" + VAD_MODEL_RELATIVE;
+	AppState->VadModelPath = platform_join_path(platform_get_exe_dir(), VAD_MODEL_RELATIVE);
 
 	init_whisper_state(&AppState->WhisperState);
 
@@ -260,7 +260,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	ImGui::StyleColorsDark();
 
-	Io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\georgia.ttf", 18.0f);
+	std::string FontPath = platform_path_from_universal("C:/Windows/Fonts/georgia.ttf");
+	Io.Fonts->AddFontFromFileTTF(FontPath.c_str(), 18.0f);
 
 	ImGui_ImplWin32_Init(Hwnd);
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);

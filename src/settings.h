@@ -13,7 +13,7 @@ inline
 std::string
 get_settings_file_path()
 {
-	return platform_get_exe_dir() + "\\data\\settings.ini";
+	return platform_join_path(platform_get_exe_dir(), "data/settings.ini");
 }
 
 inline
@@ -146,4 +146,3 @@ load_int_setting(const char *Name, int *OutValue)
 	*OutValue = std::stoi(It->second);
 	return true;
 }
-

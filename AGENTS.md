@@ -29,7 +29,7 @@ The application's primary responsibility is facilitating user control of:
 
 ## Task Complexity
 If a task is marked `[PLAN]` instead of `[ ]`, do not implement it.
-Instead, decompose it into concrete sub-tasks, write them into `.claude/tasks.md`
+Instead, decompose it into concrete sub-tasks, write them into `docs/tasks.md`
 replacing the `[PLAN]` entry, and stop for review before proceeding.
 
 ## Coding Guidelines

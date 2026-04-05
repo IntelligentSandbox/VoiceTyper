@@ -214,9 +214,9 @@ query_available_stt_models(GlobalState *AppState)
 	AppState->STTModelNames.clear();
 	AppState->STTModelPaths.clear();
 
-	std::string Dir = platform_get_exe_dir() + "\\stt_models";
+	std::string Dir = platform_join_path(platform_get_exe_dir(), "stt_models");
 	WIN32_FIND_DATAA Fd;
-	std::string Pattern = Dir + "\\ggml-*.bin";
+	std::string Pattern = platform_join_path(Dir, "ggml-*.bin");
 	HANDLE Hf = FindFirstFileA(Pattern.c_str(), &Fd);
 
 	if (Hf != INVALID_HANDLE_VALUE)
@@ -226,7 +226,7 @@ query_available_stt_models(GlobalState *AppState)
 			if (Fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
 
 			std::string FileName = Fd.cFileName;
-			std::string FilePath = Dir + "\\" + FileName;
+			std::string FilePath = platform_join_path(Dir, FileName);
 
 			std::string DisplayName = FileName;
 			if (DisplayName.rfind("ggml-", 0) == 0)

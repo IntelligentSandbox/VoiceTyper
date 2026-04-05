@@ -28,7 +28,7 @@ struct AudioInputDeviceInfo
 #define AUDIO_CAPTURE_BUFFER_COUNT      8
 
 #define WINDOW_DEFAULT_WIDTH 700
-#define WINDOW_DEFAULT_HEIGHT 500
+#define WINDOW_DEFAULT_HEIGHT 575
 
 #define APP_ICON_PATH "media/voicetyper-icon.png"
 
