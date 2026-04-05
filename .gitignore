@@ -1,5 +1,4 @@
 build/
-build-imgui/
 notes/
 compile_commands.json
 stt_models/
@@ -7,4 +6,3 @@ vad_models/
 docs/tasks.md
 .claude/settings.local.json
 dist/
-imgui.ini
