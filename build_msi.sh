@@ -3,10 +3,12 @@
 set -e
 
 USE_CUDA=OFF
+OUTPUT_PATH=""
 
 for arg in "$@"; do
 	case "$arg" in
 		cuda) USE_CUDA=ON ;;
+		--output=*) OUTPUT_PATH="${arg#--output=}" ;;
 	esac
 done
 
@@ -22,6 +24,10 @@ BUILD_OUTPUT="build/Release_${VARIANT}"
 DIST_DIR="dist"
 MSI_OUTPUT="$DIST_DIR/voicetyper-v${VERSION}-${VARIANT}.msi"
 
+if [ -n "$OUTPUT_PATH" ]; then
+	MSI_OUTPUT="$OUTPUT_PATH"
+fi
+
 if [ ! -d "$BUILD_OUTPUT" ]; then
 	echo "Error: build output directory '$BUILD_OUTPUT' does not exist."
 	echo "Run './build_git_bash.sh${USE_CUDA:+ cuda}' first."
@@ -29,6 +35,7 @@ if [ ! -d "$BUILD_OUTPUT" ]; then
 fi
 
 mkdir -p "$DIST_DIR"
+mkdir -p "$(dirname "$MSI_OUTPUT")"
 
 echo ""
 echo "=== Building $MSI_OUTPUT ==="
