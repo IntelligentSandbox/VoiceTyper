@@ -12,8 +12,8 @@ via **Whisper.cpp** (an external project and core dependency).
 The application's primary responsibility is facilitating user control of:
     audio input -> Whisper.cpp model -> insert text into focused text input field (if available)
 
-    ./build_git_bash.sh          - release cpu build
-    ./build_git_bash.sh cuda     - release cuda build
+    ./build.sh          - release cpu build
+    ./build.sh cuda     - release cuda build
 
 ## Workflow
 1. Read `docs/tasks.md` at the start of every session.

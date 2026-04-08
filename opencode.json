@@ -1,5 +1,1 @@
-{
-    "$schema": "https://opencode.ai/config.json", 
-    "lsp": false,
-    "instructions": ["docs/AGENTS.md"]
-}
+{ "$schema": "https://opencode.ai/config.json", "lsp": false }
