@@ -5,14 +5,30 @@
 #include "settings.h"
 #include "sounds.h"
 
-#define TOAST_DURATION_SECONDS 4.0
+#define TOAST_DURATION_SECONDS 2.0
+
+inline
+void
+show_toast_with_color(GlobalState *AppState, const char *Message, const ImVec4 &BackgroundColor)
+{
+	AppState->ToastMessage = Message;
+	AppState->ToastExpireTime = ImGui::GetTime() + TOAST_DURATION_SECONDS;
+	AppState->ToastBackgroundColor = BackgroundColor;
+	AppState->ToastSerial += 1;
+}
 
 inline
 void
 show_toast(GlobalState *AppState, const char *Message)
 {
-	AppState->ToastMessage = Message;
-	AppState->ToastExpireTime = ImGui::GetTime() + TOAST_DURATION_SECONDS;
+	show_toast_with_color(AppState, Message, TOAST_COLOR_ERROR);
+}
+
+inline
+void
+show_success_toast(GlobalState *AppState, const char *Message)
+{
+	show_toast_with_color(AppState, Message, TOAST_COLOR_SUCCESS);
 }
 
 inline

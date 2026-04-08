@@ -204,6 +204,8 @@ enum ModelTransitionFailure
 #define BUTTON_COLOR_RED     ImVec4(0.75f, 0.07f, 0.13f, 1.0f)
 #define BUTTON_COLOR_GREY    ImVec4(0.50f, 0.50f, 0.50f, 1.0f)
 #define BUTTON_COLOR_BLUE    ImVec4(0.13f, 0.59f, 0.95f, 1.0f)
+#define TOAST_COLOR_ERROR    ImVec4(0.70f, 0.10f, 0.10f, 1.0f)
+#define TOAST_COLOR_SUCCESS  ImVec4(0.10f, 0.55f, 0.20f, 1.0f)
 
 // ---------------------------------------------------------------------------
 // Application State
@@ -264,6 +266,8 @@ struct GlobalState
 	// Toast notification
 	std::string ToastMessage;
 	double ToastExpireTime;
+	ImVec4 ToastBackgroundColor;
+	int ToastSerial; // if user overflows this they need a life (but will never happen bc no one will use this slopapp but me.)
 
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;

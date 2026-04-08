@@ -326,14 +326,22 @@ platform_is_key_down(int VirtualKey)
 
 inline
 std::string
-platform_get_exe_dir()
+platform_get_exe_path()
 {
 	char ExePath[MAX_PATH] = {};
 	GetModuleFileNameA(nullptr, ExePath, MAX_PATH);
-	char *LastSlash = strrchr(ExePath, '\\');
-	if (!LastSlash) LastSlash = strrchr(ExePath, '/');
-	if (LastSlash) *LastSlash = '\0';
 	return std::string(ExePath);
+}
+
+inline
+std::string
+platform_get_exe_dir()
+{
+	std::string ExePath = platform_get_exe_path();
+	size_t LastSlash = ExePath.find_last_of("\\/");
+	if (LastSlash != std::string::npos)
+		ExePath.resize(LastSlash);
+	return ExePath;
 }
 
 // ---------------------------------------------------------------------------

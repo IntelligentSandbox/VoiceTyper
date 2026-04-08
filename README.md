@@ -32,13 +32,5 @@ To compile the project for yourself, you will need:
 - `cmake` (e.g. 3.31.6)
 - NVIDIA CUDA toolkit (if you want to build with cuda capability) (e.g. v13.2)
 
-```bash
-./build.sh        # release cpu
-./build.sh cuda   # release cuda
+To download ggml whisper models, get them from huggingface [here](https://huggingface.co/ggerganov/whisper.cpp/tree/main).
 
-./build.sh debug        # debug cpu
-./build.sh debug cuda   # debug cuda
-```
-
-
-TODO: add a nix flake, well get a linux port first then do that...

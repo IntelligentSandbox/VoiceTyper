@@ -13,6 +13,7 @@ void *platform_get_foreground_window();
 void platform_set_taskbar_icon(void *Window, const char *PngPath);
 void platform_play_sound(int FreqHz, int DurationMs, int Volume);
 bool platform_is_key_down(int VirtualKey);
+std::string platform_get_exe_path();
 std::string platform_get_exe_dir();
 
 inline
