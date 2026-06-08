@@ -2,7 +2,7 @@
 
 #include "state.h"
 
-#include "platform.h"
+#include "host_services.h"
 
 #include <cstdio>
 #include <cmath>
