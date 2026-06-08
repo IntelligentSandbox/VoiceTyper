@@ -12,7 +12,7 @@ query_logical_processor_count()
 	return (Count > 0) ? (int)Count : 1;
 }
 
-#include "platform.h"
+#include "host_services.h"
 
 #include "settings.h"
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "platform.h"
+#include "host_services.h"
 #include "state.h"
 
 #include <cstdio>
