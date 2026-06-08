@@ -56,61 +56,6 @@ struct HotkeyConfig
 	AppHotkeyModifiers Modifiers;
 	AppKeyCode VirtualKey;
 
-	std::string
-	to_label() const
-	{
-		std::string Label;
-
-		if (Modifiers & HOTKEY_MOD_CTRL) Label += "Ctrl+";
-		if (Modifiers & HOTKEY_MOD_ALT) Label += "Alt+";
-		if (Modifiers & HOTKEY_MOD_SHIFT) Label += "Shift+";
-		if (Modifiers & HOTKEY_MOD_WIN) Label += "Win+";
-
-		if (VirtualKey == APP_KEY_NONE)
-		{
-			if (!Label.empty() && Label.back() == '+')
-				Label.pop_back();
-			return Label;
-		}
-
-		if (VirtualKey >= APP_KEY_F1 && VirtualKey <= APP_KEY_F24)
-		{
-			Label += "F" + std::to_string(VirtualKey - APP_KEY_F1 + 1);
-		}
-		else if (VirtualKey >= 'A' && VirtualKey <= 'Z')
-		{
-			Label += (char)VirtualKey;
-		}
-		else if (VirtualKey >= '0' && VirtualKey <= '9')
-		{
-			Label += (char)VirtualKey;
-		}
-		else
-		{
-			switch (VirtualKey)
-			{
-			case APP_KEY_SPACE:     Label += "Space";     break;
-			case APP_KEY_ENTER:     Label += "Enter";     break;
-			case APP_KEY_ESCAPE:    Label += "Escape";    break;
-			case APP_KEY_TAB:       Label += "Tab";       break;
-			case APP_KEY_BACKSPACE: Label += "Backspace"; break;
-			case APP_KEY_DELETE:    Label += "Delete";    break;
-			case APP_KEY_INSERT:    Label += "Insert";    break;
-			case APP_KEY_HOME:      Label += "Home";      break;
-			case APP_KEY_END:       Label += "End";       break;
-			case APP_KEY_PAGEUP:    Label += "PageUp";    break;
-			case APP_KEY_PAGEDOWN:  Label += "PageDown";  break;
-			case APP_KEY_LEFT:      Label += "Left";      break;
-			case APP_KEY_RIGHT:     Label += "Right";     break;
-			case APP_KEY_UP:        Label += "Up";        break;
-			case APP_KEY_DOWN:      Label += "Down";      break;
-			default:                Label += "??";        break;
-			}
-		}
-
-		return Label;
-	}
-
 	bool
 	is_valid() const
 	{

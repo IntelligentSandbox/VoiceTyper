@@ -14,6 +14,7 @@
 
 #include "state.h"
 #include "system.h"
+#include "input.h"
 #include "model_assets.h"
 #include "imgui_ui.h"
 
