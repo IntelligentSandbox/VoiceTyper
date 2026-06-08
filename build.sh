@@ -19,6 +19,7 @@ else
 fi
 
 OUTPUT_DIR="build/${BUILD_TYPE}_${VARIANT}"
+BUILD_JOBS="${VOICETYPER_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)}"
 
 EXTRA_FLAGS=("-DVOICETYPER_CUDA=$USE_CUDA")
 if [ "$USE_CUDA" = "ON" ]; then
@@ -26,15 +27,29 @@ if [ "$USE_CUDA" = "ON" ]; then
 	EXTRA_FLAGS+=("-DCUDAToolkit_ROOT=$CUDA_PATH")
 fi
 
+sync_asset_dir() {
+	local source_dir="$1"
+	local output_dir="$2"
+
+	mkdir -p "$output_dir"
+
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -a --delete "$source_dir/" "$output_dir/"
+		return
+	fi
+
+	cp -ru "$source_dir/." "$output_dir/"
+}
+
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 cmake ../.. -G "Visual Studio 17 2022" -A x64 "${EXTRA_FLAGS[@]}"
-cmake --build . --config "$BUILD_TYPE"
+cmake --build . --config "$BUILD_TYPE" --parallel "$BUILD_JOBS"
 cd ../..
 
-cp -r stt_models "$OUTPUT_DIR/"
-cp -r vad_models "$OUTPUT_DIR/"
-cp -r media "$OUTPUT_DIR/"
+sync_asset_dir stt_models "$OUTPUT_DIR/stt_models"
+sync_asset_dir vad_models "$OUTPUT_DIR/vad_models"
+sync_asset_dir media "$OUTPUT_DIR/media"
 mkdir -p "$OUTPUT_DIR/data"
 touch "$OUTPUT_DIR/data/settings.ini"
 
