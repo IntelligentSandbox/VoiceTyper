@@ -79,7 +79,7 @@ struct SettingsWindowState
 // ---------------------------------------------------------------------------
 // Application State
 // ---------------------------------------------------------------------------
-struct GlobalState
+struct CoreRuntimeState
 {
 	// Hotkeys
 	HotkeyConfig RecordHotkey;
@@ -91,7 +91,6 @@ struct GlobalState
 	// Logic
 	bool IsRecording;
 	bool IsStreaming;
-	bool IsSettingsDialogOpen;
 	std::atomic<bool> IsModelTransitioning;
 	bool PlayRecordSound;
 	SoundConfig StartSound;
@@ -128,16 +127,27 @@ struct GlobalState
 
 	// Inference threading
 	int WhisperThreadCount;
+};
 
-	// Our own main window handle — used to exclude self when doing just-in-time target lookup.
-	PlatformWindowHandle OwnWindow;
+struct UiRuntimeState
+{
+	bool IsSettingsDialogOpen;
 	SettingsWindowState SettingsState;
-
-	// Toast notification
 	std::string ToastMessage;
 	double ToastExpireTime;
 	ImVec4 ToastBackgroundColor;
 	int ToastSerial; // if user overflows this they need a life (but will never happen bc no one will use this slopapp but me.)
+};
+
+struct PlatformRuntimeState
+{
+	PlatformWindowHandle OwnWindow;
+};
+
+struct GlobalState : CoreRuntimeState
+{
+	UiRuntimeState Ui;
+	PlatformRuntimeState Platform;
 
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;

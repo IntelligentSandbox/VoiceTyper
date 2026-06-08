@@ -119,7 +119,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	if (!Transcription.empty())
 	{
 		void *TargetWindow = platform_get_foreground_window();
-		if (TargetWindow == AppState->OwnWindow) TargetWindow = nullptr;
+		if (TargetWindow == AppState->Platform.OwnWindow) TargetWindow = nullptr;
 		if (!TargetWindow)
 			printf("[transcription] %s\n", Transcription.c_str());
 		platform_inject_text(TargetWindow, Transcription.c_str(), AppState->UseCharByCharInjection);

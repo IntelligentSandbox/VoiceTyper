@@ -11,10 +11,10 @@ inline
 void
 show_toast_with_color(GlobalState *AppState, const char *Message, const ImVec4 &BackgroundColor)
 {
-	AppState->ToastMessage = Message;
-	AppState->ToastExpireTime = ImGui::GetTime() + TOAST_DURATION_SECONDS;
-	AppState->ToastBackgroundColor = BackgroundColor;
-	AppState->ToastSerial += 1;
+	AppState->Ui.ToastMessage = Message;
+	AppState->Ui.ToastExpireTime = ImGui::GetTime() + TOAST_DURATION_SECONDS;
+	AppState->Ui.ToastBackgroundColor = BackgroundColor;
+	AppState->Ui.ToastSerial += 1;
 }
 
 inline
