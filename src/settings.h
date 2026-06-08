@@ -143,6 +143,17 @@ load_int_setting(const char *Name, int *OutValue)
 	auto Map = read_settings_map();
 	auto It = Map.find(Name);
 	if (It == Map.end()) return false;
-	*OutValue = std::stoi(It->second);
+
+	size_t End = 0;
+	try
+	{
+		*OutValue = std::stoi(It->second, &End);
+	}
+	catch (...)
+	{
+		return false;
+	}
+
+	if (End != It->second.size()) return false;
 	return true;
 }

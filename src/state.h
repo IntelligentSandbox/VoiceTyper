@@ -139,6 +139,22 @@ inline HotkeyConfig default_load_model_hotkey()
 	return H;
 }
 
+enum RecordingHotkeyMode
+{
+	RECORDING_HOTKEY_HOLD = 0,
+	RECORDING_HOTKEY_TOGGLE = 1,
+};
+
+inline RecordingHotkeyMode default_recording_hotkey_mode()
+{
+	return RECORDING_HOTKEY_HOLD;
+}
+
+inline bool is_valid_recording_hotkey_mode(int Mode)
+{
+	return Mode == RECORDING_HOTKEY_HOLD || Mode == RECORDING_HOTKEY_TOGGLE;
+}
+
 // ---------------------------------------------------------------------------
 // Sound Config
 // ---------------------------------------------------------------------------
@@ -173,6 +189,7 @@ struct SettingsWindowState
 	int SelectedAction;
 	HotkeyCaptureState Capture;
 	HotkeyConfig TempHotkeys[4];
+	RecordingHotkeyMode TempRecordHotkeyMode;
 	bool TempPlayRecordSound;
 	SoundConfig TempStartSound;
 	SoundConfig TempStopSound;
@@ -217,6 +234,7 @@ struct GlobalState
 	HotkeyConfig CancelRecordHotkey;
 	HotkeyConfig StreamHotkey;
 	HotkeyConfig LoadModelHotkey;
+	RecordingHotkeyMode RecordHotkeyMode;
 
 	// Logic
 	bool IsRecording;
@@ -278,6 +296,9 @@ struct GlobalState
 // ---------------------------------------------------------------------------
 inline std::string record_button_idle_label(GlobalState *AppState)
 {
+	if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_HOLD)
+		return "Record (hold " + AppState->RecordHotkey.to_label() + ")";
+
 	return "Record (" + AppState->RecordHotkey.to_label() + ")";
 }
 

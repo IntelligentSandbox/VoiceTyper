@@ -221,6 +221,7 @@ init_settings_state(GlobalState *AppState)
 	S->TempHotkeys[1] = AppState->CancelRecordHotkey;
 	S->TempHotkeys[2] = AppState->StreamHotkey;
 	S->TempHotkeys[3] = AppState->LoadModelHotkey;
+	S->TempRecordHotkeyMode = AppState->RecordHotkeyMode;
 	S->TempPlayRecordSound = AppState->PlayRecordSound;
 	S->TempStartSound = AppState->StartSound;
 	S->TempStopSound = AppState->StopSound;
@@ -355,6 +356,18 @@ render_settings_ui(GlobalState *AppState)
 
 	ImGui::Separator();
 	ImGui::Text("Keyboard Shortcuts");
+
+	ImGui::Text("Record Hotkey Mode");
+	if (ImGui::RadioButton("Hold key to record",
+		S->TempRecordHotkeyMode == RECORDING_HOTKEY_HOLD))
+	{
+		S->TempRecordHotkeyMode = RECORDING_HOTKEY_HOLD;
+	}
+	if (ImGui::RadioButton("Press key to start/stop",
+		S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE))
+	{
+		S->TempRecordHotkeyMode = RECORDING_HOTKEY_TOGGLE;
+	}
 
 	float AvailWidth = ImGui::GetContentRegionAvail().x;
 	float Spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -531,6 +544,7 @@ render_settings_ui(GlobalState *AppState)
 		AppState->CancelRecordHotkey = S->TempHotkeys[1];
 		AppState->StreamHotkey       = S->TempHotkeys[2];
 		AppState->LoadModelHotkey    = S->TempHotkeys[3];
+		AppState->RecordHotkeyMode   = S->TempRecordHotkeyMode;
 
 		save_hotkey_setting("record_hotkey",
 			(int)AppState->RecordHotkey.Modifiers, (int)AppState->RecordHotkey.VirtualKey);
@@ -540,6 +554,7 @@ render_settings_ui(GlobalState *AppState)
 			(int)AppState->StreamHotkey.Modifiers, (int)AppState->StreamHotkey.VirtualKey);
 		save_hotkey_setting("load_model_hotkey",
 			(int)AppState->LoadModelHotkey.Modifiers, (int)AppState->LoadModelHotkey.VirtualKey);
+		save_int_setting("record_hotkey_mode", (int)AppState->RecordHotkeyMode);
 
 		AppState->PlayRecordSound = S->TempPlayRecordSound;
 		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
