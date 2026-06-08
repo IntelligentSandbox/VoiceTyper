@@ -230,8 +230,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	AppStateStorage.PipelineActive        = false;
 	AppStateStorage.IsModelTransitioning.store(false);
 	AppStateStorage.ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
-	AppStateStorage.OwnWindow              = Hwnd;
-	AppStateStorage.IsSettingsDialogOpen   = false;
+	AppStateStorage.Platform.OwnWindow     = Hwnd;
+	AppStateStorage.Ui.IsSettingsDialogOpen = false;
 	AppStateStorage.PlayRecordSound        = false;
 	AppStateStorage.StartSound             = { SOUND_DEFAULT_START_FREQ, SOUND_DEFAULT_VOLUME };
 	AppStateStorage.StopSound              = { SOUND_DEFAULT_STOP_FREQ, SOUND_DEFAULT_VOLUME };
@@ -295,7 +295,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 		finish_model_transition(AppState);
 
-		if (!AppState->IsSettingsDialogOpen && !AppState->IsModelTransitioning.load())
+		if (!AppState->Ui.IsSettingsDialogOpen && !AppState->IsModelTransitioning.load())
 		{
 			bool RecordKeyIsDown       = is_hotkey_down(AppState->RecordHotkey);
 			bool CancelRecordKeyIsDown = is_hotkey_down(AppState->CancelRecordHotkey);

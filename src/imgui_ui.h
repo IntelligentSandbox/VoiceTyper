@@ -215,7 +215,7 @@ static
 void
 init_settings_state(GlobalState *AppState)
 {
-	SettingsWindowState *S = &AppState->SettingsState;
+	SettingsWindowState *S = &AppState->Ui.SettingsState;
 	S->SelectedAction = 0;
 	S->TempHotkeys[0] = AppState->RecordHotkey;
 	S->TempHotkeys[1] = AppState->CancelRecordHotkey;
@@ -255,7 +255,7 @@ static
 void
 render_settings_ui(GlobalState *AppState)
 {
-	SettingsWindowState *S = &AppState->SettingsState;
+	SettingsWindowState *S = &AppState->Ui.SettingsState;
 
 	ImVec2 Display = ImGui::GetIO().DisplaySize;
 	float SettingsW = (Display.x < 620.0f) ? Display.x : 620.0f;
@@ -265,7 +265,7 @@ render_settings_ui(GlobalState *AppState)
 	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 		return;
 
-	AppState->IsSettingsDialogOpen = true;
+	AppState->Ui.IsSettingsDialogOpen = true;
 
 #ifdef VOICETYPER_CUDA
 	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION);
@@ -573,13 +573,13 @@ render_settings_ui(GlobalState *AppState)
 		AppState->WhisperThreadCount = S->TempWhisperThreadCount;
 
 		ImGui::CloseCurrentPopup();
-		AppState->IsSettingsDialogOpen = false;
+		AppState->Ui.IsSettingsDialogOpen = false;
 	}
 	ImGui::SameLine();
 	if (colored_button("Cancel##Settings", BottomSize, BUTTON_COLOR_GREY))
 	{
 		ImGui::CloseCurrentPopup();
-		AppState->IsSettingsDialogOpen = false;
+		AppState->Ui.IsSettingsDialogOpen = false;
 	}
 
 	ImGui::EndPopup();
@@ -589,16 +589,16 @@ static
 void
 render_toast_ui(GlobalState *AppState, ImGuiIO &Io)
 {
-	if (!AppState->ToastMessage.empty() && ImGui::GetTime() < AppState->ToastExpireTime)
+	if (!AppState->Ui.ToastMessage.empty() && ImGui::GetTime() < AppState->Ui.ToastExpireTime)
 	{
 		float Padding = 12.0f;
 		ImVec2 Display = Io.DisplaySize;
 		char ToastWindowName[32];
-		snprintf(ToastWindowName, sizeof(ToastWindowName), "##Toast%d", AppState->ToastSerial);
+		snprintf(ToastWindowName, sizeof(ToastWindowName), "##Toast%d", AppState->Ui.ToastSerial);
 		ImGui::SetNextWindowPos(
 			ImVec2(Display.x * 0.5f, Display.y - 40.0f), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
 		ImGui::SetNextWindowBgAlpha(0.85f);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, AppState->ToastBackgroundColor);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, AppState->Ui.ToastBackgroundColor);
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Padding, Padding));
@@ -607,14 +607,14 @@ render_toast_ui(GlobalState *AppState, ImGuiIO &Io)
 			ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
 			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav |
 			ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings);
-		ImGui::TextUnformatted(AppState->ToastMessage.c_str());
+		ImGui::TextUnformatted(AppState->Ui.ToastMessage.c_str());
 		ImGui::End();
 		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor(2);
 	}
-	else if (!AppState->ToastMessage.empty())
+	else if (!AppState->Ui.ToastMessage.empty())
 	{
-		AppState->ToastMessage.clear();
+		AppState->Ui.ToastMessage.clear();
 	}
 }
 
