@@ -30,6 +30,13 @@ else()
 	set(GGML_CUDA OFF CACHE BOOL "" FORCE)
 endif()
 
+if(MSVC)
+	add_compile_options(
+		$<$<COMPILE_LANGUAGE:C>:/MP>
+		$<$<COMPILE_LANGUAGE:CXX>:/MP>
+	)
+endif()
+
 add_subdirectory(src/external/whisper.cpp)
 
 # ---------------------------------------------------------------------------
