@@ -56,6 +56,14 @@ struct PlatformRuntimeState
 	PlatformWindowHandle OwnWindow;
 };
 
+struct ColorRgba
+{
+	float R;
+	float G;
+	float B;
+	float A;
+};
+
 struct HotkeyConfig
 {
 	AppHotkeyModifiers Modifiers;

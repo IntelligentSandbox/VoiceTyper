@@ -11,6 +11,11 @@
 #include <cstdio>
 #include <cstdlib>
 
+#define BUTTON_COLOR_GREEN   ImVec4(0.0f, 0.50f, 0.0f, 1.0f)
+#define BUTTON_COLOR_RED     ImVec4(0.75f, 0.07f, 0.13f, 1.0f)
+#define BUTTON_COLOR_GREY    ImVec4(0.50f, 0.50f, 0.50f, 1.0f)
+#define BUTTON_COLOR_BLUE    ImVec4(0.13f, 0.59f, 0.95f, 1.0f)
+
 // ---------------------------------------------------------------------------
 // Styled button helper
 // ---------------------------------------------------------------------------
@@ -587,7 +592,8 @@ render_toast_ui(GlobalState *AppState, ImGuiIO &Io)
 		ImGui::SetNextWindowPos(
 			ImVec2(Display.x * 0.5f, Display.y - 40.0f), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
 		ImGui::SetNextWindowBgAlpha(0.85f);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, AppState->Ui.ToastBackgroundColor);
+		ColorRgba Bg = AppState->Ui.ToastBackgroundColor;
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(Bg.R, Bg.G, Bg.B, Bg.A));
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Padding, Padding));
