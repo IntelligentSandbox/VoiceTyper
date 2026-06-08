@@ -45,6 +45,12 @@ struct AudioInputDeviceInfo
 	bool IsDefault;
 };
 
+struct PlatformFileInfo
+{
+	std::string Name;
+	int64_t SizeBytes;
+};
+
 struct HotkeyConfig
 {
 	AppHotkeyModifiers Modifiers;

@@ -14,6 +14,7 @@
 
 #include "state.h"
 #include "system.h"
+#include "model_assets.h"
 #include "imgui_ui.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -241,10 +242,9 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;
 
-	AppState->VadModelPath = platform_join_path(platform_get_exe_dir(), VAD_MODEL_RELATIVE);
-
 	init_whisper_state(&AppState->WhisperState);
 
+	query_vad_model_path(AppState);
 	query_audio_input_devices(AppState);
 	query_inference_devices(AppState);
 	query_available_stt_models(AppState);
