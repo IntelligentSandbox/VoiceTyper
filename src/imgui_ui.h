@@ -153,37 +153,37 @@ render_numeric_text_input(const char *Id, char *Buffer, size_t BufferSize,
 // Hotkey capture helpers
 // ---------------------------------------------------------------------------
 static
-UINT
+AppHotkeyModifiers
 poll_modifier_state()
 {
-	UINT Mods = 0;
-	if (platform_is_key_down(VK_CONTROL)) Mods |= HOTKEY_MOD_CTRL;
-	if (platform_is_key_down(VK_MENU))    Mods |= HOTKEY_MOD_ALT;
-	if (platform_is_key_down(VK_SHIFT))   Mods |= HOTKEY_MOD_SHIFT;
-	if (platform_is_key_down(VK_LWIN))    Mods |= HOTKEY_MOD_WIN;
+	AppHotkeyModifiers Mods = 0;
+	if (platform_is_key_down(APP_KEY_CONTROL)) Mods |= HOTKEY_MOD_CTRL;
+	if (platform_is_key_down(APP_KEY_ALT)) Mods |= HOTKEY_MOD_ALT;
+	if (platform_is_key_down(APP_KEY_SHIFT)) Mods |= HOTKEY_MOD_SHIFT;
+	if (platform_is_key_down(APP_KEY_WIN)) Mods |= HOTKEY_MOD_WIN;
 	return Mods;
 }
 
 static
-UINT
+AppKeyCode
 poll_nonmodifier_vk()
 {
-	for (UINT Vk = 'A'; Vk <= 'Z'; Vk++)
+	for (AppKeyCode Vk = 'A'; Vk <= 'Z'; Vk++)
 	{
 		if (platform_is_key_down(Vk)) return Vk;
 	}
-	for (UINT Vk = '0'; Vk <= '9'; Vk++)
+	for (AppKeyCode Vk = '0'; Vk <= '9'; Vk++)
 	{
 		if (platform_is_key_down(Vk)) return Vk;
 	}
-	for (UINT Vk = VK_F1; Vk <= VK_F24; Vk++)
+	for (AppKeyCode Vk = APP_KEY_F1; Vk <= APP_KEY_F24; Vk++)
 	{
 		if (platform_is_key_down(Vk)) return Vk;
 	}
-	UINT Specials[] = {
-		VK_SPACE, VK_RETURN, VK_TAB, VK_BACK, VK_DELETE, VK_INSERT,
-		VK_HOME, VK_END, VK_PRIOR, VK_NEXT,
-		VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN
+	AppKeyCode Specials[] = {
+		APP_KEY_SPACE, APP_KEY_ENTER, APP_KEY_TAB, APP_KEY_BACKSPACE, APP_KEY_DELETE, APP_KEY_INSERT,
+		APP_KEY_HOME, APP_KEY_END, APP_KEY_PAGEUP, APP_KEY_PAGEDOWN,
+		APP_KEY_LEFT, APP_KEY_RIGHT, APP_KEY_UP, APP_KEY_DOWN
 	};
 	for (int i = 0; i < (int)(sizeof(Specials) / sizeof(Specials[0])); i++)
 	{
@@ -390,7 +390,7 @@ render_settings_ui(GlobalState *AppState)
 		ImGui::SetNextFrameWantCaptureKeyboard(true);
 		ImGui::ClearActiveID();
 
-		if (platform_is_key_down(VK_ESCAPE))
+		if (platform_is_key_down(APP_KEY_ESCAPE))
 		{
 			S->Capture.HasCapture = false;
 			S->Capture.Captured = {};
@@ -404,13 +404,13 @@ render_settings_ui(GlobalState *AppState)
 		}
 		else
 		{
-			UINT Mods = poll_modifier_state();
-			UINT Vk = poll_nonmodifier_vk();
+			AppHotkeyModifiers Mods = poll_modifier_state();
+			AppKeyCode Vk = poll_nonmodifier_vk();
 
-			if (Mods != 0 || Vk != 0)
+			if (Mods != 0 || Vk != APP_KEY_NONE)
 			{
 				S->Capture.PeakModifiers |= Mods;
-				if (Vk != 0) S->Capture.PeakVirtualKey = Vk;
+				if (Vk != APP_KEY_NONE) S->Capture.PeakVirtualKey = Vk;
 				S->Capture.ReleaseFrames = 0;
 
 				S->Capture.Captured.Modifiers = S->Capture.PeakModifiers;

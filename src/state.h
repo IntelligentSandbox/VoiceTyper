@@ -1,5 +1,6 @@
 #pragma once
 
+#include "runtime_types.h"
 #include "whisper_wrapper.h"
 
 #include <atomic>
@@ -8,18 +9,7 @@
 #include <thread>
 #include <string>
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-
 #define MAX_AUDIO_DEVICE_NAME_LENGTH 512
-
-struct AudioInputDeviceInfo
-{
-	int Index;
-	std::string Id;
-	std::string Name;
-	bool IsDefault;
-};
 
 #define AUDIO_CAPTURE_SAMPLE_RATE       16000
 #define AUDIO_CAPTURE_CHANNELS          1
@@ -31,129 +21,6 @@ struct AudioInputDeviceInfo
 #define WINDOW_DEFAULT_HEIGHT 575
 
 #define APP_ICON_PATH "media/voicetyper-icon.png"
-
-// ---------------------------------------------------------------------------
-// Hotkey Config
-// ---------------------------------------------------------------------------
-#define HOTKEY_MOD_CTRL  0x01
-#define HOTKEY_MOD_ALT   0x02
-#define HOTKEY_MOD_SHIFT 0x04
-#define HOTKEY_MOD_WIN   0x08
-
-struct HotkeyConfig
-{
-	UINT Modifiers;
-	UINT VirtualKey;
-
-	std::string
-	to_label() const
-	{
-		std::string Label;
-
-		if (Modifiers & HOTKEY_MOD_CTRL)  Label += "Ctrl+";
-		if (Modifiers & HOTKEY_MOD_ALT)   Label += "Alt+";
-		if (Modifiers & HOTKEY_MOD_SHIFT) Label += "Shift+";
-		if (Modifiers & HOTKEY_MOD_WIN)   Label += "Win+";
-
-		if (VirtualKey == 0)
-		{
-			if (!Label.empty() && Label.back() == '+')
-				Label.pop_back();
-			return Label;
-		}
-
-		if (VirtualKey >= VK_F1 && VirtualKey <= VK_F24)
-		{
-			Label += "F" + std::to_string(VirtualKey - VK_F1 + 1);
-		}
-		else if (VirtualKey >= 'A' && VirtualKey <= 'Z')
-		{
-			Label += (char)VirtualKey;
-		}
-		else if (VirtualKey >= '0' && VirtualKey <= '9')
-		{
-			Label += (char)VirtualKey;
-		}
-		else
-		{
-			switch (VirtualKey)
-			{
-			case VK_SPACE:   Label += "Space";     break;
-			case VK_RETURN:  Label += "Enter";     break;
-			case VK_ESCAPE:  Label += "Escape";    break;
-			case VK_TAB:     Label += "Tab";       break;
-			case VK_BACK:    Label += "Backspace"; break;
-			case VK_DELETE:  Label += "Delete";    break;
-			case VK_INSERT:  Label += "Insert";    break;
-			case VK_HOME:    Label += "Home";      break;
-			case VK_END:     Label += "End";       break;
-			case VK_PRIOR:   Label += "PageUp";    break;
-			case VK_NEXT:    Label += "PageDown";  break;
-			case VK_LEFT:    Label += "Left";      break;
-			case VK_RIGHT:   Label += "Right";     break;
-			case VK_UP:      Label += "Up";        break;
-			case VK_DOWN:    Label += "Down";      break;
-			default:         Label += "??";        break;
-			}
-		}
-
-		return Label;
-	}
-
-	bool
-	is_valid() const
-	{
-		return Modifiers != 0 || VirtualKey != 0;
-	}
-};
-
-inline HotkeyConfig default_record_hotkey()
-{
-	HotkeyConfig H = {};
-	H.Modifiers = HOTKEY_MOD_CTRL | HOTKEY_MOD_ALT;
-	H.VirtualKey = 0;
-	return H;
-}
-
-inline HotkeyConfig default_cancel_record_hotkey()
-{
-	HotkeyConfig H = {};
-	H.Modifiers = HOTKEY_MOD_ALT;
-	H.VirtualKey = VK_F3;
-	return H;
-}
-
-inline HotkeyConfig default_stream_hotkey()
-{
-	HotkeyConfig H = {};
-	H.Modifiers = HOTKEY_MOD_ALT;
-	H.VirtualKey = VK_F2;
-	return H;
-}
-
-inline HotkeyConfig default_load_model_hotkey()
-{
-	HotkeyConfig H = {};
-	H.Modifiers = HOTKEY_MOD_ALT;
-	H.VirtualKey = VK_F1;
-	return H;
-}
-
-enum RecordingHotkeyMode
-{
-	RECORDING_HOTKEY_HOLD = 0,
-	RECORDING_HOTKEY_TOGGLE = 1,
-};
-
-inline RecordingHotkeyMode default_recording_hotkey_mode()
-{
-	return RECORDING_HOTKEY_HOLD;
-}
-
-inline bool is_valid_recording_hotkey_mode(int Mode)
-{
-	return Mode == RECORDING_HOTKEY_HOLD || Mode == RECORDING_HOTKEY_TOGGLE;
-}
 
 // ---------------------------------------------------------------------------
 // Sound Config
@@ -168,19 +35,13 @@ inline bool is_valid_recording_hotkey_mode(int Mode)
 #define SOUND_STOP_DURATION_MS     200
 #define SOUND_CANCEL_DURATION_MS   300
 
-struct SoundConfig
-{
-	int FreqHz;
-	int Volume;
-};
-
 struct HotkeyCaptureState
 {
 	HotkeyConfig Captured;
 	bool         HasCapture;
 	bool         IsCapturing;
-	UINT         PeakModifiers;
-	UINT         PeakVirtualKey;
+	AppHotkeyModifiers PeakModifiers;
+	AppKeyCode         PeakVirtualKey;
 	int          ReleaseFrames;
 };
 
@@ -203,15 +64,6 @@ struct SettingsWindowState
 	char TempCancelSoundFreqText[16];
 	char TempCancelSoundVolumeText[16];
 };
-
-enum ModelTransitionFailure
-{
-	MODEL_TRANSITION_FAILURE_NONE = 0,
-	MODEL_TRANSITION_FAILURE_LOAD,
-	MODEL_TRANSITION_FAILURE_RELOAD,
-	MODEL_TRANSITION_FAILURE_TRANSFER,
-};
-
 
 // ---------------------------------------------------------------------------
 // Button styles
@@ -278,7 +130,7 @@ struct GlobalState
 	int WhisperThreadCount;
 
 	// Our own main window handle — used to exclude self when doing just-in-time target lookup.
-	HWND OwnWindow;
+	PlatformWindowHandle OwnWindow;
 	SettingsWindowState SettingsState;
 
 	// Toast notification

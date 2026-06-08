@@ -316,12 +316,12 @@ platform_play_sound(int FreqHz, int DurationMs, int Volume)
 }
 
 inline bool
-platform_is_key_down(int VirtualKey)
+platform_is_key_down(AppKeyCode Key)
 {
-	if (VirtualKey == VK_LWIN)
+	if (Key == APP_KEY_WIN)
 		return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
 		    || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
-	return (GetAsyncKeyState(VirtualKey) & 0x8000) != 0;
+	return (GetAsyncKeyState((int)Key) & 0x8000) != 0;
 }
 
 inline
