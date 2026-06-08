@@ -32,17 +32,17 @@ query_logical_processor_count()
 // ---------------------------------------------------------------------------
 inline
 bool
-check_modifier_state(UINT Modifiers)
+check_modifier_state(AppHotkeyModifiers Modifiers)
 {
 	bool CtrlRequired  = (Modifiers & HOTKEY_MOD_CTRL)  != 0;
 	bool AltRequired   = (Modifiers & HOTKEY_MOD_ALT)   != 0;
 	bool ShiftRequired = (Modifiers & HOTKEY_MOD_SHIFT) != 0;
 	bool WinRequired   = (Modifiers & HOTKEY_MOD_WIN)   != 0;
 
-	bool CtrlDown  = platform_is_key_down(VK_CONTROL);
-	bool AltDown   = platform_is_key_down(VK_MENU);
-	bool ShiftDown = platform_is_key_down(VK_SHIFT);
-	bool WinDown   = platform_is_key_down(VK_LWIN);
+	bool CtrlDown  = platform_is_key_down(APP_KEY_CONTROL);
+	bool AltDown   = platform_is_key_down(APP_KEY_ALT);
+	bool ShiftDown = platform_is_key_down(APP_KEY_SHIFT);
+	bool WinDown   = platform_is_key_down(APP_KEY_WIN);
 
 	if (CtrlRequired  && !CtrlDown)  return false;
 	if (AltRequired   && !AltDown)   return false;
@@ -61,7 +61,7 @@ bool
 is_hotkey_down(const HotkeyConfig &Config)
 {
 	if (!check_modifier_state(Config.Modifiers)) return false;
-	if (Config.VirtualKey == 0) return true;
+	if (Config.VirtualKey == APP_KEY_NONE) return true;
 	return platform_is_key_down(Config.VirtualKey);
 }
 
@@ -163,26 +163,26 @@ query_hotkey_settings(GlobalState *AppState)
 
 	if (load_hotkey_setting("record_hotkey", &Modifiers, &Key))
 	{
-		AppState->RecordHotkey.Modifiers = (UINT)Modifiers;
-		AppState->RecordHotkey.VirtualKey = (UINT)Key;
+		AppState->RecordHotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
+		AppState->RecordHotkey.VirtualKey = (AppKeyCode)Key;
 	}
 
 	if (load_hotkey_setting("cancel_record_hotkey", &Modifiers, &Key))
 	{
-		AppState->CancelRecordHotkey.Modifiers = (UINT)Modifiers;
-		AppState->CancelRecordHotkey.VirtualKey = (UINT)Key;
+		AppState->CancelRecordHotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
+		AppState->CancelRecordHotkey.VirtualKey = (AppKeyCode)Key;
 	}
 
 	if (load_hotkey_setting("stream_hotkey", &Modifiers, &Key))
 	{
-		AppState->StreamHotkey.Modifiers = (UINT)Modifiers;
-		AppState->StreamHotkey.VirtualKey = (UINT)Key;
+		AppState->StreamHotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
+		AppState->StreamHotkey.VirtualKey = (AppKeyCode)Key;
 	}
 
 	if (load_hotkey_setting("load_model_hotkey", &Modifiers, &Key))
 	{
-		AppState->LoadModelHotkey.Modifiers = (UINT)Modifiers;
-		AppState->LoadModelHotkey.VirtualKey = (UINT)Key;
+		AppState->LoadModelHotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
+		AppState->LoadModelHotkey.VirtualKey = (AppKeyCode)Key;
 	}
 
 	int RecordHotkeyMode = 0;
