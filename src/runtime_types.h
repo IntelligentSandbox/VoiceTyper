@@ -51,6 +51,11 @@ struct PlatformFileInfo
 	int64_t SizeBytes;
 };
 
+struct PlatformRuntimeState
+{
+	PlatformWindowHandle OwnWindow;
+};
+
 struct HotkeyConfig
 {
 	AppHotkeyModifiers Modifiers;
