@@ -358,6 +358,37 @@ platform_ensure_directory(const std::string &Path)
 	return Error == ERROR_ALREADY_EXISTS;
 }
 
+inline
+std::vector<PlatformFileInfo>
+platform_list_files(const std::string &Dir)
+{
+	std::vector<PlatformFileInfo> Files;
+	WIN32_FIND_DATAA Fd;
+	std::string Pattern = platform_join_path(Dir, "*");
+	HANDLE Hf = FindFirstFileA(Pattern.c_str(), &Fd);
+
+	if (Hf == INVALID_HANDLE_VALUE)
+		return Files;
+
+	do
+	{
+		if (Fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			continue;
+
+		LARGE_INTEGER FileSize;
+		FileSize.LowPart = Fd.nFileSizeLow;
+		FileSize.HighPart = Fd.nFileSizeHigh;
+
+		PlatformFileInfo Info = {};
+		Info.Name = Fd.cFileName;
+		Info.SizeBytes = FileSize.QuadPart;
+		Files.push_back(Info);
+	} while (FindNextFileA(Hf, &Fd));
+
+	FindClose(Hf);
+	return Files;
+}
+
 // ---------------------------------------------------------------------------
 // Win32 audio capture internals
 // ---------------------------------------------------------------------------

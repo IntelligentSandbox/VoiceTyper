@@ -66,17 +66,6 @@ is_hotkey_down(const HotkeyConfig &Config)
 }
 
 // ---------------------------------------------------------------------------
-// File existence check (used by model query)
-// ---------------------------------------------------------------------------
-inline
-bool
-file_exists(const char *Path)
-{
-	DWORD Attrib = GetFileAttributesA(Path);
-	return (Attrib != INVALID_FILE_ATTRIBUTES && !(Attrib & FILE_ATTRIBUTE_DIRECTORY));
-}
-
-// ---------------------------------------------------------------------------
 // System queries
 // ---------------------------------------------------------------------------
 inline
@@ -213,57 +202,4 @@ query_hotkey_settings(GlobalState *AppState)
 	bool CharByChar = false;
 	if (load_bool_setting("use_char_by_char_injection", &CharByChar))
 		AppState->UseCharByCharInjection = CharByChar;
-}
-
-inline
-void
-query_available_stt_models(GlobalState *AppState)
-{
-	AppState->STTModelNames.clear();
-	AppState->STTModelPaths.clear();
-
-	std::string Dir = platform_join_path(platform_get_exe_dir(), "stt_models");
-	WIN32_FIND_DATAA Fd;
-	std::string Pattern = platform_join_path(Dir, "ggml-*.bin");
-	HANDLE Hf = FindFirstFileA(Pattern.c_str(), &Fd);
-
-	if (Hf != INVALID_HANDLE_VALUE)
-	{
-		do
-		{
-			if (Fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-
-			std::string FileName = Fd.cFileName;
-			std::string FilePath = platform_join_path(Dir, FileName);
-
-			std::string DisplayName = FileName;
-			if (DisplayName.rfind("ggml-", 0) == 0)
-				DisplayName = DisplayName.substr(5);
-			if (DisplayName.size() > 4 &&
-				DisplayName.substr(DisplayName.size() - 4) == ".bin")
-			{
-				DisplayName = DisplayName.substr(0, DisplayName.size() - 4);
-			}
-
-			LARGE_INTEGER FileSize;
-			FileSize.LowPart = Fd.nFileSizeLow;
-			FileSize.HighPart = Fd.nFileSizeHigh;
-			int64_t Bytes = FileSize.QuadPart;
-
-			char SizeBuf[32];
-			if (Bytes >= 1073741824)
-				snprintf(SizeBuf, sizeof(SizeBuf), "%.1f GB", Bytes / 1073741824.0);
-			else
-				snprintf(SizeBuf, sizeof(SizeBuf), "%d MB", (int)(Bytes / 1048576));
-
-			std::string Label = DisplayName + " (" + SizeBuf + ")";
-
-			AppState->STTModelNames.push_back(Label);
-			AppState->STTModelPaths.push_back(FilePath);
-		} while (FindNextFileA(Hf, &Fd));
-
-		FindClose(Hf);
-	}
-
-	AppState->CurrentSTTModelIndex = 0;
 }
