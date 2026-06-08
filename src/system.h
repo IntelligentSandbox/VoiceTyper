@@ -1,7 +1,5 @@
 #include "state.h"
 
-#include "control.h"
-
 #include <chrono>
 #include <thread>
 #include <atomic>
