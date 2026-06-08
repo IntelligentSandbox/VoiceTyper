@@ -13,9 +13,8 @@
 #include "imgui_impl_dx11.h"
 
 #include "state.h"
-#include "system.h"
-#include "input.h"
-#include "model_assets.h"
+#include "platform_win32.h"
+#include "app_core.h"
 #include "imgui_ui.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -226,31 +225,10 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	UpdateWindow(Hwnd);
 
 	GlobalState AppStateStorage = {};
-	AppStateStorage.IsRecording            = false;
-	AppStateStorage.IsStreaming            = false;
-	AppStateStorage.CaptureRunning        = false;
-	AppStateStorage.PipelineActive        = false;
-	AppStateStorage.IsModelTransitioning.store(false);
-	AppStateStorage.ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
-	AppStateStorage.Platform.OwnWindow     = Hwnd;
-	AppStateStorage.Ui.IsSettingsDialogOpen = false;
-	AppStateStorage.PlayRecordSound        = false;
-	AppStateStorage.StartSound             = { SOUND_DEFAULT_START_FREQ, SOUND_DEFAULT_VOLUME };
-	AppStateStorage.StopSound              = { SOUND_DEFAULT_STOP_FREQ, SOUND_DEFAULT_VOLUME };
-	AppStateStorage.CancelSound            = { SOUND_DEFAULT_CANCEL_FREQ, SOUND_DEFAULT_VOLUME };
-	AppStateStorage.UseCharByCharInjection = false;
-	AppStateStorage.RecordHotkeyMode       = default_recording_hotkey_mode();
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;
 
-	init_whisper_state(&AppState->WhisperState);
-
-	query_vad_model_path(AppState);
-	query_audio_input_devices(AppState);
-	query_inference_devices(AppState);
-	query_available_stt_models(AppState);
-	query_whisper_thread_count(AppState);
-	query_hotkey_settings(AppState);
+	app_initialize_runtime(AppState, Hwnd);
 
 	platform_set_taskbar_icon((void*)Hwnd, APP_ICON_PATH);
 
@@ -269,10 +247,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);
 	g_ImGuiReady = true;
 
-	bool RecordKeyWasDown       = false;
-	bool CancelRecordKeyWasDown = false;
-	bool StreamKeyWasDown       = false;
-	bool LoadModelKeyWasDown    = false;
+	AppFrameState FrameState = {};
 
 	bool Running = true;
 	while (Running)
@@ -294,56 +269,18 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		}
 		g_SwapChainOccluded = false;
 
-		finish_model_transition(AppState);
-
-		if (!AppState->Ui.IsSettingsDialogOpen && !AppState->IsModelTransitioning.load())
-		{
-			bool RecordKeyIsDown       = is_hotkey_down(AppState->RecordHotkey);
-			bool CancelRecordKeyIsDown = is_hotkey_down(AppState->CancelRecordHotkey);
-			bool StreamKeyIsDown       = is_hotkey_down(AppState->StreamHotkey);
-			bool LoadModelKeyIsDown    = is_hotkey_down(AppState->LoadModelHotkey);
-
-			if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE)
-			{
-				if (RecordKeyIsDown && !RecordKeyWasDown)
-					toggle_recording(AppState);
-			}
-			else
-			{
-				if (RecordKeyIsDown && !RecordKeyWasDown)
-					start_recording(AppState);
-				if (!RecordKeyIsDown && RecordKeyWasDown && AppState->IsRecording)
-					stop_recording(AppState);
-			}
-
-			if (CancelRecordKeyIsDown && !CancelRecordKeyWasDown)
-				cancel_recording(AppState);
-
-			if (StreamKeyIsDown && !StreamKeyWasDown)
-				toggle_streaming(AppState);
-
-			if (LoadModelKeyIsDown && !LoadModelKeyWasDown)
-				toggle_stt_model_load(AppState);
-
-			RecordKeyWasDown       = RecordKeyIsDown;
-			CancelRecordKeyWasDown = CancelRecordKeyIsDown;
-			StreamKeyWasDown       = StreamKeyIsDown;
-			LoadModelKeyWasDown    = LoadModelKeyIsDown;
-		}
+		AppFrameResult FrameResult = app_update_runtime_frame(
+			AppState,
+			&FrameState,
+			!AppState->Ui.IsSettingsDialogOpen);
+		show_model_transition_failure(AppState, FrameResult.ModelFailure);
 
 		render_frame();
 	}
 
 	g_ImGuiReady = false;
 
-	AppState->CaptureRunning.store(false);
-	if (AppState->CaptureThread.joinable())
-		AppState->CaptureThread.join();
-	if (AppState->ModelTransitionThread.joinable())
-		AppState->ModelTransitionThread.join();
-
-	if (is_whisper_model_loaded(&AppState->WhisperState))
-		unload_whisper_model(&AppState->WhisperState);
+	app_shutdown_runtime(AppState);
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
