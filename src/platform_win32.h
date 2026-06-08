@@ -344,6 +344,20 @@ platform_get_exe_dir()
 	return ExePath;
 }
 
+inline
+bool
+platform_ensure_directory(const std::string &Path)
+{
+	if (Path.empty())
+		return false;
+
+	if (CreateDirectoryA(Path.c_str(), nullptr))
+		return true;
+
+	DWORD Error = GetLastError();
+	return Error == ERROR_ALREADY_EXISTS;
+}
+
 // ---------------------------------------------------------------------------
 // Win32 audio capture internals
 // ---------------------------------------------------------------------------

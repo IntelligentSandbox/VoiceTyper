@@ -16,6 +16,7 @@ void platform_play_sound(int FreqHz, int DurationMs, int Volume);
 bool platform_is_key_down(AppKeyCode Key);
 std::string platform_get_exe_path();
 std::string platform_get_exe_dir();
+bool platform_ensure_directory(const std::string &Path);
 
 inline
 std::string
