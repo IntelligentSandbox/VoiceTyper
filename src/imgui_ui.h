@@ -394,6 +394,7 @@ render_settings_ui(GlobalState *AppState)
 		{
 			S->Capture.HasCapture = false;
 			S->Capture.Captured = {};
+			S->TempHotkeys[S->SelectedAction] = {};
 			S->Capture.IsCapturing = false;
 			S->Capture.PeakModifiers = 0;
 			S->Capture.PeakVirtualKey = 0;
@@ -415,6 +416,7 @@ render_settings_ui(GlobalState *AppState)
 				S->Capture.Captured.Modifiers = S->Capture.PeakModifiers;
 				S->Capture.Captured.VirtualKey = S->Capture.PeakVirtualKey;
 				S->Capture.HasCapture = true;
+				S->TempHotkeys[S->SelectedAction] = S->Capture.Captured;
 			}
 			else if (S->Capture.PeakModifiers != 0 || S->Capture.PeakVirtualKey != 0)
 			{
@@ -424,6 +426,7 @@ render_settings_ui(GlobalState *AppState)
 					S->Capture.Captured.Modifiers = S->Capture.PeakModifiers;
 					S->Capture.Captured.VirtualKey = S->Capture.PeakVirtualKey;
 					S->Capture.HasCapture = true;
+					S->TempHotkeys[S->SelectedAction] = S->Capture.Captured;
 					S->Capture.IsCapturing = false;
 					S->Capture.PeakModifiers = 0;
 					S->Capture.PeakVirtualKey = 0;
@@ -482,21 +485,13 @@ render_settings_ui(GlobalState *AppState)
 
 	ImGui::TextWrapped(
 		"Select an action above, then click the box and press your desired combination. "
-		"Modifier-only combos (e.g. Ctrl+Alt) are supported. Escape clears the box.");
+		"Modifier-only combos (e.g. Ctrl+Alt) are supported. Escape clears the selected shortcut.");
 
 	ImGui::Separator();
 
-	float BottomBtnWidth = (AvailWidth - Spacing * 2) / 3;
+	float BottomBtnWidth = (AvailWidth - Spacing) / 2;
 	ImVec2 BottomSize = ImVec2(BottomBtnWidth, 40);
 
-	if (colored_button("Set Hotkey", BottomSize, BUTTON_COLOR_GREY))
-	{
-		if (S->Capture.HasCapture)
-		{
-			S->TempHotkeys[S->SelectedAction] = S->Capture.Captured;
-		}
-	}
-	ImGui::SameLine();
 	if (colored_button("Save##Settings", BottomSize, BUTTON_COLOR_GREEN))
 	{
 		SoundConfig StartSound = AppState->StartSound;
