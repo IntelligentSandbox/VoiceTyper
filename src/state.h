@@ -152,29 +152,3 @@ struct GlobalState : CoreRuntimeState
 	// SystemInfo SystemInfo;
 	// CPUInfo CpuInfo;
 };
-
-// ---------------------------------------------------------------------------
-// Button idle-label helpers
-// ---------------------------------------------------------------------------
-inline std::string record_button_idle_label(GlobalState *AppState)
-{
-	if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_HOLD)
-		return "Record (hold " + AppState->RecordHotkey.to_label() + ")";
-
-	return "Record (" + AppState->RecordHotkey.to_label() + ")";
-}
-
-inline std::string cancel_record_button_idle_label(GlobalState *AppState)
-{
-	return "Cancel (" + AppState->CancelRecordHotkey.to_label() + ")";
-}
-
-inline std::string stream_button_idle_label(GlobalState *AppState)
-{
-	return "Start Streaming (" + AppState->StreamHotkey.to_label() + ")";
-}
-
-inline std::string load_model_button_idle_label(GlobalState *AppState)
-{
-	return "Load Selected STT Model (" + AppState->LoadModelHotkey.to_label() + ")";
-}

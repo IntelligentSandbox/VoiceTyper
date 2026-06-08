@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "state.h"
+#include "input.h"
 #include "settings.h"
 #include "control.h"
 
@@ -85,6 +86,37 @@ string_combo(const char *Label, int *CurrentIndex, const std::vector<std::string
 }
 
 static
+std::string
+record_button_idle_label(GlobalState *AppState)
+{
+	if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_HOLD)
+		return "Record (hold " + hotkey_to_label(AppState->RecordHotkey) + ")";
+
+	return "Record (" + hotkey_to_label(AppState->RecordHotkey) + ")";
+}
+
+static
+std::string
+cancel_record_button_idle_label(GlobalState *AppState)
+{
+	return "Cancel (" + hotkey_to_label(AppState->CancelRecordHotkey) + ")";
+}
+
+static
+std::string
+stream_button_idle_label(GlobalState *AppState)
+{
+	return "Start Streaming (" + hotkey_to_label(AppState->StreamHotkey) + ")";
+}
+
+static
+std::string
+load_model_button_idle_label(GlobalState *AppState)
+{
+	return "Load Selected STT Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
+}
+
+static
 void
 format_int_text(char *Buffer, size_t BufferSize, int Value)
 {
@@ -147,49 +179,6 @@ render_numeric_text_input(const char *Id, char *Buffer, size_t BufferSize,
 	if (Value < Min) Value = Min;
 	if (Value > Max) Value = Max;
 	format_int_text(Buffer, BufferSize, Value);
-}
-
-// ---------------------------------------------------------------------------
-// Hotkey capture helpers
-// ---------------------------------------------------------------------------
-static
-AppHotkeyModifiers
-poll_modifier_state()
-{
-	AppHotkeyModifiers Mods = 0;
-	if (platform_is_key_down(APP_KEY_CONTROL)) Mods |= HOTKEY_MOD_CTRL;
-	if (platform_is_key_down(APP_KEY_ALT)) Mods |= HOTKEY_MOD_ALT;
-	if (platform_is_key_down(APP_KEY_SHIFT)) Mods |= HOTKEY_MOD_SHIFT;
-	if (platform_is_key_down(APP_KEY_WIN)) Mods |= HOTKEY_MOD_WIN;
-	return Mods;
-}
-
-static
-AppKeyCode
-poll_nonmodifier_vk()
-{
-	for (AppKeyCode Vk = 'A'; Vk <= 'Z'; Vk++)
-	{
-		if (platform_is_key_down(Vk)) return Vk;
-	}
-	for (AppKeyCode Vk = '0'; Vk <= '9'; Vk++)
-	{
-		if (platform_is_key_down(Vk)) return Vk;
-	}
-	for (AppKeyCode Vk = APP_KEY_F1; Vk <= APP_KEY_F24; Vk++)
-	{
-		if (platform_is_key_down(Vk)) return Vk;
-	}
-	AppKeyCode Specials[] = {
-		APP_KEY_SPACE, APP_KEY_ENTER, APP_KEY_TAB, APP_KEY_BACKSPACE, APP_KEY_DELETE, APP_KEY_INSERT,
-		APP_KEY_HOME, APP_KEY_END, APP_KEY_PAGEUP, APP_KEY_PAGEDOWN,
-		APP_KEY_LEFT, APP_KEY_RIGHT, APP_KEY_UP, APP_KEY_DOWN
-	};
-	for (int i = 0; i < (int)(sizeof(Specials) / sizeof(Specials[0])); i++)
-	{
-		if (platform_is_key_down(Specials[i])) return Specials[i];
-	}
-	return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,14 +372,14 @@ render_settings_ui(GlobalState *AppState)
 			settings_select_action(S, i);
 	}
 
-	ImGui::Text("Current: %s", S->TempHotkeys[S->SelectedAction].to_label().c_str());
+	ImGui::Text("Current: %s", hotkey_to_label(S->TempHotkeys[S->SelectedAction]).c_str());
 
 	if (S->Capture.IsCapturing)
 	{
 		ImGui::SetNextFrameWantCaptureKeyboard(true);
 		ImGui::ClearActiveID();
 
-		if (platform_is_key_down(APP_KEY_ESCAPE))
+		if (app_key_is_down(APP_KEY_ESCAPE))
 		{
 			S->Capture.HasCapture = false;
 			S->Capture.Captured = {};
@@ -405,7 +394,7 @@ render_settings_ui(GlobalState *AppState)
 		else
 		{
 			AppHotkeyModifiers Mods = poll_modifier_state();
-			AppKeyCode Vk = poll_nonmodifier_vk();
+			AppKeyCode Vk = poll_nonmodifier_key();
 
 			if (Mods != 0 || Vk != APP_KEY_NONE)
 			{
@@ -447,7 +436,7 @@ render_settings_ui(GlobalState *AppState)
 		{
 			BgColor = ImVec4(0.08f, 0.40f, 0.75f, 1.0f);
 			if (S->Capture.HasCapture)
-				CaptureText = S->Capture.Captured.to_label() + "...";
+				CaptureText = hotkey_to_label(S->Capture.Captured) + "...";
 			else
 				CaptureText = "Press a key combination...";
 		}
@@ -455,7 +444,7 @@ render_settings_ui(GlobalState *AppState)
 		{
 			BgColor = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
 			if (S->Capture.HasCapture)
-				CaptureText = S->Capture.Captured.to_label();
+				CaptureText = hotkey_to_label(S->Capture.Captured);
 			else
 				CaptureText = "Click here, then press your hotkey...";
 		}
@@ -649,7 +638,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		if (AppState->IsRecording)
 		{
 			Color = BUTTON_COLOR_RED;
-			Label = "Stop (" + AppState->RecordHotkey.to_label() + ")";
+			Label = "Stop (" + hotkey_to_label(AppState->RecordHotkey) + ")";
 		}
 
 		if (AppState->PipelineActive.load() && !AppState->IsRecording)
@@ -688,7 +677,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		if (AppState->IsStreaming)
 		{
 			Color = BUTTON_COLOR_RED;
-			Label = "Stop Streaming (" + AppState->StreamHotkey.to_label() + ")";
+			Label = "Stop Streaming (" + hotkey_to_label(AppState->StreamHotkey) + ")";
 		}
 		else if (IsModelTransitioning)
 		{
@@ -764,7 +753,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		if (ModelLoaded)
 		{
 			Color = BUTTON_COLOR_BLUE;
-			Label = "Unload STT Model (" + AppState->LoadModelHotkey.to_label() + ")";
+			Label = "Unload STT Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
 		}
 		if (IsModelTransitioning)
 		{

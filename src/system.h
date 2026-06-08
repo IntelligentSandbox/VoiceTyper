@@ -28,44 +28,6 @@ query_logical_processor_count()
 #endif
 
 // ---------------------------------------------------------------------------
-// Hotkey detection
-// ---------------------------------------------------------------------------
-inline
-bool
-check_modifier_state(AppHotkeyModifiers Modifiers)
-{
-	bool CtrlRequired  = (Modifiers & HOTKEY_MOD_CTRL)  != 0;
-	bool AltRequired   = (Modifiers & HOTKEY_MOD_ALT)   != 0;
-	bool ShiftRequired = (Modifiers & HOTKEY_MOD_SHIFT) != 0;
-	bool WinRequired   = (Modifiers & HOTKEY_MOD_WIN)   != 0;
-
-	bool CtrlDown  = platform_is_key_down(APP_KEY_CONTROL);
-	bool AltDown   = platform_is_key_down(APP_KEY_ALT);
-	bool ShiftDown = platform_is_key_down(APP_KEY_SHIFT);
-	bool WinDown   = platform_is_key_down(APP_KEY_WIN);
-
-	if (CtrlRequired  && !CtrlDown)  return false;
-	if (AltRequired   && !AltDown)   return false;
-	if (ShiftRequired && !ShiftDown) return false;
-	if (WinRequired   && !WinDown)   return false;
-
-	if (!CtrlRequired  && CtrlDown)  return false;
-	if (!AltRequired   && AltDown)   return false;
-	if (!ShiftRequired && ShiftDown) return false;
-
-	return true;
-}
-
-inline
-bool
-is_hotkey_down(const HotkeyConfig &Config)
-{
-	if (!check_modifier_state(Config.Modifiers)) return false;
-	if (Config.VirtualKey == APP_KEY_NONE) return true;
-	return platform_is_key_down(Config.VirtualKey);
-}
-
-// ---------------------------------------------------------------------------
 // System queries
 // ---------------------------------------------------------------------------
 inline
