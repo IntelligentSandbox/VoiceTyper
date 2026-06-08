@@ -194,34 +194,57 @@ update_stt_model_selection(GlobalState *AppState, int Index)
 }
 
 inline
+bool
+start_recording(GlobalState *AppState)
+{
+	if (AppState->IsModelTransitioning.load())
+		return false;
+
+	if (!is_whisper_model_loaded(&AppState->WhisperState))
+		return false;
+
+	if (AppState->IsStreaming)
+		return false;
+
+	if (AppState->IsRecording)
+		return true;
+
+	AppState->IsRecording = true;
+
+	bool Started = start_record_pipeline(AppState);
+	if (!Started)
+	{
+		AppState->IsRecording = false;
+		return false;
+	}
+
+	if (AppState->PlayRecordSound) play_start_recording_sound(&AppState->StartSound);
+	return true;
+}
+
+inline
+void
+stop_recording(GlobalState *AppState)
+{
+	if (!AppState->IsRecording)
+		return;
+
+	AppState->IsRecording = false;
+	if (AppState->PlayRecordSound) play_stop_recording_sound(&AppState->StopSound);
+	signal_record_stop(AppState);
+}
+
+inline
 void
 toggle_recording(GlobalState *AppState)
 {
-	if (AppState->IsModelTransitioning.load())
-		return;
-
-	if (!is_whisper_model_loaded(&AppState->WhisperState))
-		return;
-
-	if (AppState->IsStreaming)
-		return;
-
-	AppState->IsRecording = !AppState->IsRecording;
-
 	if (AppState->IsRecording)
 	{
-		bool Started = start_record_pipeline(AppState);
-		if (!Started)
-		{
-			AppState->IsRecording = false;
-			return;
-		}
-		if (AppState->PlayRecordSound) play_start_recording_sound(&AppState->StartSound);
+		stop_recording(AppState);
 	}
 	else
 	{
-		if (AppState->PlayRecordSound) play_stop_recording_sound(&AppState->StopSound);
-		signal_record_stop(AppState);
+		start_recording(AppState);
 	}
 }
 

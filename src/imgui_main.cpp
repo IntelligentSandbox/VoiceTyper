@@ -237,6 +237,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	AppStateStorage.StopSound              = { SOUND_DEFAULT_STOP_FREQ, SOUND_DEFAULT_VOLUME };
 	AppStateStorage.CancelSound            = { SOUND_DEFAULT_CANCEL_FREQ, SOUND_DEFAULT_VOLUME };
 	AppStateStorage.UseCharByCharInjection = false;
+	AppStateStorage.RecordHotkeyMode       = default_recording_hotkey_mode();
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;
 
@@ -301,8 +302,18 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			bool StreamKeyIsDown       = is_hotkey_down(AppState->StreamHotkey);
 			bool LoadModelKeyIsDown    = is_hotkey_down(AppState->LoadModelHotkey);
 
-			if (RecordKeyIsDown && !RecordKeyWasDown)
-				toggle_recording(AppState);
+			if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE)
+			{
+				if (RecordKeyIsDown && !RecordKeyWasDown)
+					toggle_recording(AppState);
+			}
+			else
+			{
+				if (RecordKeyIsDown && !RecordKeyWasDown)
+					start_recording(AppState);
+				if (!RecordKeyIsDown && RecordKeyWasDown && AppState->IsRecording)
+					stop_recording(AppState);
+			}
 
 			if (CancelRecordKeyIsDown && !CancelRecordKeyWasDown)
 				cancel_recording(AppState);

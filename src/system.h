@@ -157,6 +157,7 @@ query_hotkey_settings(GlobalState *AppState)
 	AppState->CancelRecordHotkey = default_cancel_record_hotkey();
 	AppState->StreamHotkey       = default_stream_hotkey();
 	AppState->LoadModelHotkey    = default_load_model_hotkey();
+	AppState->RecordHotkeyMode   = default_recording_hotkey_mode();
 
 	int Modifiers = 0, Key = 0;
 
@@ -182,6 +183,13 @@ query_hotkey_settings(GlobalState *AppState)
 	{
 		AppState->LoadModelHotkey.Modifiers = (UINT)Modifiers;
 		AppState->LoadModelHotkey.VirtualKey = (UINT)Key;
+	}
+
+	int RecordHotkeyMode = 0;
+	if (load_int_setting("record_hotkey_mode", &RecordHotkeyMode) &&
+		is_valid_recording_hotkey_mode(RecordHotkeyMode))
+	{
+		AppState->RecordHotkeyMode = (RecordingHotkeyMode)RecordHotkeyMode;
 	}
 
 	bool SoundEnabled = false;
