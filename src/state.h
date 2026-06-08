@@ -139,11 +139,6 @@ struct UiRuntimeState
 	int ToastSerial; // if user overflows this they need a life (but will never happen bc no one will use this slopapp but me.)
 };
 
-struct PlatformRuntimeState
-{
-	PlatformWindowHandle OwnWindow;
-};
-
 struct GlobalState : CoreRuntimeState
 {
 	UiRuntimeState Ui;

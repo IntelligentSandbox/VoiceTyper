@@ -231,8 +231,9 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text)
 }
 
 inline void
-platform_inject_text(void *Window, const char *Utf8, bool CharByChar)
+platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *Utf8, bool CharByChar)
 {
+	(void)Platform;
 	HWND HWnd = (HWND)Window;
 	if (!HWnd || !Utf8 || Utf8[0] == '\0') return;
 
@@ -243,8 +244,9 @@ platform_inject_text(void *Window, const char *Utf8, bool CharByChar)
 }
 
 inline void *
-platform_get_foreground_window()
+platform_get_foreground_window(PlatformRuntimeState *Platform)
 {
+	(void)Platform;
 	return (void*)GetForegroundWindow();
 }
 
@@ -263,8 +265,9 @@ platform_set_taskbar_icon(void *Window, const char *PngPath)
 }
 
 inline void
-platform_play_sound(int FreqHz, int DurationMs, int Volume)
+platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs, int Volume)
 {
+	(void)Platform;
 	if (Volume <= 0) return;
 	if (Volume > 100) Volume = 100;
 
@@ -422,8 +425,9 @@ wavein_proc(
 }
 
 inline bool
-platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex)
 {
+	(void)Platform;
 	const int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
 
 	AudioPipelineContext PipeCtx = {};

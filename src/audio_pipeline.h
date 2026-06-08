@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------------
 // Platform audio capture interface
 // ---------------------------------------------------------------------------
-// bool platform_audio_capture(GlobalState *AppState, int DeviceIndex)
+// bool platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex)
 //
 // Platform-specific function that opens the audio capture device at the given
 // index, captures PCM audio, converts to float samples, and appends them to
@@ -116,11 +116,15 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 
 	if (!Transcription.empty())
 	{
-		void *TargetWindow = platform_get_foreground_window();
+		void *TargetWindow = platform_get_foreground_window(&AppState->Platform);
 		if (TargetWindow == AppState->Platform.OwnWindow) TargetWindow = nullptr;
 		if (!TargetWindow)
 			printf("[transcription] %s\n", Transcription.c_str());
-		platform_inject_text(TargetWindow, Transcription.c_str(), AppState->UseCharByCharInjection);
+		platform_inject_text(
+			&AppState->Platform,
+			TargetWindow,
+			Transcription.c_str(),
+			AppState->UseCharByCharInjection);
 	}
 }
 
@@ -184,7 +188,7 @@ static void
 streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
 	std::thread InferThread(stream_infer_thread, AppState);
-	platform_audio_capture(AppState, DeviceIndex);
+	platform_audio_capture(&AppState->Platform, AppState, DeviceIndex);
 	InferThread.join();
 }
 
@@ -195,7 +199,7 @@ streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 static void
 record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
-	platform_audio_capture(AppState, DeviceIndex);
+	platform_audio_capture(&AppState->Platform, AppState, DeviceIndex);
 
 	bool Cancelled = AppState->CancelRequested.load();
 	AppState->CancelRequested.store(false);
