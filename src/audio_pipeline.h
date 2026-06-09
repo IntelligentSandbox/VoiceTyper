@@ -136,6 +136,7 @@ stream_infer_thread(GlobalState *AppState)
 	Params.single_segment      = true;
 
 	int SilenceMs = 0;
+	bool HasSpeech = false;
 
 	while (AppState->CaptureRunning.load())
 	{
@@ -154,14 +155,25 @@ stream_infer_thread(GlobalState *AppState)
 				AppState->AudioAccumBuffer.data() + BufferSize - RecentCount, RecentCount);
 
 			if (CurrentRms >= STREAM_SPEECH_RMS_THRESHOLD)
+			{
+				HasSpeech = true;
 				SilenceMs = 0;
-			else
+			}
+			else if (HasSpeech)
+			{
 				SilenceMs += STREAM_POLL_INTERVAL_MS;
+			}
+			else
+			{
+				AppState->AudioAccumBuffer.clear();
+				continue;
+			}
 
 			int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
 			bool ShouldCut = false;
 
-			if (SilenceMs >= STREAM_SILENCE_DURATION_MS &&
+			if (HasSpeech &&
+				SilenceMs >= STREAM_SILENCE_DURATION_MS &&
 				BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS)
 			{
 				ShouldCut = true;
@@ -172,6 +184,7 @@ stream_infer_thread(GlobalState *AppState)
 			Chunk = std::move(AppState->AudioAccumBuffer);
 			AppState->AudioAccumBuffer.clear();
 			SilenceMs = 0;
+			HasSpeech = false;
 		}
 
 		run_whisper_on_chunk(AppState, Params, Chunk);
