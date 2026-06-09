@@ -328,7 +328,7 @@ render_settings_ui(GlobalState *AppState)
 		ImGui::Unindent(20.0f);
 	}
 
-	ImGui::Checkbox("Use character-by-character text injection (instead of paste)",
+	ImGui::Checkbox("Use character-by-character text injection (instead of paste Ctrl+Shift+V)",
 		&S->TempUseCharByCharInjection);
 
 	ImGui::Text("CPU Cores for Inference:");
