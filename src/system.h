@@ -32,6 +32,12 @@ query_audio_input_devices(GlobalState *AppState)
 	std::vector<AudioInputDeviceInfo> NativeDevices = platform_query_audio_devices();
 
 	AppState->AudioInputDevices = NativeDevices;
+	AppState->AudioInputDeviceNames.clear();
+	AppState->AudioInputDeviceNames.reserve(AppState->AudioInputDevices.size());
+	for (const AudioInputDeviceInfo &Device : AppState->AudioInputDevices)
+	{
+		AppState->AudioInputDeviceNames.push_back(Device.Name);
+	}
 
 	if (AppState->AudioInputDevices.size() > 0)
 	{
