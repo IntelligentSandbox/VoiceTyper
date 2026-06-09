@@ -9,6 +9,8 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <condition_variable>
+#include <deque>
 #include <mutex>
 #include <vector>
 #include <string>
@@ -16,7 +18,7 @@
 // Minimum RMS energy to bother sending a chunk to whisper.
 #define PIPELINE_SILENCE_RMS_THRESHOLD 0.002f
 
-// How often (ms) the stream inference thread polls the audio buffer for energy levels.
+// How often (ms) the stream segmenter thread polls the audio buffer for energy levels.
 #define STREAM_POLL_INTERVAL_MS 100
 
 // RMS energy threshold for classifying a poll interval as speech vs silence.
@@ -126,15 +128,60 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 }
 
 // ---------------------------------------------------------------------------
-// Streaming pipeline  (continuous capture + inference every N seconds)
+// Streaming pipeline  (continuous capture + silence-bounded inference)
 // ---------------------------------------------------------------------------
 
-static void
-stream_infer_thread(GlobalState *AppState)
+struct StreamingChunkQueue
 {
-	whisper_full_params Params = make_whisper_params(AppState);
-	Params.single_segment      = true;
+	std::mutex Mutex;
+	std::condition_variable Condition;
+	std::deque<std::vector<float>> Chunks;
+	bool Closed;
+};
 
+static void
+stream_push_completed_chunk(StreamingChunkQueue *Queue, std::vector<float> &Chunk)
+{
+	if (Chunk.empty()) return;
+
+	{
+		std::lock_guard<std::mutex> Lock(Queue->Mutex);
+		Queue->Chunks.push_back(std::move(Chunk));
+	}
+
+	Queue->Condition.notify_one();
+}
+
+static bool
+stream_pop_completed_chunk(StreamingChunkQueue *Queue, std::vector<float> *Chunk)
+{
+	std::unique_lock<std::mutex> Lock(Queue->Mutex);
+	Queue->Condition.wait(Lock, [Queue]() {
+		return Queue->Closed || !Queue->Chunks.empty();
+	});
+
+	if (Queue->Chunks.empty())
+		return false;
+
+	*Chunk = std::move(Queue->Chunks.front());
+	Queue->Chunks.pop_front();
+	return true;
+}
+
+static void
+stream_close_completed_chunks(StreamingChunkQueue *Queue)
+{
+	{
+		std::lock_guard<std::mutex> Lock(Queue->Mutex);
+		Queue->Closed = true;
+	}
+
+	Queue->Condition.notify_all();
+}
+
+static void
+stream_segment_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
+{
 	int SilenceMs = 0;
 	bool HasSpeech = false;
 
@@ -187,6 +234,22 @@ stream_infer_thread(GlobalState *AppState)
 			HasSpeech = false;
 		}
 
+		stream_push_completed_chunk(Queue, Chunk);
+	}
+}
+
+static void
+stream_infer_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
+{
+	whisper_full_params Params = make_whisper_params(AppState);
+	Params.single_segment      = true;
+
+	for (;;)
+	{
+		std::vector<float> Chunk;
+		if (!stream_pop_completed_chunk(Queue, &Chunk))
+			break;
+
 		run_whisper_on_chunk(AppState, Params, Chunk);
 	}
 }
@@ -194,8 +257,13 @@ stream_infer_thread(GlobalState *AppState)
 static void
 streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
-	std::thread InferThread(stream_infer_thread, AppState);
+	StreamingChunkQueue ChunkQueue = {};
+	std::thread SegmentThread(stream_segment_thread, AppState, &ChunkQueue);
+	std::thread InferThread(stream_infer_thread, AppState, &ChunkQueue);
 	platform_audio_capture(&AppState->Platform, AppState, DeviceIndex);
+	AppState->CaptureRunning.store(false);
+	SegmentThread.join();
+	stream_close_completed_chunks(&ChunkQueue);
 	InferThread.join();
 }
 
