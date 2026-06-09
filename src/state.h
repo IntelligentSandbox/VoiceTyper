@@ -90,6 +90,7 @@ struct CoreRuntimeState
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;
 	std::vector<AudioInputDeviceInfo> AudioInputDevices;
+	std::vector<std::string> AudioInputDeviceNames;
 
 	// Inference Device
 	int CurrentInferenceDeviceIndex;

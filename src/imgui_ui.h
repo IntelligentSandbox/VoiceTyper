@@ -700,17 +700,14 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	// Audio Input
 	{
 		ImGui::Text("Audio Input");
-		std::vector<std::string> DeviceNames;
-		for (const auto &Dev : AppState->AudioInputDevices)
-			DeviceNames.push_back(Dev.Name);
 
-		if (DeviceNames.empty())
+		if (AppState->AudioInputDeviceNames.empty())
 		{
-			DeviceNames.push_back("No Devices Found");
+			static const std::vector<std::string> NoDevices = { "No Devices Found" };
 			int Dummy = 0;
 			ImGui::BeginDisabled();
 			ImGui::SetNextItemWidth(FullWidth.x);
-			string_combo("##AudioInput", &Dummy, DeviceNames);
+			string_combo("##AudioInput", &Dummy, NoDevices);
 			ImGui::EndDisabled();
 		}
 		else
@@ -718,7 +715,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
 			if (Busy) ImGui::BeginDisabled();
 			ImGui::SetNextItemWidth(FullWidth.x);
-			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, DeviceNames))
+			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, AppState->AudioInputDeviceNames))
 				update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
 			if (Busy) ImGui::EndDisabled();
 		}
