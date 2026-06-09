@@ -26,6 +26,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->IsStreaming = false;
 	AppState->CaptureRunning = false;
 	AppState->PipelineActive = false;
+	AppState->StreamingFinalizeOnStop = false;
 	AppState->IsModelTransitioning.store(false);
 	AppState->ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
 	AppState->Platform.OwnWindow = OwnWindow;
@@ -96,6 +97,7 @@ inline
 void
 app_shutdown_runtime(GlobalState *AppState)
 {
+	AppState->StreamingFinalizeOnStop.store(false);
 	AppState->CaptureRunning.store(false);
 	if (AppState->CaptureThread.joinable())
 		AppState->CaptureThread.join();
