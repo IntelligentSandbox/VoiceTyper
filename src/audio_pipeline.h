@@ -25,9 +25,6 @@
 // Minimum chunk duration (ms) before a speech→silence transition can trigger a cutoff.
 #define STREAM_MIN_CHUNK_DURATION_MS 1000
 
-// Maximum chunk duration (ms); forces a cutoff even during continuous speech.
-#define STREAM_MAX_CHUNK_DURATION_MS 10000
-
 // How long silence (ms) must persist after speech before cutting the chunk.
 #define STREAM_SILENCE_DURATION_MS 500
 
@@ -169,9 +166,6 @@ stream_infer_thread(GlobalState *AppState)
 			{
 				ShouldCut = true;
 			}
-
-			if (BufferDurationMs >= STREAM_MAX_CHUNK_DURATION_MS)
-				ShouldCut = true;
 
 			if (!ShouldCut) continue;
 
