@@ -180,6 +180,29 @@ stream_close_completed_chunks(StreamingChunkQueue *Queue)
 }
 
 static void
+stream_finish_buffer_on_stop(GlobalState *AppState, StreamingChunkQueue *Queue, bool HasSpeech)
+{
+	std::vector<float> Chunk;
+
+	{
+		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
+		int BufferSize = (int)AppState->AudioAccumBuffer.size();
+		int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
+
+		if (AppState->StreamingFinalizeOnStop.load() &&
+			HasSpeech &&
+			BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS)
+		{
+			Chunk = std::move(AppState->AudioAccumBuffer);
+		}
+
+		AppState->AudioAccumBuffer.clear();
+	}
+
+	stream_push_completed_chunk(Queue, Chunk);
+}
+
+static void
 stream_segment_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 {
 	int SilenceMs = 0;
@@ -236,6 +259,8 @@ stream_segment_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 
 		stream_push_completed_chunk(Queue, Chunk);
 	}
+
+	stream_finish_buffer_on_stop(AppState, Queue, HasSpeech);
 }
 
 static void
@@ -265,6 +290,8 @@ streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 	SegmentThread.join();
 	stream_close_completed_chunks(&ChunkQueue);
 	InferThread.join();
+	AppState->PipelineActive.store(false);
+	AppState->StreamingFinalizeOnStop.store(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +399,7 @@ start_streaming_pipeline(GlobalState *AppState)
 	}
 
 	AppState->CaptureRunning.store(true);
+	AppState->StreamingFinalizeOnStop.store(false);
 	AppState->PipelineActive.store(true);
 	AppState->CaptureThread = std::thread(streaming_pipeline_thread, AppState, DeviceIndex);
 
@@ -380,14 +408,16 @@ start_streaming_pipeline(GlobalState *AppState)
 
 inline
 void
-stop_streaming_pipeline(GlobalState *AppState)
+stop_streaming_pipeline(GlobalState *AppState, bool FinalizeCurrentChunk = false)
 {
-	if (!AppState->CaptureRunning.load()) return;
+	if (!AppState->CaptureRunning.load() && !AppState->CaptureThread.joinable()) return;
 
+	AppState->StreamingFinalizeOnStop.store(FinalizeCurrentChunk);
 	AppState->CaptureRunning.store(false);
 
 	if (AppState->CaptureThread.joinable())
 		AppState->CaptureThread.join();
 
 	AppState->PipelineActive.store(false);
+	AppState->StreamingFinalizeOnStop.store(false);
 }

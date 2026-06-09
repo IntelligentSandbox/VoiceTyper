@@ -109,6 +109,7 @@ struct CoreRuntimeState
 	std::atomic<bool> CaptureRunning;
 	std::atomic<bool> CancelRequested;
 	std::atomic<bool> PipelineActive;
+	std::atomic<bool> StreamingFinalizeOnStop;
 	std::atomic<int> ModelTransitionFailureCode;
 	std::thread CaptureThread;
 	std::thread ModelTransitionThread;
