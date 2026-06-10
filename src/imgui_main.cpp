@@ -14,6 +14,7 @@
 
 #include "state.h"
 #include "platform_win32.h"
+#include "settings.h"
 #include "app_core.h"
 #include "imgui_ui.h"
 
@@ -31,6 +32,8 @@ static ID3D11RenderTargetView *g_RenderTargetView  = nullptr;
 static bool                    g_SwapChainOccluded = false;
 static GlobalState            *g_AppState          = nullptr;
 static bool                    g_ImGuiReady        = false;
+static const int               WINDOW_MIN_WIDTH    = 320;
+static const int               WINDOW_MIN_HEIGHT   = 240;
 
 // ---------------------------------------------------------------------------
 // Forward Declarations
@@ -39,6 +42,8 @@ static bool create_device_d3d(HWND Hwnd);
 static void cleanup_device_d3d();
 static void create_render_target();
 static void cleanup_render_target();
+static bool load_window_size(int *OutWidth, int *OutHeight);
+static void save_window_size(HWND Hwnd);
 LRESULT WINAPI wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam);
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -123,6 +128,34 @@ cleanup_render_target()
 	}
 }
 
+static
+bool
+load_window_size(int *OutWidth, int *OutHeight)
+{
+	int Width = 0;
+	int Height = 0;
+	if (!load_window_size_setting(&Width, &Height)) return false;
+	if (Width < WINDOW_MIN_WIDTH || Height < WINDOW_MIN_HEIGHT) return false;
+
+	*OutWidth = Width;
+	*OutHeight = Height;
+	return true;
+}
+
+static
+void
+save_window_size(HWND Hwnd)
+{
+	RECT WindowRect = {};
+	if (!GetWindowRect(Hwnd, &WindowRect)) return;
+
+	int Width = WindowRect.right - WindowRect.left;
+	int Height = WindowRect.bottom - WindowRect.top;
+	if (Width < WINDOW_MIN_WIDTH || Height < WINDOW_MIN_HEIGHT) return;
+
+	save_window_size_setting(Width, Height);
+}
+
 // ---------------------------------------------------------------------------
 // Render a single frame
 // ---------------------------------------------------------------------------
@@ -162,10 +195,18 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 	{
 	case WM_SIZE:
 		if (WParam == SIZE_MINIMIZED) return 0;
-		cleanup_render_target();
-		g_SwapChain->ResizeBuffers(0, (UINT)LOWORD(LParam), (UINT)HIWORD(LParam), DXGI_FORMAT_UNKNOWN, 0);
-		create_render_target();
-		render_frame();
+		if (WParam == SIZE_RESTORED)
+		{
+			save_window_size(Hwnd);
+		}
+		if (g_SwapChain)
+		{
+			cleanup_render_target();
+			g_SwapChain->ResizeBuffers(
+				0, (UINT)LOWORD(LParam), (UINT)HIWORD(LParam), DXGI_FORMAT_UNKNOWN, 0);
+			create_render_target();
+			render_frame();
+		}
 		return 0;
 
 	case WM_SYSCOMMAND:
@@ -201,10 +242,14 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	Wc.hIconSm = AppIcon;
 	RegisterClassExW(&Wc);
 
+	int WindowWidth = WINDOW_DEFAULT_WIDTH;
+	int WindowHeight = WINDOW_DEFAULT_HEIGHT;
+	load_window_size(&WindowWidth, &WindowHeight);
+
 	HWND Hwnd = CreateWindowW(
 		Wc.lpszClassName, L"VoiceTyper", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
-		WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT,
+		WindowWidth, WindowHeight,
 		nullptr, nullptr, Instance, nullptr);
 
 	if (!Hwnd) return 1;
