@@ -99,3 +99,39 @@ load_int_setting(const char *Name, int *OutValue)
 	if (End != It->second.size()) return false;
 	return true;
 }
+
+inline
+bool
+save_window_size_setting(int Width, int Height)
+{
+	auto Map = read_settings_map();
+	Map["window_width"] = std::to_string(Width);
+	Map["window_height"] = std::to_string(Height);
+	return write_settings_map(Map);
+}
+
+inline
+bool
+load_window_size_setting(int *OutWidth, int *OutHeight)
+{
+	auto Map = read_settings_map();
+	auto WidthIt = Map.find("window_width");
+	auto HeightIt = Map.find("window_height");
+	if (WidthIt == Map.end() || HeightIt == Map.end()) return false;
+
+	size_t WidthEnd = 0;
+	size_t HeightEnd = 0;
+	try
+	{
+		*OutWidth = std::stoi(WidthIt->second, &WidthEnd);
+		*OutHeight = std::stoi(HeightIt->second, &HeightEnd);
+	}
+	catch (...)
+	{
+		return false;
+	}
+
+	if (WidthEnd != WidthIt->second.size()) return false;
+	if (HeightEnd != HeightIt->second.size()) return false;
+	return true;
+}

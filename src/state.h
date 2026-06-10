@@ -134,7 +134,4 @@ struct GlobalState : CoreRuntimeState
 {
 	UiRuntimeState Ui;
 	PlatformRuntimeState Platform;
-
-	// SystemInfo SystemInfo;
-	// CPUInfo CpuInfo;
 };

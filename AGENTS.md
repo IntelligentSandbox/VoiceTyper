@@ -17,7 +17,7 @@ The application's primary responsibility is facilitating user control of:
     bash build.sh cuda     - release cuda build
 
 ## Workflow
-1. Read `docs/tasks.md` at the start of every session.
+1. Read `docs/tasks.md` at the start of every session. The user may give you an explicit request, which should take priority over the tasklist. However, if the tasklist contains items that may conflict with the one-off request, notify the user and ask what to do.
 2. Work through tasks in order, top to bottom. Do not skip tasks.
 3. For each task:
    a. Implement the change.
