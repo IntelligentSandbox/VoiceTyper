@@ -12,6 +12,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Build options
 # ---------------------------------------------------------------------------
 option(VOICETYPER_CUDA "Enable NVIDIA CUDA GPU inference" OFF)
+option(VOICETYPER_STREAMING_WHISPER_VAD "Enable Whisper VAD for silence-bounded streaming chunks" ON)
+option(VOICETYPER_RECORD_WHISPER_VAD "Enable Whisper VAD for record-mode chunks" ON)
+set(VOICETYPER_APP_UPDATE_HZ "100" CACHE STRING "Fixed app-state update rate in Hz")
+set(VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS "5" CACHE STRING "Maximum fixed app ticks to process per loop")
+
+if(NOT VOICETYPER_APP_UPDATE_HZ MATCHES "^[1-9][0-9]*$")
+	message(FATAL_ERROR "VOICETYPER_APP_UPDATE_HZ must be a positive integer")
+endif()
+
+if(NOT VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS MATCHES "^[1-9][0-9]*$")
+	message(FATAL_ERROR "VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS must be a positive integer")
+endif()
 
 # ---------------------------------------------------------------------------
 # whisper.cpp configuration
@@ -85,6 +97,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:DEBUG>
 	$<$<BOOL:${VOICETYPER_CUDA}>:VOICETYPER_CUDA>
+	VOICETYPER_STREAMING_WHISPER_VAD=$<BOOL:${VOICETYPER_STREAMING_WHISPER_VAD}>
+	VOICETYPER_RECORD_WHISPER_VAD=$<BOOL:${VOICETYPER_RECORD_WHISPER_VAD}>
+	VOICETYPER_APP_UPDATE_HZ=${VOICETYPER_APP_UPDATE_HZ}
+	VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS=${VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS}
 	VOICETYPER_VERSION="${VOICETYPER_VERSION}"
 )
 

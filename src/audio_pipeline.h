@@ -60,7 +60,7 @@ compute_rms(const float *Samples, int Count)
 }
 
 static whisper_full_params
-make_whisper_params(GlobalState *AppState)
+make_whisper_params(GlobalState *AppState, bool EnableVad)
 {
 	whisper_full_params Params  = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
 	Params.language             = "en";
@@ -71,14 +71,18 @@ make_whisper_params(GlobalState *AppState)
 	Params.print_special        = false;
 	Params.print_timestamps     = false;
 	Params.n_threads            = AppState->WhisperThreadCount;
-	Params.vad                  = true;
-	Params.vad_model_path       = AppState->VadModelPath.c_str();
+	Params.vad                  = EnableVad;
 
-	whisper_vad_params VadParams      = whisper_vad_default_params();
-	VadParams.threshold               = 0.5f;
-	VadParams.min_speech_duration_ms  = 250;
-	VadParams.min_silence_duration_ms = 500;
-	Params.vad_params                 = VadParams;
+	if (EnableVad)
+	{
+		Params.vad_model_path = AppState->VadModelPath.c_str();
+
+		whisper_vad_params VadParams      = whisper_vad_default_params();
+		VadParams.threshold               = 0.5f;
+		VadParams.min_speech_duration_ms  = 250;
+		VadParams.min_silence_duration_ms = 500;
+		Params.vad_params                 = VadParams;
+	}
 
 	return Params;
 }
@@ -266,7 +270,7 @@ stream_segment_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 static void
 stream_infer_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 {
-	whisper_full_params Params = make_whisper_params(AppState);
+	whisper_full_params Params = make_whisper_params(AppState, VOICETYPER_STREAMING_WHISPER_VAD != 0);
 	Params.single_segment      = true;
 
 	for (;;)
@@ -323,7 +327,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 
 	if (!Cancelled && !Chunk.empty())
 	{
-		whisper_full_params Params = make_whisper_params(AppState);
+		whisper_full_params Params = make_whisper_params(AppState, VOICETYPER_RECORD_WHISPER_VAD != 0);
 		Params.single_segment      = false;
 
 		run_whisper_on_chunk(AppState, Params, Chunk);
