@@ -18,6 +18,19 @@
 #include "app_core.h"
 #include "imgui_ui.h"
 
+#ifndef VOICETYPER_APP_UPDATE_HZ
+#define VOICETYPER_APP_UPDATE_HZ 100
+#endif
+
+#ifndef VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS
+#define VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS 5
+#endif
+
+static_assert(VOICETYPER_APP_UPDATE_HZ > 0, "VOICETYPER_APP_UPDATE_HZ must be positive");
+static_assert(
+	VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS > 0,
+	"VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS must be positive");
+
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -32,8 +45,13 @@ static ID3D11RenderTargetView *g_RenderTargetView  = nullptr;
 static bool                    g_SwapChainOccluded = false;
 static GlobalState            *g_AppState          = nullptr;
 static bool                    g_ImGuiReady        = false;
+static bool                    g_RenderDueNow      = true;
+static int                     g_RenderRefreshHz   = 60;
+static LONGLONG                g_RenderIntervalTicks = 0;
+static LONGLONG                g_PerformanceCounterFrequency = 0;
 static const int               WINDOW_MIN_WIDTH    = 320;
 static const int               WINDOW_MIN_HEIGHT   = 240;
+static const int               RENDER_REFRESH_FALLBACK_HZ = 60;
 
 // ---------------------------------------------------------------------------
 // Forward Declarations
@@ -156,6 +174,112 @@ save_window_size(HWND Hwnd)
 	save_window_size_setting(Width, Height);
 }
 
+static
+LONGLONG
+performance_counter_frequency()
+{
+	if (g_PerformanceCounterFrequency > 0) return g_PerformanceCounterFrequency;
+
+	LARGE_INTEGER Frequency = {};
+	if (QueryPerformanceFrequency(&Frequency) && Frequency.QuadPart > 0)
+	{
+		g_PerformanceCounterFrequency = Frequency.QuadPart;
+	}
+	else
+	{
+		g_PerformanceCounterFrequency = 1000;
+	}
+
+	return g_PerformanceCounterFrequency;
+}
+
+static
+LONGLONG
+performance_counter_now()
+{
+	LARGE_INTEGER Counter = {};
+	QueryPerformanceCounter(&Counter);
+	return Counter.QuadPart;
+}
+
+static
+LONGLONG
+performance_interval_for_hz(int Hz)
+{
+	if (Hz <= 0) Hz = RENDER_REFRESH_FALLBACK_HZ;
+
+	LONGLONG Ticks = performance_counter_frequency() / Hz;
+	if (Ticks < 1) return 1;
+
+	return Ticks;
+}
+
+static
+DWORD
+milliseconds_until_counter(LONGLONG Now, LONGLONG Deadline)
+{
+	if (Deadline <= Now) return 0;
+
+	LONGLONG Frequency = performance_counter_frequency();
+	LONGLONG Ticks = Deadline - Now;
+	LONGLONG Milliseconds = (Ticks * 1000 + Frequency - 1) / Frequency;
+	if (Milliseconds > 0x7fffffff) return 0x7fffffff;
+
+	return (DWORD)Milliseconds;
+}
+
+static
+int
+detect_monitor_refresh_hz(HWND Hwnd)
+{
+	HMONITOR Monitor = MonitorFromWindow(Hwnd, MONITOR_DEFAULTTONEAREST);
+	if (!Monitor) return RENDER_REFRESH_FALLBACK_HZ;
+
+	MONITORINFOEXW MonitorInfo = {};
+	MonitorInfo.cbSize = sizeof(MonitorInfo);
+	if (!GetMonitorInfoW(Monitor, &MonitorInfo)) return RENDER_REFRESH_FALLBACK_HZ;
+
+	DEVMODEW DevMode = {};
+	DevMode.dmSize = sizeof(DevMode);
+	if (!EnumDisplaySettingsW(MonitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &DevMode))
+		return RENDER_REFRESH_FALLBACK_HZ;
+
+	if (DevMode.dmDisplayFrequency <= 1 || DevMode.dmDisplayFrequency > 1000)
+		return RENDER_REFRESH_FALLBACK_HZ;
+
+	return (int)DevMode.dmDisplayFrequency;
+}
+
+static
+void
+refresh_render_cadence(HWND Hwnd)
+{
+	g_RenderRefreshHz = detect_monitor_refresh_hz(Hwnd);
+	g_RenderIntervalTicks = performance_interval_for_hz(g_RenderRefreshHz);
+	g_RenderDueNow = true;
+}
+
+static
+bool
+window_can_render(HWND Hwnd)
+{
+	return g_RenderTargetView && IsWindowVisible(Hwnd) && !IsIconic(Hwnd);
+}
+
+static
+bool
+swap_chain_is_still_occluded()
+{
+	if (!g_SwapChainOccluded) return false;
+	if (!g_SwapChain) return true;
+
+	HRESULT Hr = g_SwapChain->Present(0, DXGI_PRESENT_TEST);
+	if (Hr == DXGI_STATUS_OCCLUDED) return true;
+
+	g_SwapChainOccluded = false;
+	return false;
+}
+
 // ---------------------------------------------------------------------------
 // Render a single frame
 // ---------------------------------------------------------------------------
@@ -178,6 +302,7 @@ render_frame()
 	g_DeviceContext->ClearRenderTargetView(g_RenderTargetView, ClearColor);
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
+	// TODO: Reevaluate this if vsync fights the explicit render scheduler or causes cadence issues.
 	HRESULT Hr = g_SwapChain->Present(1, 0);
 	g_SwapChainOccluded = (Hr == DXGI_STATUS_OCCLUDED);
 }
@@ -194,6 +319,8 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 	switch (Msg)
 	{
 	case WM_SIZE:
+		refresh_render_cadence(Hwnd);
+		g_RenderDueNow = true;
 		if (WParam == SIZE_MINIMIZED) return 0;
 		if (WParam == SIZE_RESTORED)
 		{
@@ -205,8 +332,17 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 			g_SwapChain->ResizeBuffers(
 				0, (UINT)LOWORD(LParam), (UINT)HIWORD(LParam), DXGI_FORMAT_UNKNOWN, 0);
 			create_render_target();
-			render_frame();
 		}
+		return 0;
+
+	case WM_MOVE:
+		refresh_render_cadence(Hwnd);
+		g_RenderDueNow = true;
+		return 0;
+
+	case WM_DISPLAYCHANGE:
+		refresh_render_cadence(Hwnd);
+		g_RenderDueNow = true;
 		return 0;
 
 	case WM_SYSCOMMAND:
@@ -292,6 +428,12 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);
 	g_ImGuiReady = true;
 
+	refresh_render_cadence(Hwnd);
+	const LONGLONG AppUpdateIntervalTicks = performance_interval_for_hz(VOICETYPER_APP_UPDATE_HZ);
+	LONGLONG Now = performance_counter_now();
+	LONGLONG NextAppTick = Now;
+	LONGLONG NextRenderTick = Now;
+
 	AppFrameState FrameState = {};
 
 	bool Running = true;
@@ -300,27 +442,69 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		MSG Msg;
 		while (PeekMessage(&Msg, nullptr, 0, 0, PM_REMOVE))
 		{
+			if (Msg.message == WM_QUIT)
+			{
+				Running = false;
+				break;
+			}
+
 			TranslateMessage(&Msg);
 			DispatchMessage(&Msg);
-			if (Msg.message == WM_QUIT) Running = false;
 		}
 
 		if (!Running) break;
 
-		if (g_SwapChainOccluded && g_SwapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
+		Now = performance_counter_now();
+
+		int AppTicksRun = 0;
+		while (Now >= NextAppTick && AppTicksRun < VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS)
 		{
-			Sleep(10);
-			continue;
+			AppFrameResult FrameResult = app_update_runtime_frame(
+				AppState,
+				&FrameState,
+				!AppState->Ui.IsSettingsDialogOpen);
+			show_model_transition_failure(AppState, FrameResult.ModelFailure);
+
+			NextAppTick += AppUpdateIntervalTicks;
+			AppTicksRun++;
+			Now = performance_counter_now();
 		}
-		g_SwapChainOccluded = false;
 
-		AppFrameResult FrameResult = app_update_runtime_frame(
-			AppState,
-			&FrameState,
-			!AppState->Ui.IsSettingsDialogOpen);
-		show_model_transition_failure(AppState, FrameResult.ModelFailure);
+		if (Now >= NextAppTick)
+		{
+			NextAppTick = Now + AppUpdateIntervalTicks;
+		}
 
-		render_frame();
+		if (window_can_render(Hwnd) && (g_RenderDueNow || Now >= NextRenderTick))
+		{
+			LONGLONG RenderStart = Now;
+
+			if (!swap_chain_is_still_occluded())
+			{
+				render_frame();
+				Now = performance_counter_now();
+			}
+
+			g_RenderDueNow = false;
+			NextRenderTick = RenderStart + g_RenderIntervalTicks;
+		}
+
+		Now = performance_counter_now();
+		LONGLONG NextDeadline = NextAppTick;
+		if (window_can_render(Hwnd))
+		{
+			if (g_RenderDueNow)
+			{
+				NextDeadline = Now;
+			}
+			else if (NextRenderTick < NextDeadline)
+			{
+				NextDeadline = NextRenderTick;
+			}
+		}
+
+		DWORD WaitMs = milliseconds_until_counter(Now, NextDeadline);
+		MsgWaitForMultipleObjectsEx(0, nullptr, WaitMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 	}
 
 	g_ImGuiReady = false;
