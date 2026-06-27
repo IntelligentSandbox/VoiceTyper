@@ -9,9 +9,12 @@ custom user commands via keywords/keyphrases.
 AI is used to write code in this project with human review done at our discretion.
 We try our best to make something that is fast, usable, fully offline with minimal dependencies.
 Let the results and code quality speak for themselves...the sloppening...
-AI Coding programs used include but are not limited to:
-- [opencode](https://github.com/anomalyco/opencode)
-- [claude code](https://code.claude.com/docs/en/overview)
+Disclosure of all harnesses/models will be done at best effort.
+Coding Agent Harnesses Used: [OpenCode](https://github.com/anomalyco/opencode), [Claude Code](https://code.claude.com/docs/en/overview)
+LLMs Used:
+- [Claude Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)
+- [OpenAI GPT-5.5](https://platform.openai.com/docs/models/gpt-5.5)
+- [OpenCode Zen Big Pickle](https://grokipedia.com/page/Big_Pickle_model)
 
 ## Dependencies
 Sources copied directly into the repo:
@@ -33,4 +36,3 @@ To compile the project for yourself, you will need:
 - NVIDIA CUDA toolkit (if you want to build with cuda capability) (e.g. v13.2)
 
 To download ggml whisper models, get them from huggingface [here](https://huggingface.co/ggerganov/whisper.cpp/tree/main).
-
