@@ -174,7 +174,6 @@ collect_release_assets() {
 	local files
 	local file
 	local has_package
-	local has_changelog
 
 	shopt -s nullglob
 	files=("$DIST_DIR"/*)
@@ -182,28 +181,26 @@ collect_release_assets() {
 
 	RELEASE_ASSETS=()
 	has_package=0
-	has_changelog=0
 
 	for file in "${files[@]}"; do
 		if [ ! -f "$file" ]; then
 			continue
 		fi
 
-		RELEASE_ASSETS+=("$file")
-
-		if [ "$file" = "$CHANGELOG_FILE" ]; then
-			has_changelog=1
-		else
-			has_package=1
+		if [ -f "$CHANGELOG_FILE" ] && [ "$file" -ef "$CHANGELOG_FILE" ]; then
+			continue
 		fi
+
+		if [[ "$file" == "$DIST_DIR"/*.md ]]; then
+			continue
+		fi
+
+		RELEASE_ASSETS+=("$file")
+		has_package=1
 	done
 
 	if [ ! -f "$CHANGELOG_FILE" ]; then
 		die "Release notes file '$CHANGELOG_FILE' does not exist. Run './release changelog' first."
-	fi
-
-	if [ "$has_changelog" = "0" ]; then
-		RELEASE_ASSETS+=("$CHANGELOG_FILE")
 	fi
 
 	if [ "${#RELEASE_ASSETS[@]}" -eq 0 ]; then
