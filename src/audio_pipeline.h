@@ -1,6 +1,7 @@
 #pragma once
 
 #include "state.h"
+#include "transcription_core.h"
 
 #include "host_services.h"
 
@@ -59,34 +60,6 @@ compute_rms(const float *Samples, int Count)
 	return (float)sqrt(Sum / (double)Count);
 }
 
-static whisper_full_params
-make_whisper_params(GlobalState *AppState, bool EnableVad)
-{
-	whisper_full_params Params  = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-	Params.language             = "en";
-	Params.translate            = false;
-	Params.no_context           = true;
-	Params.print_progress       = false;
-	Params.print_realtime       = false;
-	Params.print_special        = false;
-	Params.print_timestamps     = false;
-	Params.n_threads            = AppState->WhisperThreadCount;
-	Params.vad                  = EnableVad;
-
-	if (EnableVad)
-	{
-		Params.vad_model_path = AppState->VadModelPath.c_str();
-
-		whisper_vad_params VadParams      = whisper_vad_default_params();
-		VadParams.threshold               = 0.5f;
-		VadParams.min_speech_duration_ms  = 250;
-		VadParams.min_silence_duration_ms = 500;
-		Params.vad_params                 = VadParams;
-	}
-
-	return Params;
-}
-
 static void
 run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::vector<float> &Chunk)
 {
@@ -94,27 +67,14 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD)
 		return;
 
-	int Ret = whisper_full(
-		AppState->WhisperState.Context,
-		Params,
-		Chunk.data(),
-		(int)Chunk.size());
+	std::string Transcription;
+	int Ret = transcribe_pcm_to_string(
+		AppState->WhisperState.Context, Params, Chunk.data(), (int)Chunk.size(), &Transcription);
 
 	if (Ret != 0)
 	{
 		printf("[audio_pipeline] whisper_full failed (ret=%d)\n", Ret);
 		return;
-	}
-
-	int NumSegments = whisper_full_n_segments(AppState->WhisperState.Context);
-	std::string Transcription;
-	for (int i = 0; i < NumSegments; i++)
-	{
-		const char *Text = whisper_full_get_segment_text(AppState->WhisperState.Context, i);
-		if (Text && Text[0] != '\0')
-		{
-			Transcription += Text;
-		}
 	}
 
 	if (!Transcription.empty())
@@ -270,7 +230,10 @@ stream_segment_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 static void
 stream_infer_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 {
-	whisper_full_params Params = make_whisper_params(AppState, VOICETYPER_STREAMING_WHISPER_VAD != 0);
+	whisper_full_params Params = make_transcription_whisper_params(
+		AppState->WhisperThreadCount,
+		VOICETYPER_STREAMING_WHISPER_VAD != 0,
+		AppState->VadModelPath.c_str());
 	Params.single_segment      = true;
 
 	for (;;)
@@ -327,7 +290,10 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 
 	if (!Cancelled && !Chunk.empty())
 	{
-		whisper_full_params Params = make_whisper_params(AppState, VOICETYPER_RECORD_WHISPER_VAD != 0);
+		whisper_full_params Params = make_transcription_whisper_params(
+			AppState->WhisperThreadCount,
+			VOICETYPER_RECORD_WHISPER_VAD != 0,
+			AppState->VadModelPath.c_str());
 		Params.single_segment      = false;
 
 		run_whisper_on_chunk(AppState, Params, Chunk);
