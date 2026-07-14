@@ -4,6 +4,7 @@
 #include "transcription_core.h"
 
 #include "host_services.h"
+#include "stream_chunker.h"
 
 #include <cstdio>
 #include <cmath>
@@ -15,21 +16,6 @@
 #include <mutex>
 #include <vector>
 #include <string>
-
-// Minimum RMS energy to bother sending a chunk to whisper.
-#define PIPELINE_SILENCE_RMS_THRESHOLD 0.002f
-
-// How often (ms) the stream segmenter thread polls the audio buffer for energy levels.
-#define STREAM_POLL_INTERVAL_MS 100
-
-// RMS energy threshold for classifying a poll interval as speech vs silence.
-#define STREAM_SPEECH_RMS_THRESHOLD 0.002f
-
-// Minimum chunk duration (ms) before a speech→silence transition can trigger a cutoff.
-#define STREAM_MIN_CHUNK_DURATION_MS 1000
-
-// How long silence (ms) must persist after speech before cutting the chunk.
-#define STREAM_SILENCE_DURATION_MS 500
 
 // ---------------------------------------------------------------------------
 // Platform audio capture interface
