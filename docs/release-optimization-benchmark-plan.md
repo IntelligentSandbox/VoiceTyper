@@ -129,6 +129,8 @@ Runner options:
 - `--threads <count>`: default hardware concurrency.
 - `--output <path>`: default `build/bench/results.jsonl`.
 - `--append`: append instead of overwrite.
+- `--incremental`: measure incremental rebuild after modifying one source file.
+- `--incremental-source <path>`: default `src/imgui_main.cpp`.
 
 ## Build Metrics
 For each variant, measure both cold and warm build behavior.
@@ -172,12 +174,24 @@ and benchmark runtime metrics.
 Example:
 
 ```json
-{"variant":"cpu-baseline","backend":"cpu","app_ipo":false,"ggml_lto":false,"cold_configure_ms":1234,"cold_build_ms":60000,"warm_configure_ms":300,"warm_build_ms":900,"voice_typer_exe_bytes":1234567,"bench_exe_bytes":765432,"model_load_ms":820,"transcribe_ms":[410,399,402,405,401],"text":"hello world","expected_text":"hello world","expected_text_match":true}
+{"variant":"cpu-baseline","backend":"cpu","app_ipo":false,"ggml_lto":false,"cold_configure_ms":1234,"cold_build_ms":60000,"warm_configure_ms":300,"warm_build_ms":900,"incremental_build_ms":1200,"voice_typer_exe_bytes":1234567,"bench_exe_bytes":765432,"model_load_ms":820,"transcribe_ms":[410,399,402,405,401],"text":"hello world","expected_text":"hello world","expected_text_match":true}
 ```
 
 If a variant fails to configure, build, or run:
 - Write a failed JSONL row with variant metadata, the phase that failed, and a short error summary.
 - Continue to the next variant.
+
+## Incremental Rebuild Metrics
+When `--incremental` is passed, the runner performs an additional build after the warm build:
+
+- Back up the configured `--incremental-source` file (default `src/imgui_main.cpp`).
+- Append a single newline to trigger recompilation of that translation unit.
+- Run the Release build and measure `incremental_build_ms`.
+- Restore the original file content from the backup.
+
+This measures the realistic dev-iteration cost: one TU recompiled plus relinking.
+With LTO/IPO enabled, the relink step re-runs whole-program optimization across all IR objects,
+which is where the per-change overhead of LTO/IPO is concentrated.
 
 ## Binary Size Metrics
 Record output sizes after the cold build:
@@ -205,5 +219,4 @@ Keep size collection pragmatic in v1. At minimum, record the app and benchmark e
 - Audio resampling.
 - Stereo-to-mono conversion.
 - GUI automation.
-- Measuring incremental rebuild after a touched source file.
 - Statistical analysis beyond recording per-iteration timings.

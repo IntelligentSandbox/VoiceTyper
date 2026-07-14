@@ -14,6 +14,8 @@ ITERATION_COUNT=5
 THREAD_COUNT="$(nproc 2>/dev/null || echo 1)"
 OUTPUT_PATH="build/bench/results.jsonl"
 APPEND_OUTPUT=0
+INCREMENTAL=0
+INCREMENTAL_SOURCE="src/imgui_main.cpp"
 BUILD_JOBS="${VOICETYPER_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)}"
 
 usage() {
@@ -30,6 +32,8 @@ Options:
   --threads <count>       Default: hardware concurrency
   --output <path>         Default: build/bench/results.jsonl
   --append                Append instead of overwrite
+  --incremental           Measure incremental rebuild after touching one source file
+  --incremental-source <path>  Default: src/imgui_main.cpp
 EOF
 }
 
@@ -84,6 +88,15 @@ while [ "$#" -gt 0 ]; do
 			APPEND_OUTPUT=1
 			shift
 			;;
+		--incremental)
+			INCREMENTAL=1
+			shift
+			;;
+		--incremental-source)
+			[ "$#" -ge 2 ] || { echo "--incremental-source requires a value" >&2; exit 2; }
+			INCREMENTAL_SOURCE="$2"
+			shift 2
+			;;
 		--help|-h)
 			usage
 			exit 0
@@ -99,6 +112,11 @@ done
 if [ -z "$AUDIO_PATH" ]; then
 	echo "--audio is required" >&2
 	usage >&2
+	exit 2
+fi
+
+if [ "$INCREMENTAL" -eq 1 ] && [ ! -f "$ROOT_DIR/$INCREMENTAL_SOURCE" ]; then
+	echo "--incremental-source not found: $INCREMENTAL_SOURCE" >&2
 	exit 2
 fi
 
@@ -188,6 +206,7 @@ write_failure_row() {
 		"$variant" "$backend" "$(bool_json "$app_ipo")" "$(bool_json "$ggml_lto")" >> "$OUTPUT_PATH"
 	printf '"cold_configure_ms":%s,"cold_build_ms":%s,' "$COLD_CONFIGURE_MS" "$COLD_BUILD_MS" >> "$OUTPUT_PATH"
 	printf '"warm_configure_ms":%s,"warm_build_ms":%s,' "$WARM_CONFIGURE_MS" "$WARM_BUILD_MS" >> "$OUTPUT_PATH"
+	printf '"incremental_build_ms":%s,' "$INCREMENTAL_BUILD_MS" >> "$OUTPUT_PATH"
 	printf '"voice_typer_exe_bytes":%s,"bench_exe_bytes":%s,' \
 		"$VOICE_TYPER_EXE_BYTES" "$BENCH_EXE_BYTES" >> "$OUTPUT_PATH"
 	printf '"failed_phase":"%s","error":"%s"}\n' "$phase" "$error_summary" >> "$OUTPUT_PATH"
@@ -204,6 +223,7 @@ write_success_row() {
 		"$variant" "$backend" "$(bool_json "$app_ipo")" "$(bool_json "$ggml_lto")" >> "$OUTPUT_PATH"
 	printf '"cold_configure_ms":%s,"cold_build_ms":%s,' "$COLD_CONFIGURE_MS" "$COLD_BUILD_MS" >> "$OUTPUT_PATH"
 	printf '"warm_configure_ms":%s,"warm_build_ms":%s,' "$WARM_CONFIGURE_MS" "$WARM_BUILD_MS" >> "$OUTPUT_PATH"
+	printf '"incremental_build_ms":%s,' "$INCREMENTAL_BUILD_MS" >> "$OUTPUT_PATH"
 	printf '"voice_typer_exe_bytes":%s,"bench_exe_bytes":%s,%s\n' \
 		"$VOICE_TYPER_EXE_BYTES" "$BENCH_EXE_BYTES" "$runtime_body" >> "$OUTPUT_PATH"
 }
@@ -223,6 +243,7 @@ run_variant() {
 	local build_log="$log_dir/cold_build.log"
 	local warm_configure_log="$log_dir/warm_configure.log"
 	local warm_build_log="$log_dir/warm_build.log"
+	local incremental_build_log="$log_dir/incremental_build.log"
 	local run_stdout="$log_dir/runtime_stdout.log"
 	local run_stderr="$log_dir/runtime_stderr.log"
 
@@ -234,6 +255,7 @@ run_variant() {
 	COLD_BUILD_MS=null
 	WARM_CONFIGURE_MS=null
 	WARM_BUILD_MS=null
+	INCREMENTAL_BUILD_MS=null
 	VOICE_TYPER_EXE_BYTES=null
 	BENCH_EXE_BYTES=null
 
@@ -285,6 +307,22 @@ run_variant() {
 		return
 	fi
 	WARM_BUILD_MS="$MEASURED_MS"
+
+	if [ "$INCREMENTAL" -eq 1 ]; then
+		local source_abs="$ROOT_DIR/$INCREMENTAL_SOURCE"
+		local backup_file="$log_dir/incremental_source.bak"
+		cp "$source_abs" "$backup_file"
+		printf '\n' >> "$source_abs"
+
+		if ! run_timed "$incremental_build_log" cmake --build "$build_dir" --config Release --parallel "$BUILD_JOBS"; then
+			INCREMENTAL_BUILD_MS="$MEASURED_MS"
+			cp "$backup_file" "$source_abs"
+			write_failure_row "$variant" "$backend" "$app_ipo" "$ggml_lto" "incremental_build" "$incremental_build_log"
+			return
+		fi
+		INCREMENTAL_BUILD_MS="$MEASURED_MS"
+		cp "$backup_file" "$source_abs"
+	fi
 
 	local bench_exe="$output_dir/VoiceTyperBench.exe"
 	local bench_args=(
