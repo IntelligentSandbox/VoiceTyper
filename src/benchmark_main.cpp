@@ -1,5 +1,6 @@
 #include "transcription_core.h"
 #include "whisper_wrapper.h"
+#include "stream_chunker.h"
 
 #include <algorithm>
 #include <chrono>
@@ -20,6 +21,9 @@ struct BenchOptions
 	std::string AudioPath;
 	std::string ExpectedText;
 	bool HasExpectedText = false;
+	std::string Mode = "record";
+	bool EnableVad = false;
+	std::string VadModelPath = "vad_models/ggml-silero-v5.1.2.bin";
 	int WarmupCount = 1;
 	int IterationCount = 5;
 	int ThreadCount = 1;
@@ -31,6 +35,7 @@ print_usage(const char *ExeName)
 {
 	std::cerr << "Usage: " << ExeName
 		<< " --audio <path> [--model <path>] [--expected-text <text>]"
+		<< " [--mode <record|streaming>] [--vad <on|off>] [--vad-model <path>]"
 		<< " [--warmup <count>] [--iterations <count>] [--threads <count>] [--cuda-device <index>]\n";
 }
 
@@ -101,6 +106,42 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 		{
 			const char *Value = require_value("--cuda-device");
 			if (!Value || !parse_int_arg(Value, 0, &Options->CudaDevice)) return false;
+		}
+		else if (Arg == "--mode")
+		{
+			const char *Value = require_value("--mode");
+			if (!Value) return false;
+			if (std::string(Value) != "record" && std::string(Value) != "streaming")
+			{
+				std::cerr << "--mode must be 'record' or 'streaming'\n";
+				return false;
+			}
+			Options->Mode = Value;
+		}
+		else if (Arg == "--vad")
+		{
+			const char *Value = require_value("--vad");
+			if (!Value) return false;
+			std::string VadStr = Value;
+			if (VadStr == "on" || VadStr == "true" || VadStr == "1")
+			{
+				Options->EnableVad = true;
+			}
+			else if (VadStr == "off" || VadStr == "false" || VadStr == "0")
+			{
+				Options->EnableVad = false;
+			}
+			else
+			{
+				std::cerr << "--vad must be 'on' or 'off'\n";
+				return false;
+			}
+		}
+		else if (Arg == "--vad-model")
+		{
+			const char *Value = require_value("--vad-model");
+			if (!Value) return false;
+			Options->VadModelPath = Value;
 		}
 		else
 		{
@@ -381,13 +422,63 @@ main(int ArgCount, char **Args)
 		return 1;
 	}
 
+	static const int BENCH_SAMPLE_RATE = 16000;
+	bool IsStreaming = (Options.Mode == "streaming");
+	bool SingleSegment = IsStreaming;
+
+	struct TranscribeUnit
+	{
+		const float *Samples;
+		int Count;
+	};
+	std::vector<TranscribeUnit> Units;
+	std::vector<std::vector<float>> Chunks;
+	std::vector<int> UnitDurationsMs;
+
+	if (IsStreaming)
+	{
+		Chunks = chunk_audio_for_streaming(Samples, BENCH_SAMPLE_RATE);
+		for (size_t c = 0; c < Chunks.size(); c++)
+		{
+			UnitDurationsMs.push_back((int)Chunks[c].size() * 1000 / BENCH_SAMPLE_RATE);
+			Units.push_back(TranscribeUnit{Chunks[c].data(), (int)Chunks[c].size()});
+		}
+	}
+	else
+	{
+		UnitDurationsMs.push_back((int)Samples.size() * 1000 / BENCH_SAMPLE_RATE);
+		Units.push_back(TranscribeUnit{Samples.data(), (int)Samples.size()});
+	}
+
+	const char *VadModelArg = Options.EnableVad ? Options.VadModelPath.c_str() : nullptr;
+
+	auto run_one_pass = [&](std::string *OutText, std::vector<double> *UnitTimes) -> int {
+		whisper_full_params Params = make_transcription_whisper_params(
+			Options.ThreadCount, Options.EnableVad, VadModelArg);
+		Params.single_segment = SingleSegment;
+		OutText->clear();
+		for (size_t u = 0; u < Units.size(); u++)
+		{
+			std::string UnitText;
+			auto UnitStart = std::chrono::steady_clock::now();
+			int Ret = transcribe_pcm_to_string(
+				ModelState.Context, Params, Units[u].Samples, Units[u].Count, &UnitText);
+			auto UnitEnd = std::chrono::steady_clock::now();
+			if (Ret != 0) return Ret;
+			if (UnitTimes) UnitTimes->push_back(elapsed_ms(UnitStart, UnitEnd));
+			if (!UnitText.empty())
+			{
+				if (!OutText->empty()) OutText->append(" ");
+				OutText->append(UnitText);
+			}
+		}
+		return 0;
+	};
+
 	std::string Text;
 	for (int i = 0; i < Options.WarmupCount; i++)
 	{
-		whisper_full_params Params = make_transcription_whisper_params(Options.ThreadCount, false, nullptr);
-		Params.single_segment = false;
-		int Ret = transcribe_pcm_to_string(
-			ModelState.Context, Params, Samples.data(), (int)Samples.size(), &Text);
+		int Ret = run_one_pass(&Text, nullptr);
 		if (Ret != 0)
 		{
 			std::cerr << "whisper_full failed during warmup (ret=" << Ret << ")\n";
@@ -396,36 +487,63 @@ main(int ArgCount, char **Args)
 		}
 	}
 
-	std::vector<double> TranscribeTimes;
-	TranscribeTimes.reserve((size_t)Options.IterationCount);
+	std::vector<std::vector<double>> PerUnitTimes;
+	PerUnitTimes.reserve((size_t)Options.IterationCount);
 	for (int i = 0; i < Options.IterationCount; i++)
 	{
-		whisper_full_params Params = make_transcription_whisper_params(Options.ThreadCount, false, nullptr);
-		Params.single_segment = false;
-		auto TranscribeStart = std::chrono::steady_clock::now();
-		int Ret = transcribe_pcm_to_string(
-			ModelState.Context, Params, Samples.data(), (int)Samples.size(), &Text);
-		auto TranscribeEnd = std::chrono::steady_clock::now();
+		std::vector<double> UnitTimes;
+		int Ret = run_one_pass(&Text, &UnitTimes);
 		if (Ret != 0)
 		{
 			std::cerr << "whisper_full failed during iteration (ret=" << Ret << ")\n";
 			unload_whisper_model(&ModelState);
 			return 1;
 		}
+		PerUnitTimes.push_back(std::move(UnitTimes));
+	}
 
-		TranscribeTimes.push_back(elapsed_ms(TranscribeStart, TranscribeEnd));
+	std::vector<double> TranscribeTimes;
+	TranscribeTimes.reserve((size_t)Options.IterationCount);
+	for (const auto &UnitTimes : PerUnitTimes)
+	{
+		double Total = 0.0;
+		for (double T : UnitTimes) Total += T;
+		TranscribeTimes.push_back(Total);
 	}
 
 	std::string NormalizedText = normalize_expected_text(Text);
 	std::string NormalizedExpected;
 	if (Options.HasExpectedText) NormalizedExpected = normalize_expected_text(Options.ExpectedText);
 
-	std::cout << "{\"model_load_ms\":" << format_ms(elapsed_ms(LoadStart, LoadEnd))
-		<< ",\"transcribe_ms\":[";
+	std::cout << "{\"mode\":\"" << Options.Mode
+		<< "\",\"vad\":" << (Options.EnableVad ? "true" : "false")
+		<< ",\"model_load_ms\":" << format_ms(elapsed_ms(LoadStart, LoadEnd))
+		<< ",\"unit_count\":" << Units.size()
+		<< ",\"unit_durations_ms\":[";
+	for (size_t i = 0; i < UnitDurationsMs.size(); i++)
+	{
+		if (i > 0) std::cout << ",";
+		std::cout << UnitDurationsMs[i];
+	}
+
+	std::cout << "],\"transcribe_ms\":[";
 	for (size_t i = 0; i < TranscribeTimes.size(); i++)
 	{
 		if (i > 0) std::cout << ",";
 		std::cout << format_ms(TranscribeTimes[i]);
+	}
+
+	std::cout << "],\"per_unit_ms\":[";
+	for (size_t i = 0; i < PerUnitTimes.size(); i++)
+	{
+		if (i > 0) std::cout << ",";
+		std::cout << "[";
+		for (size_t u = 0; u < PerUnitTimes[i].size(); u++)
+		{
+			if (u > 0) std::cout << ",";
+			std::cout << format_ms(PerUnitTimes[i][u]);
+		}
+		std::cout << "]";
 	}
 
 	std::cout << "],\"text\":\"" << json_escape(Text) << "\"";
