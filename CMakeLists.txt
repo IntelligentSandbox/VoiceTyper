@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Build options
 # ---------------------------------------------------------------------------
 option(VOICETYPER_CUDA "Enable NVIDIA CUDA GPU inference" OFF)
-option(VOICETYPER_APP_IPO "Enable IPO/LTO for VoiceTyper application targets" ON)
+option(VOICETYPER_APP_IPO "Enable IPO for VoiceTyper application targets" ON)
 option(VOICETYPER_STREAMING_WHISPER_VAD "Enable Whisper VAD for silence-bounded streaming chunks" ON)
 option(VOICETYPER_RECORD_WHISPER_VAD "Enable Whisper VAD for record-mode chunks" ON)
 set(GGML_LTO OFF CACHE BOOL "Enable GGML link time optimization")
