@@ -15,6 +15,14 @@ get_settings_file_path()
 }
 
 inline
+void
+cleanup_legacy_settings_json()
+{
+	std::string Path = platform_join_path(platform_get_exe_dir(), "data/settings.json");
+	remove(Path.c_str());
+}
+
+inline
 std::map<std::string, std::string>
 read_settings_map()
 {
