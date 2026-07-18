@@ -53,9 +53,11 @@ cd ../..
 
 sync_asset_dir stt_models "$OUTPUT_DIR/stt_models"
 sync_asset_dir vad_models "$OUTPUT_DIR/vad_models"
-sync_asset_dir media "$OUTPUT_DIR/media"
-mkdir -p "$OUTPUT_DIR/data"
-touch "$OUTPUT_DIR/data/settings.ini"
+cp -u media/voicetyper-icon.ico "$OUTPUT_DIR/app.ico"
+touch "$OUTPUT_DIR/settings.ini"
+
+rm -rf "$OUTPUT_DIR/media" "$OUTPUT_DIR/data"
+rm -f "$OUTPUT_DIR/VoiceTyperBench.exe" "$OUTPUT_DIR/voicetyper-icon.ico" "$OUTPUT_DIR/voicetyper-icon.png"
 
 if [ "$USE_CUDA" = "ON" ]; then
 	CUDA_DLL_DIR="$CUDA_PATH/bin"

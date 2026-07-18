@@ -146,8 +146,9 @@ fi
 BUILD_DIR="$ROOT_DIR/build/bench/streaming_vad/build"
 OUTPUT_BASE="$ROOT_DIR/build/bench/streaming_vad/out"
 OUTPUT_DIR="$OUTPUT_BASE/Release_${BACKEND}"
+BENCH_DIR="$OUTPUT_BASE/Bench_${BACKEND}"
 LOG_DIR="$ROOT_DIR/build/bench/streaming_vad/logs"
-BENCH_EXE="$OUTPUT_DIR/VoiceTyperBench.exe"
+BENCH_EXE="$BENCH_DIR/VoiceTyperBench.exe"
 
 mkdir -p "$BUILD_DIR" "$LOG_DIR"
 

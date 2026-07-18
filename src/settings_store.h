@@ -11,15 +11,39 @@ inline
 std::string
 get_settings_file_path()
 {
-	return platform_join_path(platform_get_exe_dir(), "data/settings.ini");
+	return platform_join_path(platform_get_exe_dir(), "settings.ini");
 }
 
 inline
 void
 cleanup_legacy_settings_json()
 {
-	std::string Path = platform_join_path(platform_get_exe_dir(), "data/settings.json");
+	std::string Path = platform_join_path(platform_get_exe_dir(), "settings.json");
 	remove(Path.c_str());
+}
+
+inline
+void
+migrate_legacy_data_dir_settings()
+{
+	std::string NewPath = get_settings_file_path();
+	std::string OldPath = platform_join_path(platform_get_exe_dir(), "data/settings.ini");
+
+	FILE *OldFile = fopen(OldPath.c_str(), "r");
+	if (!OldFile) return;
+	fclose(OldFile);
+
+	FILE *NewFile = fopen(NewPath.c_str(), "r");
+	if (NewFile)
+	{
+		fseek(NewFile, 0, SEEK_END);
+		long Size = ftell(NewFile);
+		fclose(NewFile);
+		if (Size > 0) return;
+	}
+
+	remove(NewPath.c_str());
+	rename(OldPath.c_str(), NewPath.c_str());
 }
 
 inline

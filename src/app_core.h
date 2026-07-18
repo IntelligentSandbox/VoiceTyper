@@ -41,6 +41,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	init_whisper_state(&AppState->WhisperState);
 
 	cleanup_legacy_settings_json();
+	migrate_legacy_data_dir_settings();
 	query_vad_model_path(AppState);
 	query_audio_input_devices(AppState);
 	query_inference_devices(AppState);

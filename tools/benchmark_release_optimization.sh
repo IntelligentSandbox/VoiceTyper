@@ -238,6 +238,7 @@ run_variant() {
 	local build_dir="$variant_dir/build"
 	local output_base="$variant_dir/out"
 	local output_dir="$output_base/Release_${backend}"
+	local bench_dir="$output_base/Bench_${backend}"
 	local log_dir="$variant_dir/logs"
 	local configure_log="$log_dir/cold_configure.log"
 	local build_log="$log_dir/cold_build.log"
@@ -292,7 +293,7 @@ run_variant() {
 	COLD_BUILD_MS="$MEASURED_MS"
 
 	VOICE_TYPER_EXE_BYTES="$(file_size_json "$output_dir/VoiceTyper.exe")"
-	BENCH_EXE_BYTES="$(file_size_json "$output_dir/VoiceTyperBench.exe")"
+	BENCH_EXE_BYTES="$(file_size_json "$bench_dir/VoiceTyperBench.exe")"
 
 	if ! run_timed "$warm_configure_log" "${cmake_args[@]}"; then
 		WARM_CONFIGURE_MS="$MEASURED_MS"
@@ -324,7 +325,7 @@ run_variant() {
 		cp "$backup_file" "$source_abs"
 	fi
 
-	local bench_exe="$output_dir/VoiceTyperBench.exe"
+	local bench_exe="$bench_dir/VoiceTyperBench.exe"
 	local bench_args=(
 		"$bench_exe"
 		--model "$MODEL_PATH"

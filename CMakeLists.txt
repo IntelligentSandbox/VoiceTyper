@@ -129,6 +129,7 @@ endif()
 
 set(VOICETYPER_RELEASE_OUTPUT_DIR "${VOICETYPER_OUTPUT_BASE_DIR}/Release${VARIANT_SUFFIX}")
 set(VOICETYPER_DEBUG_OUTPUT_DIR "${VOICETYPER_OUTPUT_BASE_DIR}/Debug${VARIANT_SUFFIX}")
+set(VOICETYPER_BENCH_OUTPUT_DIR "${VOICETYPER_OUTPUT_BASE_DIR}/Bench${VARIANT_SUFFIX}")
 
 function(apply_voicetyper_target_options TARGET_NAME)
 	set_target_properties(${TARGET_NAME} PROPERTIES
@@ -139,6 +140,13 @@ function(apply_voicetyper_target_options TARGET_NAME)
 	if(VOICETYPER_APP_IPO)
 		set_target_properties(${TARGET_NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 	endif()
+endfunction()
+
+function(apply_voicetyper_bench_target_options TARGET_NAME)
+	set_target_properties(${TARGET_NAME} PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VOICETYPER_BENCH_OUTPUT_DIR}"
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VOICETYPER_DEBUG_OUTPUT_DIR}"
+	)
 endfunction()
 
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${APP_ICON_RESOURCE})
@@ -173,7 +181,7 @@ if(VOICETYPER_CUDA)
 endif()
 
 add_executable(VoiceTyperBench src/benchmark_main.cpp)
-apply_voicetyper_target_options(VoiceTyperBench)
+apply_voicetyper_bench_target_options(VoiceTyperBench)
 
 target_include_directories(VoiceTyperBench PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/src
