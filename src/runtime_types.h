@@ -76,7 +76,8 @@ struct HotkeyConfig
 	}
 };
 
-inline HotkeyConfig default_record_hotkey()
+inline HotkeyConfig
+default_record_hotkey()
 {
 	HotkeyConfig H = {};
 	H.Modifiers = HOTKEY_MOD_CTRL | HOTKEY_MOD_ALT;
@@ -84,7 +85,8 @@ inline HotkeyConfig default_record_hotkey()
 	return H;
 }
 
-inline HotkeyConfig default_cancel_record_hotkey()
+inline HotkeyConfig
+default_cancel_record_hotkey()
 {
 	HotkeyConfig H = {};
 	H.Modifiers = HOTKEY_MOD_ALT;
@@ -92,7 +94,8 @@ inline HotkeyConfig default_cancel_record_hotkey()
 	return H;
 }
 
-inline HotkeyConfig default_stream_hotkey()
+inline HotkeyConfig
+default_stream_hotkey()
 {
 	HotkeyConfig H = {};
 	H.Modifiers = HOTKEY_MOD_ALT;
@@ -100,7 +103,8 @@ inline HotkeyConfig default_stream_hotkey()
 	return H;
 }
 
-inline HotkeyConfig default_load_model_hotkey()
+inline HotkeyConfig
+default_load_model_hotkey()
 {
 	HotkeyConfig H = {};
 	H.Modifiers = HOTKEY_MOD_ALT;
@@ -114,12 +118,14 @@ enum RecordingHotkeyMode
 	RECORDING_HOTKEY_TOGGLE = 1,
 };
 
-inline RecordingHotkeyMode default_recording_hotkey_mode()
+inline RecordingHotkeyMode
+default_recording_hotkey_mode()
 {
 	return RECORDING_HOTKEY_HOLD;
 }
 
-inline bool is_valid_recording_hotkey_mode(int Mode)
+inline bool
+is_valid_recording_hotkey_mode(int Mode)
 {
 	return Mode == RECORDING_HOTKEY_HOLD || Mode == RECORDING_HOTKEY_TOGGLE;
 }

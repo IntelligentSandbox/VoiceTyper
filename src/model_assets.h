@@ -9,15 +9,13 @@
 
 #define VAD_MODEL_RELATIVE "vad_models/ggml-silero-v5.1.2.bin"
 
-inline
-void
+inline void
 query_vad_model_path(GlobalState *AppState)
 {
 	AppState->VadModelPath = platform_join_path(platform_get_exe_dir(), VAD_MODEL_RELATIVE);
 }
 
-inline
-void
+inline void
 query_available_stt_models(GlobalState *AppState)
 {
 	AppState->STTModelNames.clear();

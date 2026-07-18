@@ -22,8 +22,7 @@
 // Platform interface implementations (declared in platform.h)
 // ---------------------------------------------------------------------------
 
-inline
-std::vector<AudioInputDeviceInfo>
+inline std::vector<AudioInputDeviceInfo>
 platform_query_audio_devices()
 {
 	std::vector<AudioInputDeviceInfo> Devices;
@@ -348,8 +347,7 @@ platform_is_key_down(AppKeyCode Key)
 	return (GetAsyncKeyState((int)Key) & 0x8000) != 0;
 }
 
-inline
-std::string
+inline std::string
 platform_get_exe_path()
 {
 	char ExePath[MAX_PATH] = {};
@@ -357,8 +355,7 @@ platform_get_exe_path()
 	return std::string(ExePath);
 }
 
-inline
-std::string
+inline std::string
 platform_get_exe_dir()
 {
 	std::string ExePath = platform_get_exe_path();
@@ -368,8 +365,7 @@ platform_get_exe_dir()
 	return ExePath;
 }
 
-inline
-bool
+inline bool
 platform_ensure_directory(const std::string &Path)
 {
 	if (Path.empty())
@@ -382,8 +378,7 @@ platform_ensure_directory(const std::string &Path)
 	return Error == ERROR_ALREADY_EXISTS;
 }
 
-inline
-std::vector<PlatformFileInfo>
+inline std::vector<PlatformFileInfo>
 platform_list_files(const std::string &Dir)
 {
 	std::vector<PlatformFileInfo> Files;

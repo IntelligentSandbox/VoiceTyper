@@ -69,8 +69,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 // ---------------------------------------------------------------------------
 // D3D11 Setup
 // ---------------------------------------------------------------------------
-static
-bool
+static bool
 create_device_d3d(HWND Hwnd)
 {
 	DXGI_SWAP_CHAIN_DESC Sd = {};
@@ -115,8 +114,7 @@ create_device_d3d(HWND Hwnd)
 	return true;
 }
 
-static
-void
+static void
 cleanup_device_d3d()
 {
 	cleanup_render_target();
@@ -125,8 +123,7 @@ cleanup_device_d3d()
 	if (g_Device)         { g_Device->Release();         g_Device = nullptr; }
 }
 
-static
-void
+static void
 create_render_target()
 {
 	ID3D11Texture2D *BackBuffer = nullptr;
@@ -135,8 +132,7 @@ create_render_target()
 	BackBuffer->Release();
 }
 
-static
-void
+static void
 cleanup_render_target()
 {
 	if (g_RenderTargetView)
@@ -146,8 +142,7 @@ cleanup_render_target()
 	}
 }
 
-static
-bool
+static bool
 load_window_size(int *OutWidth, int *OutHeight)
 {
 	int Width = 0;
@@ -160,8 +155,7 @@ load_window_size(int *OutWidth, int *OutHeight)
 	return true;
 }
 
-static
-void
+static void
 save_window_size(HWND Hwnd)
 {
 	RECT WindowRect = {};
@@ -174,8 +168,7 @@ save_window_size(HWND Hwnd)
 	save_window_size_setting(Width, Height);
 }
 
-static
-LONGLONG
+static LONGLONG
 performance_counter_frequency()
 {
 	if (g_PerformanceCounterFrequency > 0) return g_PerformanceCounterFrequency;
@@ -193,8 +186,7 @@ performance_counter_frequency()
 	return g_PerformanceCounterFrequency;
 }
 
-static
-LONGLONG
+static LONGLONG
 performance_counter_now()
 {
 	LARGE_INTEGER Counter = {};
@@ -202,8 +194,7 @@ performance_counter_now()
 	return Counter.QuadPart;
 }
 
-static
-LONGLONG
+static LONGLONG
 performance_interval_for_hz(int Hz)
 {
 	if (Hz <= 0) Hz = RENDER_REFRESH_FALLBACK_HZ;
@@ -214,8 +205,7 @@ performance_interval_for_hz(int Hz)
 	return Ticks;
 }
 
-static
-DWORD
+static DWORD
 milliseconds_until_counter(LONGLONG Now, LONGLONG Deadline)
 {
 	if (Deadline <= Now) return 0;
@@ -228,8 +218,7 @@ milliseconds_until_counter(LONGLONG Now, LONGLONG Deadline)
 	return (DWORD)Milliseconds;
 }
 
-static
-int
+static int
 detect_monitor_refresh_hz(HWND Hwnd)
 {
 	HMONITOR Monitor = MonitorFromWindow(Hwnd, MONITOR_DEFAULTTONEAREST);
@@ -250,8 +239,7 @@ detect_monitor_refresh_hz(HWND Hwnd)
 	return (int)DevMode.dmDisplayFrequency;
 }
 
-static
-void
+static void
 refresh_render_cadence(HWND Hwnd)
 {
 	g_RenderRefreshHz = detect_monitor_refresh_hz(Hwnd);
@@ -259,15 +247,13 @@ refresh_render_cadence(HWND Hwnd)
 	g_RenderDueNow = true;
 }
 
-static
-bool
+static bool
 window_can_render(HWND Hwnd)
 {
 	return g_RenderTargetView && IsWindowVisible(Hwnd) && !IsIconic(Hwnd);
 }
 
-static
-bool
+static bool
 swap_chain_is_still_occluded()
 {
 	if (!g_SwapChainOccluded) return false;
@@ -283,8 +269,7 @@ swap_chain_is_still_occluded()
 // ---------------------------------------------------------------------------
 // Render a single frame
 // ---------------------------------------------------------------------------
-static
-void
+static void
 render_frame()
 {
 	if (!g_ImGuiReady || !g_AppState) return;

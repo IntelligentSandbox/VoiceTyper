@@ -305,8 +305,7 @@ pipeline_preflight(GlobalState *AppState)
 	return true;
 }
 
-inline
-bool
+inline bool
 start_record_pipeline(GlobalState *AppState)
 {
 	if (!pipeline_preflight(AppState)) return false;
@@ -330,16 +329,14 @@ start_record_pipeline(GlobalState *AppState)
 
 // Signal the record capture to stop (non-blocking). The background thread will
 // finish transcription and restore the button itself via invokeMethod.
-inline
-void
+inline void
 signal_record_stop(GlobalState *AppState)
 {
 	AppState->CaptureRunning.store(false);
 }
 
 // TODO(warren): kinda janky still.
-inline
-bool
+inline bool
 start_streaming_pipeline(GlobalState *AppState)
 {
 	if (!pipeline_preflight(AppState)) return false;
@@ -362,8 +359,7 @@ start_streaming_pipeline(GlobalState *AppState)
 	return true;
 }
 
-inline
-void
+inline void
 stop_streaming_pipeline(GlobalState *AppState, bool FinalizeCurrentChunk = false)
 {
 	if (!AppState->CaptureRunning.load() && !AppState->CaptureThread.joinable()) return;

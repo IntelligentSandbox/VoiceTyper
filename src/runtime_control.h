@@ -5,15 +5,13 @@
 #include "settings.h"
 #include "sounds.h"
 
-inline
-void
+inline void
 runtime_update_audio_input_selection(GlobalState *AppState, int Index)
 {
 	AppState->CurrentAudioDeviceIndex = Index;
 }
 
-static
-void
+static void
 runtime_model_transition_thread(GlobalState *AppState, int ModelIndex,
 	int InferenceDeviceIndex, bool UnloadCurrentModel,
 	ModelTransitionFailure FailureCode)
@@ -37,8 +35,7 @@ runtime_model_transition_thread(GlobalState *AppState, int ModelIndex,
 	AppState->IsModelTransitioning.store(false);
 }
 
-inline
-ModelTransitionFailure
+inline ModelTransitionFailure
 runtime_finish_model_transition(GlobalState *AppState)
 {
 	if (AppState->IsModelTransitioning.load())
@@ -53,8 +50,7 @@ runtime_finish_model_transition(GlobalState *AppState)
 		(int)MODEL_TRANSITION_FAILURE_NONE);
 }
 
-inline
-bool
+inline bool
 runtime_start_model_transition(GlobalState *AppState, int ModelIndex,
 	int InferenceDeviceIndex, bool UnloadCurrentModel,
 	ModelTransitionFailure FailureCode)
@@ -80,8 +76,7 @@ runtime_start_model_transition(GlobalState *AppState, int ModelIndex,
 	return true;
 }
 
-inline
-ModelTransitionFailure
+inline ModelTransitionFailure
 runtime_update_inference_device_selection(GlobalState *AppState, int Index)
 {
 	if (Index < 0 || Index >= (int)AppState->InferenceDevices.size())
@@ -119,16 +114,14 @@ runtime_update_inference_device_selection(GlobalState *AppState, int Index)
 	return MODEL_TRANSITION_FAILURE_NONE;
 }
 
-inline
-void
+inline void
 runtime_update_whisper_thread_count(GlobalState *AppState, int Count)
 {
 	if (Count < 1) Count = 1;
 	AppState->WhisperThreadCount = Count;
 }
 
-inline
-ModelTransitionFailure
+inline ModelTransitionFailure
 runtime_update_stt_model_selection(GlobalState *AppState, int Index)
 {
 	AppState->CurrentSTTModelIndex = Index;
@@ -151,8 +144,7 @@ runtime_update_stt_model_selection(GlobalState *AppState, int Index)
 	return MODEL_TRANSITION_FAILURE_NONE;
 }
 
-inline
-bool
+inline bool
 runtime_start_recording(GlobalState *AppState)
 {
 	if (AppState->IsModelTransitioning.load())
@@ -180,8 +172,7 @@ runtime_start_recording(GlobalState *AppState)
 	return true;
 }
 
-inline
-void
+inline void
 runtime_stop_recording(GlobalState *AppState)
 {
 	if (!AppState->IsRecording)
@@ -192,8 +183,7 @@ runtime_stop_recording(GlobalState *AppState)
 	signal_record_stop(AppState);
 }
 
-inline
-void
+inline void
 runtime_toggle_recording(GlobalState *AppState)
 {
 	if (AppState->IsRecording)
@@ -206,8 +196,7 @@ runtime_toggle_recording(GlobalState *AppState)
 	}
 }
 
-inline
-void
+inline void
 runtime_cancel_recording(GlobalState *AppState)
 {
 	if (!AppState->IsRecording) return;
@@ -219,8 +208,7 @@ runtime_cancel_recording(GlobalState *AppState)
 	AppState->IsRecording = false;
 }
 
-inline
-void
+inline void
 runtime_toggle_streaming(GlobalState *AppState)
 {
 	if (AppState->IsModelTransitioning.load())
@@ -249,8 +237,7 @@ runtime_toggle_streaming(GlobalState *AppState)
 	}
 }
 
-inline
-ModelTransitionFailure
+inline ModelTransitionFailure
 runtime_toggle_stt_model_load(GlobalState *AppState)
 {
 	if (AppState->IsModelTransitioning.load())

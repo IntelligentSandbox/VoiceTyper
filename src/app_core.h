@@ -18,8 +18,7 @@ struct AppFrameResult
 	ModelTransitionFailure ModelFailure;
 };
 
-inline
-void
+inline void
 app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 {
 	AppState->IsRecording = false;
@@ -50,8 +49,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	query_hotkey_settings(AppState);
 }
 
-inline
-AppFrameResult
+inline AppFrameResult
 app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool HotkeysEnabled)
 {
 	AppFrameResult Result = {};
@@ -95,8 +93,7 @@ app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool 
 	return Result;
 }
 
-inline
-void
+inline void
 app_shutdown_runtime(GlobalState *AppState)
 {
 	AppState->StreamingFinalizeOnStop.store(false);

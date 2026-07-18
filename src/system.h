@@ -4,8 +4,7 @@
 #include <thread>
 #include <atomic>
 
-inline
-int
+inline int
 query_logical_processor_count()
 {
 	unsigned int Count = std::thread::hardware_concurrency();
@@ -23,8 +22,7 @@ query_logical_processor_count()
 // ---------------------------------------------------------------------------
 // System queries
 // ---------------------------------------------------------------------------
-inline
-void
+inline void
 query_audio_input_devices(GlobalState *AppState)
 {
 	AppState->CurrentAudioDeviceIndex = -1;
@@ -53,8 +51,7 @@ query_audio_input_devices(GlobalState *AppState)
 	}
 }
 
-inline
-void
+inline void
 query_inference_devices(GlobalState *AppState)
 {
 	AppState->InferenceDevices.clear();
@@ -88,8 +85,7 @@ query_inference_devices(GlobalState *AppState)
 	}
 }
 
-inline
-void
+inline void
 query_whisper_thread_count(GlobalState *AppState)
 {
 	int LogicalCores = query_logical_processor_count();
@@ -99,8 +95,7 @@ query_whisper_thread_count(GlobalState *AppState)
 	AppState->WhisperThreadCount = ThreadCount;
 }
 
-inline
-void
+inline void
 query_hotkey_settings(GlobalState *AppState)
 {
 	AppState->RecordHotkey       = default_record_hotkey();

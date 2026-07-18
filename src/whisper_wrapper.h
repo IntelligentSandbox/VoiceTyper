@@ -3,7 +3,8 @@
 #include "whisper.h"
 #include <string>
 
-static void whisper_log_suppress(ggml_log_level, const char *, void *) {}
+static void
+whisper_log_suppress(ggml_log_level, const char *, void *) {}
 
 struct WhisperModelState
 {
@@ -13,8 +14,7 @@ struct WhisperModelState
 	std::string ModelPath;
 };
 
-inline
-void
+inline void
 init_whisper_state(WhisperModelState *State)
 {
 	State->Context = nullptr;
@@ -26,8 +26,7 @@ init_whisper_state(WhisperModelState *State)
 
 // Returns true on success, false on failure.
 // InferenceDeviceIndex: 0 = CPU, >= 1 = GPU (CUDA device = InferenceDeviceIndex - 1)
-inline
-bool
+inline bool
 load_whisper_model(WhisperModelState *State, const char *ModelPath,
 	int ModelIndex, int InferenceDeviceIndex)
 {
@@ -58,8 +57,7 @@ load_whisper_model(WhisperModelState *State, const char *ModelPath,
 	return true;
 }
 
-inline
-void
+inline void
 unload_whisper_model(WhisperModelState *State)
 {
 	if (!State->IsLoaded || State->Context == nullptr)
@@ -72,8 +70,7 @@ unload_whisper_model(WhisperModelState *State)
 	State->ModelPath = "";
 }
 
-inline
-bool
+inline bool
 is_whisper_model_loaded(WhisperModelState *State)
 {
 	return State->IsLoaded && State->Context != nullptr;

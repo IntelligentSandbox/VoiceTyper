@@ -4,15 +4,13 @@
 
 #include <string>
 
-inline
-bool
+inline bool
 app_key_is_down(AppKeyCode Key)
 {
 	return platform_is_key_down(Key);
 }
 
-inline
-std::string
+inline std::string
 app_key_label(AppKeyCode Key)
 {
 	if (Key == APP_KEY_NONE)
@@ -48,8 +46,7 @@ app_key_label(AppKeyCode Key)
 	}
 }
 
-inline
-std::string
+inline std::string
 hotkey_to_label(const HotkeyConfig &Config)
 {
 	std::string Label;
@@ -70,8 +67,7 @@ hotkey_to_label(const HotkeyConfig &Config)
 	return Label;
 }
 
-inline
-AppHotkeyModifiers
+inline AppHotkeyModifiers
 poll_modifier_state()
 {
 	AppHotkeyModifiers Mods = 0;
@@ -82,8 +78,7 @@ poll_modifier_state()
 	return Mods;
 }
 
-inline
-AppKeyCode
+inline AppKeyCode
 poll_nonmodifier_key()
 {
 	for (AppKeyCode Key = 'A'; Key <= 'Z'; Key++)
@@ -111,8 +106,7 @@ poll_nonmodifier_key()
 	return APP_KEY_NONE;
 }
 
-inline
-bool
+inline bool
 check_modifier_state(AppHotkeyModifiers Modifiers)
 {
 	bool CtrlRequired  = (Modifiers & HOTKEY_MOD_CTRL)  != 0;
@@ -137,8 +131,7 @@ check_modifier_state(AppHotkeyModifiers Modifiers)
 	return true;
 }
 
-inline
-bool
+inline bool
 is_hotkey_down(const HotkeyConfig &Config)
 {
 	if (!check_modifier_state(Config.Modifiers)) return false;

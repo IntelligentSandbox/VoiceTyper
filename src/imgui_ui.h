@@ -17,8 +17,7 @@
 // ---------------------------------------------------------------------------
 // Styled button helper
 // ---------------------------------------------------------------------------
-static
-bool
+static bool
 colored_button(const char *Label, const ImVec2 &Size, const ImVec4 &Color, bool Enabled = true)
 {
 	if (!Enabled)
@@ -58,8 +57,7 @@ colored_button(const char *Label, const ImVec2 &Size, const ImVec4 &Color, bool 
 // ---------------------------------------------------------------------------
 // Combo helper for std::vector<std::string>
 // ---------------------------------------------------------------------------
-static
-bool
+static bool
 string_combo(const char *Label, int *CurrentIndex, const std::vector<std::string> &Items)
 {
 	if (Items.empty()) return false;
@@ -88,8 +86,7 @@ string_combo(const char *Label, int *CurrentIndex, const std::vector<std::string
 	return Changed;
 }
 
-static
-std::string
+static std::string
 record_button_idle_label(GlobalState *AppState)
 {
 	if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_HOLD)
@@ -98,22 +95,19 @@ record_button_idle_label(GlobalState *AppState)
 	return "Record (" + hotkey_to_label(AppState->RecordHotkey) + ")";
 }
 
-static
-std::string
+static std::string
 cancel_record_button_idle_label(GlobalState *AppState)
 {
 	return "Cancel (" + hotkey_to_label(AppState->CancelRecordHotkey) + ")";
 }
 
-static
-std::string
+static std::string
 stream_button_idle_label(GlobalState *AppState)
 {
 	return "Start Streaming (" + hotkey_to_label(AppState->StreamHotkey) + ")";
 }
 
-static
-std::string
+static std::string
 load_model_button_idle_label(GlobalState *AppState)
 {
 	return "Load Selected STT Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
@@ -122,8 +116,7 @@ load_model_button_idle_label(GlobalState *AppState)
 // ---------------------------------------------------------------------------
 // Settings Dialog - select action
 // ---------------------------------------------------------------------------
-static
-void
+static void
 settings_select_action(SettingsWindowState *S, int Action)
 {
 	S->SelectedAction = Action;
@@ -138,8 +131,7 @@ settings_select_action(SettingsWindowState *S, int Action)
 // ---------------------------------------------------------------------------
 // Settings Dialog - initialize state
 // ---------------------------------------------------------------------------
-static
-void
+static void
 init_settings_state(GlobalState *AppState)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
@@ -167,8 +159,7 @@ init_settings_state(GlobalState *AppState)
 // ---------------------------------------------------------------------------
 // Settings Dialog
 // ---------------------------------------------------------------------------
-static
-void
+static void
 settings_preview_sound(GlobalState *AppState, SettingsWindowState *S, int FreqHz, bool Force)
 {
 	double Now = ImGui::GetTime();
@@ -177,8 +168,7 @@ settings_preview_sound(GlobalState *AppState, SettingsWindowState *S, int FreqHz
 	S->LastPreviewTime = Now;
 }
 
-static
-void
+static void
 render_settings_ui(GlobalState *AppState)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
@@ -468,8 +458,7 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::EndPopup();
 }
 
-static
-void
+static void
 render_toast_ui(GlobalState *AppState, ImGuiIO &Io)
 {
 	if (!AppState->Ui.ToastMessage.empty() && ImGui::GetTime() < AppState->Ui.ToastExpireTime)
@@ -505,8 +494,7 @@ render_toast_ui(GlobalState *AppState, ImGuiIO &Io)
 // ---------------------------------------------------------------------------
 // Main Window
 // ---------------------------------------------------------------------------
-inline
-void
+inline void
 render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 {
 	ImGui::SetNextWindowPos(ImVec2(0, 0));
