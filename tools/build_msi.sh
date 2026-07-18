@@ -25,7 +25,7 @@ fi
 
 BUILD_OUTPUT="build/Release_${VARIANT}"
 DIST_DIR="dist"
-MSI_OUTPUT="$DIST_DIR/voicetyper-v${VERSION}-${VARIANT}.msi"
+MSI_OUTPUT="$DIST_DIR/VoiceTyper-v${VERSION}-${VARIANT}.msi"
 
 if [ -n "$OUTPUT_PATH" ]; then
 	MSI_OUTPUT="$OUTPUT_PATH"
