@@ -2,19 +2,21 @@
 Voice Typer aspires to be a native application that you can use to synthesize text
 from your voice using on device NN models that can be used in any of your other 
 desktop applications such as your web browser, note taking app, or even messaging
-app that doesn't have a voice input feature. Later down the line, we can also have
-custom user commands via keywords/keyphrases.
+app that doesn't have a voice input feature. 
 
 ## Disclaimers:
-AI is used to write code in this project with human review done at our discretion.
+LLMs are used to write code in this project with human review done at our discretion.
 We try our best to make something that is fast, usable, fully offline with minimal dependencies.
 Let the results and code quality speak for themselves...the sloppening...
 Disclosure of all harnesses/models will be done at best effort.
-Coding Agent Harnesses Used: [OpenCode](https://github.com/anomalyco/opencode), [Claude Code](https://code.claude.com/docs/en/overview)
+LLM Coding Agent Harnesses Used:
+- [OpenCode](https://github.com/anomalyco/opencode)
+- [Claude Code](https://code.claude.com/docs/en/overview)
 LLMs Used:
 - [Claude Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)
 - [OpenAI GPT-5.5](https://platform.openai.com/docs/models/gpt-5.5)
 - [OpenCode Zen Big Pickle](https://grokipedia.com/page/Big_Pickle_model)
+- [GLM 5.2](https://z.ai/blog/glm-5.2)
 
 ## Dependencies
 Sources copied directly into the repo:
@@ -28,11 +30,13 @@ Sources copied directly into the repo:
 - Originally used [Qt](https://www.qt.io/development/qt-framework) for the ui, but wanted something simpler that we could just embed into the project source.
 
 ## Getting Started
+Currently we only target Windows OS.
 Precompiled binary releases are available via GitHub Releases.
 
 To compile the project for yourself, you will need:
-- C++ compiler (e.g. Visual Studio 17 2022 MSVC)
+- C++ compiler toolchain (e.g. Visual Studio 17 2022 MSVC)
 - `cmake` (e.g. 3.31.6)
-- NVIDIA CUDA toolkit (if you want to build with cuda capability) (e.g. v13.2)
+Optional
+- NVIDIA CUDA toolkit (e.g. v13.2)
 
 To download ggml whisper models, get them from huggingface [here](https://huggingface.co/ggerganov/whisper.cpp/tree/main).
