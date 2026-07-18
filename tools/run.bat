@@ -1,6 +1,10 @@
 @echo off
 setlocal EnableExtensions
 
+set "SCRIPT_DIR=%~dp0"
+if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+cd /d "%SCRIPT_DIR%\.."
+
 set "VARIANT=cpu"
 
 if /I "%~1"=="cuda" (
@@ -14,7 +18,7 @@ set "EXE=build\Release_%VARIANT%\VoiceTyper.exe"
 
 if not exist "%EXE%" (
 	echo Error: "%EXE%" does not exist.
-	echo Run "build.bat %~1" first.
+	echo Run "tools\build.bat %~1" first.
 	exit /b 1
 )
 

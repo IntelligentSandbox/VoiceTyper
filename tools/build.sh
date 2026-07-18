@@ -1,5 +1,7 @@
 #!/bin/bash
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 BUILD_TYPE="Release"
 USE_CUDA=OFF
 
@@ -40,6 +42,8 @@ sync_asset_dir() {
 
 	cp -ru "$source_dir/." "$output_dir/"
 }
+
+cd "$ROOT_DIR" || exit 1
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
