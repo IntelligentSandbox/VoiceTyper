@@ -2,6 +2,9 @@
 
 set -e
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR" || exit 1
+
 USE_CUDA=OFF
 OUTPUT_PATH=""
 
@@ -30,7 +33,7 @@ fi
 
 if [ ! -d "$BUILD_OUTPUT" ]; then
 	echo "Error: build output directory '$BUILD_OUTPUT' does not exist."
-	echo "Run './build_git_bash.sh${USE_CUDA:+ cuda}' first."
+	echo "Run 'tools/build.sh${USE_CUDA:+ cuda}' first."
 	exit 1
 fi
 

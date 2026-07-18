@@ -1,9 +1,9 @@
 build/
 notes/
-compile_commands.json
 stt_models/
 vad_models/
-docs/tasks.md
-.claude/settings.local.json
 dist/
-docs/ideas.md
+docs/
+.dev/
+.claude/settings.local.json
+compile_commands.json

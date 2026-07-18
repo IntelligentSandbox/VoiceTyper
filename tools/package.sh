@@ -2,6 +2,9 @@
 
 set -e
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR" || exit 1
+
 REBUILD=0
 
 for arg in "$@"; do
@@ -67,7 +70,7 @@ require_build_output() {
 	fi
 
 	echo "Error: $variant build output '$build_output' does not exist."
-	echo "Run '$build_command' first, or run './package.sh build'."
+	echo "Run '$build_command' first, or run 'tools/package.sh build'."
 	exit 1
 }
 
@@ -127,8 +130,8 @@ if [ "$REBUILD" = "1" ]; then
 	rm -rf "$CUDA_BUILD"
 	rm -rf "$CPU_BUILD"
 else
-	require_build_output "$CUDA_BUILD" "cuda" "./build.sh cuda"
-	require_build_output "$CPU_BUILD" "cpu" "./build.sh"
+	require_build_output "$CUDA_BUILD" "cuda" "tools/build.sh cuda"
+	require_build_output "$CPU_BUILD" "cpu" "tools/build.sh"
 fi
 rm -rf "$DIST_DIR"
 rm -rf "$STAGE_DIR"
@@ -138,13 +141,13 @@ if [ "$REBUILD" = "1" ]; then
 	echo ""
 	echo "=== Building Release (CUDA) ==="
 	START=$SECONDS
-	./build.sh cuda
+	tools/build.sh cuda
 	echo "    Build took $((SECONDS - START))s"
 
 	echo ""
 	echo "=== Building Release (CPU) ==="
 	START=$SECONDS
-	./build.sh
+	tools/build.sh
 	echo "    Build took $((SECONDS - START))s"
 fi
 

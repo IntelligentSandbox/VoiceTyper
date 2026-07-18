@@ -13,8 +13,8 @@ CHANGELOG_FILE="$DIST_DIR/release-notes-$TAG.md"
 usage() {
 	cat <<EOF
 Usage:
-  ./release changelog [--git|--github] [--file PATH]
-  ./release push [--draft] [--prerelease] [--file PATH] [--remote NAME]
+  tools/release.sh changelog [--git|--github] [--file PATH]
+  tools/release.sh push [--draft] [--prerelease] [--file PATH] [--remote NAME]
 
 Actions:
   changelog   Regenerate editable release notes for $TAG.
@@ -200,7 +200,7 @@ collect_release_assets() {
 	done
 
 	if [ ! -f "$CHANGELOG_FILE" ]; then
-		die "Release notes file '$CHANGELOG_FILE' does not exist. Run './release changelog' first."
+		die "Release notes file '$CHANGELOG_FILE' does not exist. Run 'tools/release.sh changelog' first."
 	fi
 
 	if [ "${#RELEASE_ASSETS[@]}" -eq 0 ]; then
@@ -208,7 +208,7 @@ collect_release_assets() {
 	fi
 
 	if [ "$has_package" = "0" ]; then
-		die "No package artifacts found in $DIST_DIR. Run './package.sh' first."
+		die "No package artifacts found in $DIST_DIR. Run 'tools/package.sh' first."
 	fi
 }
 
