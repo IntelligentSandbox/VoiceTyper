@@ -32,9 +32,9 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->Platform.OwnWindow = OwnWindow;
 	AppState->Ui.IsSettingsDialogOpen = false;
 	AppState->PlayRecordSound = false;
-	AppState->StartSound = { SOUND_DEFAULT_START_FREQ, SOUND_DEFAULT_VOLUME };
-	AppState->StopSound = { SOUND_DEFAULT_STOP_FREQ, SOUND_DEFAULT_VOLUME };
-	AppState->CancelSound = { SOUND_DEFAULT_CANCEL_FREQ, SOUND_DEFAULT_VOLUME };
+	AppState->StartSoundFreq = SOUND_DEFAULT_START_FREQ;
+	AppState->StopSoundFreq = SOUND_DEFAULT_STOP_FREQ;
+	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;
 	AppState->UseCharByCharInjection = false;
 	AppState->RecordHotkeyMode = default_recording_hotkey_mode();
 

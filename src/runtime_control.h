@@ -176,7 +176,7 @@ runtime_start_recording(GlobalState *AppState)
 		return false;
 	}
 
-	if (AppState->PlayRecordSound) play_start_recording_sound(&AppState->Platform, &AppState->StartSound);
+	if (AppState->PlayRecordSound) play_start_recording_sound(&AppState->Platform, AppState->StartSoundFreq);
 	return true;
 }
 
@@ -188,7 +188,7 @@ runtime_stop_recording(GlobalState *AppState)
 		return;
 
 	AppState->IsRecording = false;
-	if (AppState->PlayRecordSound) play_stop_recording_sound(&AppState->Platform, &AppState->StopSound);
+	if (AppState->PlayRecordSound) play_stop_recording_sound(&AppState->Platform, AppState->StopSoundFreq);
 	signal_record_stop(AppState);
 }
 
@@ -214,7 +214,7 @@ runtime_cancel_recording(GlobalState *AppState)
 
 	AppState->CancelRequested.store(true);
 	signal_record_stop(AppState);
-	if (AppState->PlayRecordSound) play_cancel_recording_sound(&AppState->Platform, &AppState->CancelSound);
+	if (AppState->PlayRecordSound) play_cancel_recording_sound(&AppState->Platform, AppState->CancelSoundFreq);
 
 	AppState->IsRecording = false;
 }
