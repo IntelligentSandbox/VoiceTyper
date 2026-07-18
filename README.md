@@ -1,6 +1,6 @@
 # VoiceTyper
 VoiceTyper aspires to be a fast, lightweight, native, fully-local and offline dictation application.
-As a standalone program, it that can be used to input text directly from your voice into other 
+As a standalone program, it can be used to input text directly from your voice into other 
 desktop applications such as your web browser, note taking app, or even messaging
 app that doesn't have a voice input feature. 
 
