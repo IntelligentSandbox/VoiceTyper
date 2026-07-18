@@ -194,9 +194,9 @@ render_settings_ui(GlobalState *AppState)
 	AppState->Ui.IsSettingsDialogOpen = true;
 
 #ifdef VOICETYPER_CUDA
-	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION);
+	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION_FULL);
 #else
-	ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION);
+	ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION_FULL);
 #endif
 
 	ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",

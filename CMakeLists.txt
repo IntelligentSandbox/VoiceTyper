@@ -5,6 +5,42 @@ string(STRIP "${VOICETYPER_VERSION}" VOICETYPER_VERSION)
 
 project(VoiceTyper VERSION ${VOICETYPER_VERSION} LANGUAGES C CXX)
 
+# Build a full version string. The VERSION file holds the version currently
+# being developed. If HEAD is exactly at the v$VERSION tag, this is a clean
+# release build and the full version is just $VERSION. Otherwise it is a dev
+# build and the short SHA is appended: "$VERSION-dev-<sha>".
+# Examples with VERSION=0.1.8:
+#   HEAD == v0.1.8 tag  -> "0.1.8"
+#   HEAD past v0.1.8    -> "0.1.8-dev-c893b49"
+#   v0.1.8 tag missing  -> "0.1.8-dev-c893b49"
+#   git unavailable     -> "0.1.8"
+set(VOICETYPER_VERSION_FULL "${VOICETYPER_VERSION}")
+
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+	execute_process(
+		COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+		WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+		OUTPUT_VARIABLE _git_sha
+		RESULT_VARIABLE _sha_result
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+		ERROR_QUIET
+	)
+	execute_process(
+		COMMAND ${GIT_EXECUTABLE} tag --points-at HEAD --list "v${VOICETYPER_VERSION}"
+		WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+		OUTPUT_VARIABLE _head_tag
+		RESULT_VARIABLE _tag_result
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+		ERROR_QUIET
+	)
+	if(_sha_result EQUAL 0 AND _git_sha AND NOT _head_tag)
+		set(VOICETYPER_VERSION_FULL "${VOICETYPER_VERSION}-dev-${_git_sha}")
+	endif()
+endif()
+
+message(STATUS "VoiceTyper version: ${VOICETYPER_VERSION} (full: ${VOICETYPER_VERSION_FULL})")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -122,7 +158,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 	VOICETYPER_RECORD_WHISPER_VAD=$<BOOL:${VOICETYPER_RECORD_WHISPER_VAD}>
 	VOICETYPER_APP_UPDATE_HZ=${VOICETYPER_APP_UPDATE_HZ}
 	VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS=${VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS}
-	VOICETYPER_VERSION="${VOICETYPER_VERSION}"
+	VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -148,7 +184,7 @@ target_include_directories(VoiceTyperBench PRIVATE
 target_compile_definitions(VoiceTyperBench PRIVATE
 	$<$<CONFIG:Debug>:DEBUG>
 	$<$<BOOL:${VOICETYPER_CUDA}>:VOICETYPER_CUDA>
-	VOICETYPER_VERSION="${VOICETYPER_VERSION}"
+	VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
 )
 
 target_link_libraries(VoiceTyperBench PRIVATE whisper)
