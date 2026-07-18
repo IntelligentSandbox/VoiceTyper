@@ -55,5 +55,16 @@ transcribe_pcm_to_string(
 		}
 	}
 
+	size_t Start = OutText->find_first_not_of(" \t\n\r");
+	if (Start == std::string::npos)
+	{
+		OutText->clear();
+	}
+	else
+	{
+		size_t End = OutText->find_last_not_of(" \t\n\r");
+		*OutText = OutText->substr(Start, End - Start + 1);
+	}
+
 	return 0;
 }
