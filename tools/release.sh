@@ -63,7 +63,7 @@ generate_git_changelog() {
 	commits="$(git log "$range" --pretty=format:'- %s (%h)')"
 
 	{
-		printf "# Voice Typer %s\n\n" "$TAG"
+		printf "# VoiceTyper %s\n\n" "$TAG"
 		if [ -n "$previous" ]; then
 			printf "Changes since %s:\n\n" "$previous"
 		else
@@ -94,7 +94,7 @@ generate_github_changelog() {
 	fi
 
 	{
-		printf "# Voice Typer %s\n\n" "$TAG"
+		printf "# VoiceTyper %s\n\n" "$TAG"
 		gh api 'repos/{owner}/{repo}/releases/generate-notes' "${api_args[@]}" --jq '.body'
 		printf "\n"
 	} > "$CHANGELOG_FILE"
@@ -254,13 +254,13 @@ run_push() {
 	require_new_tag_and_release
 	collect_release_assets
 
-	git tag -a "$TAG" -m "Voice Typer $TAG"
+	git tag -a "$TAG" -m "VoiceTyper $TAG"
 	git push "$REMOTE" "$TAG"
 
 	release_args=(
 		"$TAG"
 		"${RELEASE_ASSETS[@]}"
-		--title "Voice Typer $TAG"
+		--title "VoiceTyper $TAG"
 		--notes-file "$CHANGELOG_FILE"
 		--verify-tag
 	)
