@@ -124,12 +124,6 @@ inline bool is_valid_recording_hotkey_mode(int Mode)
 	return Mode == RECORDING_HOTKEY_HOLD || Mode == RECORDING_HOTKEY_TOGGLE;
 }
 
-struct SoundConfig
-{
-	int FreqHz;
-	int Volume;
-};
-
 enum ModelTransitionFailure
 {
 	MODEL_TRANSITION_FAILURE_NONE = 0,

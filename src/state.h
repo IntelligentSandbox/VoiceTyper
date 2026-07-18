@@ -25,15 +25,16 @@
 // ---------------------------------------------------------------------------
 // Sound Config
 // ---------------------------------------------------------------------------
-#define SOUND_DEFAULT_START_FREQ   1000
-#define SOUND_DEFAULT_STOP_FREQ    800
-#define SOUND_DEFAULT_CANCEL_FREQ  400
+#define SOUND_DEFAULT_START_FREQ   880
+#define SOUND_DEFAULT_STOP_FREQ    659
+#define SOUND_DEFAULT_CANCEL_FREQ  330
 #define SOUND_DEFAULT_VOLUME       50
 #define SOUND_MIN_FREQ             200
 #define SOUND_MAX_FREQ             2000
 #define SOUND_START_DURATION_MS    200
 #define SOUND_STOP_DURATION_MS     200
 #define SOUND_CANCEL_DURATION_MS   300
+#define SOUND_PREVIEW_DURATION_MS  120
 
 struct HotkeyCaptureState
 {
@@ -52,17 +53,12 @@ struct SettingsWindowState
 	HotkeyConfig TempHotkeys[4];
 	RecordingHotkeyMode TempRecordHotkeyMode;
 	bool TempPlayRecordSound;
-	SoundConfig TempStartSound;
-	SoundConfig TempStopSound;
-	SoundConfig TempCancelSound;
+	int TempStartSoundFreq;
+	int TempStopSoundFreq;
+	int TempCancelSoundFreq;
 	bool TempUseCharByCharInjection;
 	int TempWhisperThreadCount;
-	char TempStartSoundFreqText[16];
-	char TempStartSoundVolumeText[16];
-	char TempStopSoundFreqText[16];
-	char TempStopSoundVolumeText[16];
-	char TempCancelSoundFreqText[16];
-	char TempCancelSoundVolumeText[16];
+	double LastPreviewTime;
 };
 
 // ---------------------------------------------------------------------------
@@ -82,9 +78,9 @@ struct CoreRuntimeState
 	bool IsStreaming;
 	std::atomic<bool> IsModelTransitioning;
 	bool PlayRecordSound;
-	SoundConfig StartSound;
-	SoundConfig StopSound;
-	SoundConfig CancelSound;
+	int StartSoundFreq;
+	int StopSoundFreq;
+	int CancelSoundFreq;
 	bool UseCharByCharInjection;
 
 	// Audio - platform-agnostic

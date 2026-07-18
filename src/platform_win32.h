@@ -6,6 +6,8 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <thread>
+#include <cmath>
 
 #include <windows.h>
 #include <mmsystem.h>
@@ -265,57 +267,76 @@ platform_set_taskbar_icon(void *Window, const char *PngPath)
 }
 
 inline void
-platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs, int Volume)
+platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs)
 {
 	(void)Platform;
-	if (Volume <= 0) return;
-	if (Volume > 100) Volume = 100;
+	if (DurationMs <= 0) return;
+	if (FreqHz < 20) return;
+
+	const int FixedVolume = SOUND_DEFAULT_VOLUME;
+	if (FixedVolume <= 0) return;
 
 	const int SampleRate = 44100;
 	const int NumSamples = (SampleRate * DurationMs) / 1000;
-	const int FadeMs = 5;
-	const int FadeSamples = (SampleRate * FadeMs) / 1000;
+	const int AttackMs = 8;
+	const int AttackSamples = (SampleRate * AttackMs) / 1000;
 
-	WAVEFORMATEX Wfx = {};
-	Wfx.wFormatTag = WAVE_FORMAT_PCM;
-	Wfx.nChannels = 1;
-	Wfx.nSamplesPerSec = SampleRate;
-	Wfx.wBitsPerSample = 16;
-	Wfx.nBlockAlign = Wfx.nChannels * Wfx.wBitsPerSample / 8;
-	Wfx.nAvgBytesPerSec = Wfx.nSamplesPerSec * Wfx.nBlockAlign;
+	std::thread([FreqHz, DurationMs, FixedVolume, SampleRate, NumSamples, AttackSamples]() {
+		WAVEFORMATEX Wfx = {};
+		Wfx.wFormatTag = WAVE_FORMAT_PCM;
+		Wfx.nChannels = 1;
+		Wfx.nSamplesPerSec = SampleRate;
+		Wfx.wBitsPerSample = 16;
+		Wfx.nBlockAlign = Wfx.nChannels * Wfx.wBitsPerSample / 8;
+		Wfx.nAvgBytesPerSec = Wfx.nSamplesPerSec * Wfx.nBlockAlign;
 
-	HWAVEOUT HWaveOut = nullptr;
-	if (waveOutOpen(&HWaveOut, WAVE_MAPPER, &Wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
-		return;
+		HWAVEOUT HWaveOut = nullptr;
+		if (waveOutOpen(&HWaveOut, WAVE_MAPPER, &Wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
+			return;
 
-	short *Buffer = new short[NumSamples];
-	float Amplitude = (Volume / 100.0f) * 32767.0f;
-	const float Pi2 = 6.2831853f;
+		short *Buffer = new short[NumSamples];
+		const float PeakAmplitude = (FixedVolume / 100.0f) * 32767.0f;
+		const float Pi2 = 6.2831853f;
+		const float Harmonic2Gain = 0.18f;
+		const float Harmonic3Gain = 0.06f;
+		const float Norm = 1.0f / (1.0f + Harmonic2Gain + Harmonic3Gain);
+		const float TauSec = -(DurationMs / 1000.0f) / logf(0.05f);
+		const float DecayPerSample = expf(-1.0f / (SampleRate * TauSec));
 
-	for (int i = 0; i < NumSamples; i++)
-	{
-		float t = (float)i / (float)SampleRate;
-		float Sample = Amplitude * sinf(Pi2 * FreqHz * t);
-		if (i < FadeSamples)
-			Sample *= (float)i / (float)FadeSamples;
-		else if (i >= NumSamples - FadeSamples)
-			Sample *= (float)(NumSamples - 1 - i) / (float)FadeSamples;
-		Buffer[i] = (short)Sample;
-	}
+		float Amp = 1.0f;
+		for (int i = 0; i < NumSamples; i++)
+		{
+			float t = (float)i / (float)SampleRate;
+			float Sample = sinf(Pi2 * FreqHz * t)
+			             + Harmonic2Gain * sinf(Pi2 * 2.0f * FreqHz * t)
+			             + Harmonic3Gain * sinf(Pi2 * 3.0f * FreqHz * t);
+			Sample *= Norm;
 
-	WAVEHDR Hdr = {};
-	Hdr.lpData = (LPSTR)Buffer;
-	Hdr.dwBufferLength = NumSamples * sizeof(short);
+			Amp *= DecayPerSample;
+			float Env = Amp;
+			if (i < AttackSamples)
+				Env *= (float)i / (float)AttackSamples;
 
-	waveOutPrepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
-	waveOutWrite(HWaveOut, &Hdr, sizeof(Hdr));
+			Sample *= PeakAmplitude * Env;
+			if (Sample > 32767.0f) Sample = 32767.0f;
+			if (Sample < -32768.0f) Sample = -32768.0f;
+			Buffer[i] = (short)Sample;
+		}
 
-	while (!(Hdr.dwFlags & WHDR_DONE))
-		Sleep(1);
+		WAVEHDR Hdr = {};
+		Hdr.lpData = (LPSTR)Buffer;
+		Hdr.dwBufferLength = NumSamples * sizeof(short);
 
-	waveOutUnprepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
-	waveOutClose(HWaveOut);
-	delete[] Buffer;
+		waveOutPrepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
+		waveOutWrite(HWaveOut, &Hdr, sizeof(Hdr));
+
+		while (!(Hdr.dwFlags & WHDR_DONE))
+			Sleep(1);
+
+		waveOutUnprepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
+		waveOutClose(HWaveOut);
+		delete[] Buffer;
+	}).detach();
 }
 
 inline bool

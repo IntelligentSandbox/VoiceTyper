@@ -7,9 +7,7 @@
 #include "settings.h"
 #include "control.h"
 
-#include <cerrno>
 #include <cstdio>
-#include <cstdlib>
 
 #define BUTTON_COLOR_GREEN   ImVec4(0.0f, 0.50f, 0.0f, 1.0f)
 #define BUTTON_COLOR_RED     ImVec4(0.75f, 0.07f, 0.13f, 1.0f)
@@ -121,71 +119,6 @@ load_model_button_idle_label(GlobalState *AppState)
 	return "Load Selected STT Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
 }
 
-static
-void
-format_int_text(char *Buffer, size_t BufferSize, int Value)
-{
-	snprintf(Buffer, BufferSize, "%d", Value);
-}
-
-static
-bool
-parse_bounded_int_text(const char *Text, int Min, int Max, int *OutValue)
-{
-	if (!Text || Text[0] == '\0')
-		return false;
-
-	errno = 0;
-	char *End = nullptr;
-	long Value = strtol(Text, &End, 10);
-	if (errno != 0 || End == Text || *End != '\0')
-		return false;
-
-	if (Value < Min || Value > Max)
-		return false;
-
-	*OutValue = (int)Value;
-	return true;
-}
-
-static
-bool
-validate_bounded_int_text(GlobalState *AppState, const char *FieldName,
-	const char *Text, int Min, int Max, int *OutValue)
-{
-	if (parse_bounded_int_text(Text, Min, Max, OutValue))
-		return true;
-
-	char Message[128];
-	snprintf(Message, sizeof(Message), "%s must be a number between %d and %d.",
-		FieldName, Min, Max);
-	show_toast(AppState, Message);
-	return false;
-}
-
-static
-void
-render_numeric_text_input(const char *Id, char *Buffer, size_t BufferSize,
-	int Min, int Max, int WheelStep)
-{
-	ImGui::InputText(Id, Buffer, BufferSize, ImGuiInputTextFlags_CharsDecimal);
-	if (!ImGui::IsItemActive())
-		return;
-
-	float Wheel = ImGui::GetIO().MouseWheel;
-	if (Wheel == 0.0f)
-		return;
-
-	int Value = 0;
-	if (!parse_bounded_int_text(Buffer, Min, Max, &Value))
-		return;
-
-	Value += (Wheel > 0.0f) ? WheelStep : -WheelStep;
-	if (Value < Min) Value = Min;
-	if (Value > Max) Value = Max;
-	format_int_text(Buffer, BufferSize, Value);
-}
-
 // ---------------------------------------------------------------------------
 // Settings Dialog - select action
 // ---------------------------------------------------------------------------
@@ -217,23 +150,12 @@ init_settings_state(GlobalState *AppState)
 	S->TempHotkeys[3] = AppState->LoadModelHotkey;
 	S->TempRecordHotkeyMode = AppState->RecordHotkeyMode;
 	S->TempPlayRecordSound = AppState->PlayRecordSound;
-	S->TempStartSound = AppState->StartSound;
-	S->TempStopSound = AppState->StopSound;
-	S->TempCancelSound = AppState->CancelSound;
+	S->TempStartSoundFreq = AppState->StartSoundFreq;
+	S->TempStopSoundFreq = AppState->StopSoundFreq;
+	S->TempCancelSoundFreq = AppState->CancelSoundFreq;
 	S->TempUseCharByCharInjection = AppState->UseCharByCharInjection;
 	S->TempWhisperThreadCount = AppState->WhisperThreadCount;
-	format_int_text(S->TempStartSoundFreqText, sizeof(S->TempStartSoundFreqText),
-		S->TempStartSound.FreqHz);
-	format_int_text(S->TempStartSoundVolumeText, sizeof(S->TempStartSoundVolumeText),
-		S->TempStartSound.Volume);
-	format_int_text(S->TempStopSoundFreqText, sizeof(S->TempStopSoundFreqText),
-		S->TempStopSound.FreqHz);
-	format_int_text(S->TempStopSoundVolumeText, sizeof(S->TempStopSoundVolumeText),
-		S->TempStopSound.Volume);
-	format_int_text(S->TempCancelSoundFreqText, sizeof(S->TempCancelSoundFreqText),
-		S->TempCancelSound.FreqHz);
-	format_int_text(S->TempCancelSoundVolumeText,
-		sizeof(S->TempCancelSoundVolumeText), S->TempCancelSound.Volume);
+	S->LastPreviewTime = -1.0;
 	S->Capture.Captured = AppState->RecordHotkey;
 	S->Capture.HasCapture = AppState->RecordHotkey.is_valid();
 	S->Capture.IsCapturing = false;
@@ -245,6 +167,16 @@ init_settings_state(GlobalState *AppState)
 // ---------------------------------------------------------------------------
 // Settings Dialog
 // ---------------------------------------------------------------------------
+static
+void
+settings_preview_sound(GlobalState *AppState, SettingsWindowState *S, int FreqHz, bool Force)
+{
+	double Now = ImGui::GetTime();
+	if (!Force && Now - S->LastPreviewTime < 0.15) return;
+	platform_play_sound(&AppState->Platform, FreqHz, SOUND_PREVIEW_DURATION_MS);
+	S->LastPreviewTime = Now;
+}
+
 static
 void
 render_settings_ui(GlobalState *AppState)
@@ -274,12 +206,11 @@ render_settings_ui(GlobalState *AppState)
 	{
 		ImGui::Indent(20.0f);
 
-		if (ImGui::BeginTable("##SoundSettings", 3,
-			ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame))
+		if (ImGui::BeginTable("##SoundSettings", 2,
+			ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
 		{
-			ImGui::TableSetupColumn("Sound");
-			ImGui::TableSetupColumn("Pitch\n(200-2000 Hz)");
-			ImGui::TableSetupColumn("Volume\n(1-100%)");
+			ImGui::TableSetupColumn("Sound", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableSetupColumn("Pitch (200-2000 Hz)", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableHeadersRow();
 
 			ImGui::TableNextRow();
@@ -287,40 +218,45 @@ render_settings_ui(GlobalState *AppState)
 			ImGui::TextUnformatted("Start");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1.0f);
-			render_numeric_text_input("##StartPitch", S->TempStartSoundFreqText,
-				sizeof(S->TempStartSoundFreqText), SOUND_MIN_FREQ,
-				SOUND_MAX_FREQ, 10);
-			ImGui::TableSetColumnIndex(2);
-			ImGui::SetNextItemWidth(-1.0f);
-			render_numeric_text_input("##StartVolume", S->TempStartSoundVolumeText,
-				sizeof(S->TempStartSoundVolumeText), 1, 100, 1);
+			if (ImGui::SliderInt("##StartPitch", &S->TempStartSoundFreq,
+				SOUND_MIN_FREQ, SOUND_MAX_FREQ, "%d Hz"))
+			{
+				settings_preview_sound(AppState, S, S->TempStartSoundFreq, false);
+			}
+			if (ImGui::IsItemDeactivated())
+			{
+				settings_preview_sound(AppState, S, S->TempStartSoundFreq, true);
+			}
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Stop");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1.0f);
-			render_numeric_text_input("##StopPitch", S->TempStopSoundFreqText,
-				sizeof(S->TempStopSoundFreqText), SOUND_MIN_FREQ,
-				SOUND_MAX_FREQ, 10);
-			ImGui::TableSetColumnIndex(2);
-			ImGui::SetNextItemWidth(-1.0f);
-			render_numeric_text_input("##StopVolume", S->TempStopSoundVolumeText,
-				sizeof(S->TempStopSoundVolumeText), 1, 100, 1);
+			if (ImGui::SliderInt("##StopPitch", &S->TempStopSoundFreq,
+				SOUND_MIN_FREQ, SOUND_MAX_FREQ, "%d Hz"))
+			{
+				settings_preview_sound(AppState, S, S->TempStopSoundFreq, false);
+			}
+			if (ImGui::IsItemDeactivated())
+			{
+				settings_preview_sound(AppState, S, S->TempStopSoundFreq, true);
+			}
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Cancel");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1.0f);
-			render_numeric_text_input("##CancelPitch", S->TempCancelSoundFreqText,
-				sizeof(S->TempCancelSoundFreqText), SOUND_MIN_FREQ,
-				SOUND_MAX_FREQ, 10);
-			ImGui::TableSetColumnIndex(2);
-			ImGui::SetNextItemWidth(-1.0f);
-			render_numeric_text_input("##CancelVolume",
-				S->TempCancelSoundVolumeText,
-				sizeof(S->TempCancelSoundVolumeText), 1, 100, 1);
+			if (ImGui::SliderInt("##CancelPitch", &S->TempCancelSoundFreq,
+				SOUND_MIN_FREQ, SOUND_MAX_FREQ, "%d Hz"))
+			{
+				settings_preview_sound(AppState, S, S->TempCancelSoundFreq, false);
+			}
+			if (ImGui::IsItemDeactivated())
+			{
+				settings_preview_sound(AppState, S, S->TempCancelSoundFreq, true);
+			}
 
 			ImGui::EndTable();
 		}
@@ -488,47 +424,6 @@ render_settings_ui(GlobalState *AppState)
 
 	if (colored_button("Save##Settings", BottomSize, BUTTON_COLOR_GREEN))
 	{
-		SoundConfig StartSound = AppState->StartSound;
-		SoundConfig StopSound = AppState->StopSound;
-		SoundConfig CancelSound = AppState->CancelSound;
-
-		if (S->TempPlayRecordSound)
-		{
-			if (!validate_bounded_int_text(AppState, "Start sound pitch",
-				S->TempStartSoundFreqText, SOUND_MIN_FREQ, SOUND_MAX_FREQ,
-				&StartSound.FreqHz))
-			{
-				return;
-			}
-			if (!validate_bounded_int_text(AppState, "Start sound volume",
-				S->TempStartSoundVolumeText, 1, 100, &StartSound.Volume))
-			{
-				return;
-			}
-			if (!validate_bounded_int_text(AppState, "Stop sound pitch",
-				S->TempStopSoundFreqText, SOUND_MIN_FREQ, SOUND_MAX_FREQ,
-				&StopSound.FreqHz))
-			{
-				return;
-			}
-			if (!validate_bounded_int_text(AppState, "Stop sound volume",
-				S->TempStopSoundVolumeText, 1, 100, &StopSound.Volume))
-			{
-				return;
-			}
-			if (!validate_bounded_int_text(AppState, "Cancel sound pitch",
-				S->TempCancelSoundFreqText, SOUND_MIN_FREQ, SOUND_MAX_FREQ,
-				&CancelSound.FreqHz))
-			{
-				return;
-			}
-			if (!validate_bounded_int_text(AppState, "Cancel sound volume",
-				S->TempCancelSoundVolumeText, 1, 100, &CancelSound.Volume))
-			{
-				return;
-			}
-		}
-
 		AppState->RecordHotkey       = S->TempHotkeys[0];
 		AppState->CancelRecordHotkey = S->TempHotkeys[1];
 		AppState->StreamHotkey       = S->TempHotkeys[2];
@@ -548,18 +443,12 @@ render_settings_ui(GlobalState *AppState)
 		AppState->PlayRecordSound = S->TempPlayRecordSound;
 		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
 
-		S->TempStartSound = StartSound;
-		S->TempStopSound = StopSound;
-		S->TempCancelSound = CancelSound;
-		AppState->StartSound = S->TempStartSound;
-		AppState->StopSound = S->TempStopSound;
-		AppState->CancelSound = S->TempCancelSound;
-		save_int_setting("start_sound_freq", AppState->StartSound.FreqHz);
-		save_int_setting("start_sound_volume", AppState->StartSound.Volume);
-		save_int_setting("stop_sound_freq", AppState->StopSound.FreqHz);
-		save_int_setting("stop_sound_volume", AppState->StopSound.Volume);
-		save_int_setting("cancel_sound_freq", AppState->CancelSound.FreqHz);
-		save_int_setting("cancel_sound_volume", AppState->CancelSound.Volume);
+		AppState->StartSoundFreq = S->TempStartSoundFreq;
+		AppState->StopSoundFreq = S->TempStopSoundFreq;
+		AppState->CancelSoundFreq = S->TempCancelSoundFreq;
+		save_int_setting("start_sound_freq", AppState->StartSoundFreq);
+		save_int_setting("stop_sound_freq", AppState->StopSoundFreq);
+		save_int_setting("cancel_sound_freq", AppState->CancelSoundFreq);
 
 		AppState->UseCharByCharInjection = S->TempUseCharByCharInjection;
 		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
