@@ -26,8 +26,7 @@ platform_path_from_universal(const std::string &Path)
 	std::string Result = Path;
 	for (char &Ch : Result)
 	{
-		if (Ch == '/')
-			Ch = '\\';
+		if (Ch == '/') Ch = '\\';
 	}
 	return Result;
 #else
@@ -41,12 +40,10 @@ platform_join_path(const std::string &Base, const std::string &Relative)
 	std::string Result = Base;
 	for (char &Ch : Result)
 	{
-		if (Ch == '\\')
-			Ch = '/';
+		if (Ch == '\\') Ch = '/';
 	}
 
-	if (!Result.empty() && Result.back() != '/')
-		Result += '/';
+	if (!Result.empty() && Result.back() != '/') Result += '/';
 	Result += Relative;
 
 	return platform_path_from_universal(Result);

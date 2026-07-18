@@ -13,17 +13,13 @@ app_key_is_down(AppKeyCode Key)
 inline std::string
 app_key_label(AppKeyCode Key)
 {
-	if (Key == APP_KEY_NONE)
-		return "";
+	if (Key == APP_KEY_NONE) return "";
 
-	if (Key >= APP_KEY_F1 && Key <= APP_KEY_F24)
-		return "F" + std::to_string(Key - APP_KEY_F1 + 1);
+	if (Key >= APP_KEY_F1 && Key <= APP_KEY_F24) return "F" + std::to_string(Key - APP_KEY_F1 + 1);
 
-	if (Key >= 'A' && Key <= 'Z')
-		return std::string(1, (char)Key);
+	if (Key >= 'A' && Key <= 'Z') return std::string(1, (char)Key);
 
-	if (Key >= '0' && Key <= '9')
-		return std::string(1, (char)Key);
+	if (Key >= '0' && Key <= '9') return std::string(1, (char)Key);
 
 	switch (Key)
 	{
@@ -58,8 +54,7 @@ hotkey_to_label(const HotkeyConfig &Config)
 
 	if (Config.VirtualKey == APP_KEY_NONE)
 	{
-		if (!Label.empty() && Label.back() == '+')
-			Label.pop_back();
+		if (!Label.empty() && Label.back() == '+') Label.pop_back();
 		return Label;
 	}
 

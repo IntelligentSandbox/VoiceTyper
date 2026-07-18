@@ -50,8 +50,7 @@ static void
 run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::vector<float> &Chunk)
 {
 	float Rms = compute_rms(Chunk.data(), (int)Chunk.size());
-	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD)
-		return;
+	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD) return;
 
 	std::string Transcription;
 	int Ret = transcribe_pcm_to_string(
@@ -67,8 +66,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	{
 		void *TargetWindow = platform_get_foreground_window(&AppState->Platform);
 		if (TargetWindow == AppState->Platform.OwnWindow) TargetWindow = nullptr;
-		if (!TargetWindow)
-			printf("[transcription] %s\n", Transcription.c_str());
+		if (!TargetWindow) printf("[transcription] %s\n", Transcription.c_str());
 		platform_inject_text(
 			&AppState->Platform,
 			TargetWindow,
@@ -110,8 +108,7 @@ stream_pop_completed_chunk(StreamingChunkQueue *Queue, std::vector<float> *Chunk
 		return Queue->Closed || !Queue->Chunks.empty();
 	});
 
-	if (Queue->Chunks.empty())
-		return false;
+	if (Queue->Chunks.empty()) return false;
 
 	*Chunk = std::move(Queue->Chunks.front());
 	Queue->Chunks.pop_front();
@@ -225,8 +222,7 @@ stream_infer_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 	for (;;)
 	{
 		std::vector<float> Chunk;
-		if (!stream_pop_completed_chunk(Queue, &Chunk))
-			break;
+		if (!stream_pop_completed_chunk(Queue, &Chunk)) break;
 
 		run_whisper_on_chunk(AppState, Params, Chunk);
 	}
@@ -295,12 +291,10 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 static bool
 pipeline_preflight(GlobalState *AppState)
 {
-	if (!is_whisper_model_loaded(&AppState->WhisperState))
-		return false;
+	if (!is_whisper_model_loaded(&AppState->WhisperState)) return false;
 
 	int DeviceIndex = AppState->CurrentAudioDeviceIndex;
-	if (DeviceIndex < 0 || DeviceIndex >= (int)AppState->AudioInputDevices.size())
-		return false;
+	if (DeviceIndex < 0 || DeviceIndex >= (int)AppState->AudioInputDevices.size()) return false;
 
 	return true;
 }
@@ -310,8 +304,7 @@ start_record_pipeline(GlobalState *AppState)
 {
 	if (!pipeline_preflight(AppState)) return false;
 
-	if (AppState->CaptureThread.joinable())
-		AppState->CaptureThread.join();
+	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
 
 	int DeviceIndex = AppState->CurrentAudioDeviceIndex;
 
@@ -341,8 +334,7 @@ start_streaming_pipeline(GlobalState *AppState)
 {
 	if (!pipeline_preflight(AppState)) return false;
 
-	if (AppState->CaptureThread.joinable())
-		AppState->CaptureThread.join();
+	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
 
 	int DeviceIndex = AppState->CurrentAudioDeviceIndex;
 
@@ -367,8 +359,7 @@ stop_streaming_pipeline(GlobalState *AppState, bool FinalizeCurrentChunk = false
 	AppState->StreamingFinalizeOnStop.store(FinalizeCurrentChunk);
 	AppState->CaptureRunning.store(false);
 
-	if (AppState->CaptureThread.joinable())
-		AppState->CaptureThread.join();
+	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
 
 	AppState->PipelineActive.store(false);
 	AppState->StreamingFinalizeOnStop.store(false);

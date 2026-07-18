@@ -73,8 +73,7 @@ write_settings_map(const std::map<std::string, std::string> &Map)
 {
 	std::string Path = get_settings_file_path();
 	std::string Dir = Path.substr(0, Path.find_last_of("\\/"));
-	if (!platform_ensure_directory(Dir))
-		return false;
+	if (!platform_ensure_directory(Dir)) return false;
 
 	FILE *F = fopen(Path.c_str(), "w");
 	if (!F) return false;

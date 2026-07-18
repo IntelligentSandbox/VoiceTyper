@@ -138,18 +138,13 @@ query_hotkey_settings(GlobalState *AppState)
 	}
 
 	bool SoundEnabled = false;
-	if (load_bool_setting("play_record_sound", &SoundEnabled))
-		AppState->PlayRecordSound = SoundEnabled;
+	if (load_bool_setting("play_record_sound", &SoundEnabled)) AppState->PlayRecordSound = SoundEnabled;
 
 	int IntVal = 0;
-	if (load_int_setting("start_sound_freq", &IntVal))
-		AppState->StartSoundFreq = IntVal;
-	if (load_int_setting("stop_sound_freq", &IntVal))
-		AppState->StopSoundFreq = IntVal;
-	if (load_int_setting("cancel_sound_freq", &IntVal))
-		AppState->CancelSoundFreq = IntVal;
+	if (load_int_setting("start_sound_freq", &IntVal)) AppState->StartSoundFreq = IntVal;
+	if (load_int_setting("stop_sound_freq", &IntVal)) AppState->StopSoundFreq = IntVal;
+	if (load_int_setting("cancel_sound_freq", &IntVal)) AppState->CancelSoundFreq = IntVal;
 
 	bool CharByChar = false;
-	if (load_bool_setting("use_char_by_char_injection", &CharByChar))
-		AppState->UseCharByCharInjection = CharByChar;
+	if (load_bool_setting("use_char_by_char_injection", &CharByChar)) AppState->UseCharByCharInjection = CharByChar;
 }

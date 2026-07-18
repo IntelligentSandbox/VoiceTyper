@@ -86,10 +86,7 @@ chunk_audio_for_streaming(const std::vector<float> &Samples, int SampleRate)
 	}
 
 	int BufferDurationMs = (int)Accum.size() * 1000 / SampleRate;
-	if (HasSpeech && BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS)
-	{
-		Chunks.push_back(std::move(Accum));
-	}
+	if (HasSpeech && BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS) Chunks.push_back(std::move(Accum));
 
 	return Chunks;
 }

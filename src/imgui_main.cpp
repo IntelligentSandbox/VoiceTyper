@@ -230,11 +230,9 @@ detect_monitor_refresh_hz(HWND Hwnd)
 
 	DEVMODEW DevMode = {};
 	DevMode.dmSize = sizeof(DevMode);
-	if (!EnumDisplaySettingsW(MonitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &DevMode))
-		return RENDER_REFRESH_FALLBACK_HZ;
+	if (!EnumDisplaySettingsW(MonitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &DevMode)) return RENDER_REFRESH_FALLBACK_HZ;
 
-	if (DevMode.dmDisplayFrequency <= 1 || DevMode.dmDisplayFrequency > 1000)
-		return RENDER_REFRESH_FALLBACK_HZ;
+	if (DevMode.dmDisplayFrequency <= 1 || DevMode.dmDisplayFrequency > 1000) return RENDER_REFRESH_FALLBACK_HZ;
 
 	return (int)DevMode.dmDisplayFrequency;
 }
@@ -298,8 +296,7 @@ render_frame()
 LRESULT WINAPI
 wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 {
-	if (ImGui_ImplWin32_WndProcHandler(Hwnd, Msg, WParam, LParam))
-		return 1;
+	if (ImGui_ImplWin32_WndProcHandler(Hwnd, Msg, WParam, LParam)) return 1;
 
 	switch (Msg)
 	{
@@ -307,10 +304,7 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 		refresh_render_cadence(Hwnd);
 		g_RenderDueNow = true;
 		if (WParam == SIZE_MINIMIZED) return 0;
-		if (WParam == SIZE_RESTORED)
-		{
-			save_window_size(Hwnd);
-		}
+		if (WParam == SIZE_RESTORED) save_window_size(Hwnd);
 		if (g_SwapChain)
 		{
 			cleanup_render_target();
@@ -455,10 +449,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			Now = performance_counter_now();
 		}
 
-		if (Now >= NextAppTick)
-		{
-			NextAppTick = Now + AppUpdateIntervalTicks;
-		}
+		if (Now >= NextAppTick) NextAppTick = Now + AppUpdateIntervalTicks;
 
 		if (window_can_render(Hwnd) && (g_RenderDueNow || Now >= NextRenderTick))
 		{

@@ -89,8 +89,7 @@ string_combo(const char *Label, int *CurrentIndex, const std::vector<std::string
 static std::string
 record_button_idle_label(GlobalState *AppState)
 {
-	if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_HOLD)
-		return "Record (hold " + hotkey_to_label(AppState->RecordHotkey) + ")";
+	if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_HOLD) return "Record (hold " + hotkey_to_label(AppState->RecordHotkey) + ")";
 
 	return "Record (" + hotkey_to_label(AppState->RecordHotkey) + ")";
 }
@@ -178,8 +177,7 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), Display);
 	ImGui::SetNextWindowSize(ImVec2(SettingsW, 0));
 	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
-		return;
+	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) return;
 
 	AppState->Ui.IsSettingsDialogOpen = true;
 
@@ -213,10 +211,7 @@ render_settings_ui(GlobalState *AppState)
 			{
 				settings_preview_sound(AppState, S, S->TempStartSoundFreq, false);
 			}
-			if (ImGui::IsItemDeactivated())
-			{
-				settings_preview_sound(AppState, S, S->TempStartSoundFreq, true);
-			}
+			if (ImGui::IsItemDeactivated()) settings_preview_sound(AppState, S, S->TempStartSoundFreq, true);
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -228,10 +223,7 @@ render_settings_ui(GlobalState *AppState)
 			{
 				settings_preview_sound(AppState, S, S->TempStopSoundFreq, false);
 			}
-			if (ImGui::IsItemDeactivated())
-			{
-				settings_preview_sound(AppState, S, S->TempStopSoundFreq, true);
-			}
+			if (ImGui::IsItemDeactivated()) settings_preview_sound(AppState, S, S->TempStopSoundFreq, true);
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -243,10 +235,7 @@ render_settings_ui(GlobalState *AppState)
 			{
 				settings_preview_sound(AppState, S, S->TempCancelSoundFreq, false);
 			}
-			if (ImGui::IsItemDeactivated())
-			{
-				settings_preview_sound(AppState, S, S->TempCancelSoundFreq, true);
-			}
+			if (ImGui::IsItemDeactivated()) settings_preview_sound(AppState, S, S->TempCancelSoundFreq, true);
 
 			ImGui::EndTable();
 		}
@@ -299,8 +288,7 @@ render_settings_ui(GlobalState *AppState)
 	{
 		if (i > 0) ImGui::SameLine();
 		ImVec4 Color = (S->SelectedAction == i) ? BUTTON_COLOR_BLUE : BUTTON_COLOR_GREY;
-		if (colored_button(ActionLabels[i], ActionSize, Color))
-			settings_select_action(S, i);
+		if (colored_button(ActionLabels[i], ActionSize, Color)) settings_select_action(S, i);
 	}
 
 	ImGui::Text("Current: %s", hotkey_to_label(S->TempHotkeys[S->SelectedAction]).c_str());
@@ -366,18 +354,14 @@ render_settings_ui(GlobalState *AppState)
 		if (S->Capture.IsCapturing)
 		{
 			BgColor = ImVec4(0.08f, 0.40f, 0.75f, 1.0f);
-			if (S->Capture.HasCapture)
-				CaptureText = hotkey_to_label(S->Capture.Captured) + "...";
-			else
-				CaptureText = "Press a key combination...";
+			if (S->Capture.HasCapture) CaptureText = hotkey_to_label(S->Capture.Captured) + "...";
+			else CaptureText = "Press a key combination...";
 		}
 		else
 		{
 			BgColor = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
-			if (S->Capture.HasCapture)
-				CaptureText = hotkey_to_label(S->Capture.Captured);
-			else
-				CaptureText = "Click here, then press your hotkey...";
+			if (S->Capture.HasCapture) CaptureText = hotkey_to_label(S->Capture.Captured);
+			else CaptureText = "Click here, then press your hotkey...";
 		}
 
 		ImGui::PushStyleColor(ImGuiCol_Button, BgColor);
@@ -537,8 +521,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			Enabled = false;
 		}
 
-		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
-			toggle_recording(AppState);
+		if (colored_button(Label.c_str(), BigButton, Color, Enabled)) toggle_recording(AppState);
 	}
 
 	// Cancel Record Button
@@ -546,8 +529,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		bool Enabled = AppState->IsRecording;
 		std::string Label = cancel_record_button_idle_label(AppState);
 
-		if (colored_button(Label.c_str(), SmallButton, BUTTON_COLOR_GREY, Enabled))
-			cancel_recording(AppState);
+		if (colored_button(Label.c_str(), SmallButton, BUTTON_COLOR_GREY, Enabled)) cancel_recording(AppState);
 	}
 
 	// Stream Button
@@ -568,8 +550,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			Label = "Loading model...";
 		}
 
-		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
-			toggle_streaming(AppState);
+		if (colored_button(Label.c_str(), BigButton, Color, Enabled)) toggle_streaming(AppState);
 	}
 
 	ImGui::Separator();
@@ -592,8 +573,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
 			if (Busy) ImGui::BeginDisabled();
 			ImGui::SetNextItemWidth(FullWidth.x);
-			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, AppState->AudioInputDeviceNames))
-				update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
+			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, AppState->AudioInputDeviceNames)) update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
 			if (Busy) ImGui::EndDisabled();
 		}
 	}
@@ -641,8 +621,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			Label = "Transferring model...";
 		}
 
-		if (colored_button(Label.c_str(), BigButton, Color, Enabled))
-			toggle_stt_model_load(AppState);
+		if (colored_button(Label.c_str(), BigButton, Color, Enabled)) toggle_stt_model_load(AppState);
 	}
 
 	// Inference Device

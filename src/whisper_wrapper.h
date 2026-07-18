@@ -47,8 +47,7 @@ load_whisper_model(WhisperModelState *State, const char *ModelPath,
 
 	State->Context = whisper_init_from_file_with_params(ModelPath, ContextParams);
 
-	if (State->Context == nullptr)
-		return false;
+	if (State->Context == nullptr) return false;
 
 	State->IsLoaded = true;
 	State->LoadedModelIndex = ModelIndex;
@@ -60,8 +59,7 @@ load_whisper_model(WhisperModelState *State, const char *ModelPath,
 inline void
 unload_whisper_model(WhisperModelState *State)
 {
-	if (!State->IsLoaded || State->Context == nullptr)
-		return;
+	if (!State->IsLoaded || State->Context == nullptr) return;
 
 	whisper_free(State->Context);
 	State->Context = nullptr;

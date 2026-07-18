@@ -26,20 +26,16 @@ query_available_stt_models(GlobalState *AppState)
 
 	for (const PlatformFileInfo &File : Files)
 	{
-		if (File.Name.rfind("ggml-", 0) != 0)
-			continue;
-		if (File.Name.size() <= 4 || File.Name.substr(File.Name.size() - 4) != ".bin")
-			continue;
+		if (File.Name.rfind("ggml-", 0) != 0) continue;
+		if (File.Name.size() <= 4 || File.Name.substr(File.Name.size() - 4) != ".bin") continue;
 
 		std::string FilePath = platform_join_path(Dir, File.Name);
 		std::string DisplayName = File.Name.substr(5);
 		DisplayName = DisplayName.substr(0, DisplayName.size() - 4);
 
 		char SizeBuf[32];
-		if (File.SizeBytes >= 1073741824)
-			snprintf(SizeBuf, sizeof(SizeBuf), "%.1f GB", File.SizeBytes / 1073741824.0);
-		else
-			snprintf(SizeBuf, sizeof(SizeBuf), "%d MB", (int)(File.SizeBytes / 1048576));
+		if (File.SizeBytes >= 1073741824) snprintf(SizeBuf, sizeof(SizeBuf), "%.1f GB", File.SizeBytes / 1073741824.0);
+		else snprintf(SizeBuf, sizeof(SizeBuf), "%d MB", (int)(File.SizeBytes / 1048576));
 
 		std::string Label = DisplayName + " (" + SizeBuf + ")";
 
