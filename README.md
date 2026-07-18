@@ -1,22 +1,22 @@
 # Voice Typer
-Voice Typer aspires to be a native application that you can use to synthesize text
-from your voice using on device NN models that can be used in any of your other 
+Voice Typer aspires to be a fast, lightweight, native, fully-local and offline dictation application.
+As a standalone program, it that can be used to input text directly from your voice into other 
 desktop applications such as your web browser, note taking app, or even messaging
 app that doesn't have a voice input feature. 
 
-## Disclaimers:
+## LLM Usage Disclaimer:
 LLMs are used to write code in this project with human review done at our discretion.
-We try our best to make something that is fast, usable, fully offline with minimal dependencies.
-Let the results and code quality speak for themselves...the sloppening...
-Disclosure of all harnesses/models will be done at best effort.
+
 LLM Coding Agent Harnesses Used:
 - [OpenCode](https://github.com/anomalyco/opencode)
 - [Claude Code](https://code.claude.com/docs/en/overview)
+
 LLMs Used:
-- [Claude Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)
-- [OpenAI GPT-5.5](https://platform.openai.com/docs/models/gpt-5.5)
-- [OpenCode Zen Big Pickle](https://grokipedia.com/page/Big_Pickle_model)
 - [GLM 5.2](https://z.ai/blog/glm-5.2)
+- [OpenCode Zen Big Pickle](https://grokipedia.com/page/Big_Pickle_model)
+- [Claude Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)
+- [Claude Sonnet 4.6](https://www.anthropic.com/news/claude-sonnet-4-6)
+- [OpenAI GPT-5.5](https://platform.openai.com/docs/models/gpt-5.5)
 
 ## Dependencies
 Sources copied directly into the repo:
