@@ -14,11 +14,16 @@ usage() {
 	cat <<EOF
 Usage:
   tools/release.sh changelog [--git|--github] [--file PATH]
+  tools/release.sh cut [--draft] [--prerelease] [--file PATH] [--remote NAME]
   tools/release.sh push [--draft] [--prerelease] [--file PATH] [--remote NAME]
 
 Actions:
   changelog   Regenerate editable release notes for $TAG.
+  cut         Tag HEAD, run a clean build + package, generate release notes if
+              missing, verify dist artifacts, then create and push the $TAG git
+              tag and GitHub release. Pre-run 'changelog' to edit notes first.
   push        Create and push the $TAG git tag, then create the GitHub release.
+              Assumes build/package artifacts are already present in $DIST_DIR.
 
 Options:
   --git         Build release notes from local git commits since the previous tag. This is the default.
@@ -173,14 +178,13 @@ require_new_tag_and_release() {
 collect_release_assets() {
 	local files
 	local file
-	local has_package
+	local basename
 
 	shopt -s nullglob
 	files=("$DIST_DIR"/*)
 	shopt -u nullglob
 
 	RELEASE_ASSETS=()
-	has_package=0
 
 	for file in "${files[@]}"; do
 		if [ ! -f "$file" ]; then
@@ -195,8 +199,12 @@ collect_release_assets() {
 			continue
 		fi
 
+		basename="$(basename "$file")"
+		if [[ "$basename" != *"-v${VERSION}-"* ]]; then
+			die "Dist artifact '$basename' does not match version $VERSION. Remove stale $DIST_DIR contents and re-run 'tools/package.sh'."
+		fi
+
 		RELEASE_ASSETS+=("$file")
-		has_package=1
 	done
 
 	if [ ! -f "$CHANGELOG_FILE" ]; then
@@ -204,58 +212,14 @@ collect_release_assets() {
 	fi
 
 	if [ "${#RELEASE_ASSETS[@]}" -eq 0 ]; then
-		die "No release assets found."
-	fi
-
-	if [ "$has_package" = "0" ]; then
 		die "No package artifacts found in $DIST_DIR. Run 'tools/package.sh' first."
 	fi
 }
 
-run_push() {
-	local draft
-	local prerelease
+create_github_release() {
+	local draft="$1"
+	local prerelease="$2"
 	local release_args
-
-	draft=0
-	prerelease=0
-
-	while [ "$#" -gt 0 ]; do
-		case "$1" in
-			--draft)
-				draft=1
-				;;
-			--prerelease)
-				prerelease=1
-				;;
-			--file)
-				[ "$#" -ge 2 ] || die "--file requires a path."
-				CHANGELOG_FILE="$2"
-				shift
-				;;
-			--remote)
-				[ "$#" -ge 2 ] || die "--remote requires a name."
-				REMOTE="$2"
-				shift
-				;;
-			-h|--help)
-				usage
-				exit 0
-				;;
-			*)
-				die "Unknown push option '$1'."
-				;;
-		esac
-		shift
-	done
-
-	require_command gh
-	require_clean_tracked_files
-	require_new_tag_and_release
-	collect_release_assets
-
-	git tag -a "$TAG" -m "VoiceTyper $TAG"
-	git push "$REMOTE" "$TAG"
 
 	release_args=(
 		"$TAG"
@@ -276,6 +240,110 @@ run_push() {
 	gh release create "${release_args[@]}"
 }
 
+parse_release_flags() {
+	# Shared --draft/--prerelease/--file/--remote parsing for push and cut.
+	local action="$1"
+	shift
+
+	DRAFT=0
+	PRERELEASE=0
+
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--draft)
+				DRAFT=1
+				;;
+			--prerelease)
+				PRERELEASE=1
+				;;
+			--file)
+				[ "$#" -ge 2 ] || die "--file requires a path."
+				CHANGELOG_FILE="$2"
+				shift
+				;;
+			--remote)
+				[ "$#" -ge 2 ] || die "--remote requires a name."
+				REMOTE="$2"
+				shift
+				;;
+			-h|--help)
+				usage
+				exit 0
+				;;
+			*)
+				die "Unknown $action option '$1'."
+				;;
+		esac
+		shift
+	done
+}
+
+run_push() {
+	parse_release_flags push "$@"
+
+	require_command gh
+	require_clean_tracked_files
+	require_new_tag_and_release
+	collect_release_assets
+
+	git tag -a "$TAG" -m "VoiceTyper $TAG"
+	git push "$REMOTE" "$TAG"
+
+	create_github_release "$DRAFT" "$PRERELEASE"
+}
+
+run_cut() {
+	parse_release_flags cut "$@"
+
+	require_command gh
+	require_command 7z
+	require_clean_tracked_files
+	require_new_tag_and_release
+
+	echo "=== Cutting $TAG ==="
+	echo "Tagging HEAD so the build embeds the clean version string..."
+	git tag -a "$TAG" -m "VoiceTyper $TAG"
+
+	# If anything below fails before the tag is pushed, remove the local tag so the
+	# user can re-run without hitting "tag already exists".
+	trap '
+		if git rev-parse -q --verify "refs/tags/'"$TAG"'" >/dev/null && \
+			! git ls-remote --exit-code --tags "'"$REMOTE"'" "refs/tags/'"$TAG"'" >/dev/null 2>&1; then
+			echo "Cleaning up unpushed local tag '"$TAG"' due to failure." >&2
+			git tag -d "'"$TAG"'" >/dev/null
+		fi
+	' EXIT
+
+	echo "Running clean build + package..."
+	tools/package.sh build
+
+	if [ ! -f "$CHANGELOG_FILE" ]; then
+		echo "Generating release notes (git-based)..."
+		mkdir -p "$(dirname "$CHANGELOG_FILE")"
+		generate_git_changelog
+	else
+		echo "Using existing release notes at $CHANGELOG_FILE"
+	fi
+
+	echo "Verifying dist artifacts for version $VERSION..."
+	collect_release_assets
+
+	echo "Found ${#RELEASE_ASSETS[@]} artifact(s) for $TAG:"
+	local asset
+	for asset in "${RELEASE_ASSETS[@]}"; do
+		echo "    $(basename "$asset")"
+	done
+
+	echo "Pushing tag to $REMOTE..."
+	git push "$REMOTE" "$TAG"
+	trap - EXIT
+
+	echo "Creating GitHub release..."
+	create_github_release "$DRAFT" "$PRERELEASE"
+
+	echo "=== $TAG cut successfully ==="
+}
+
 if [ -z "$VERSION" ]; then
 	die "VERSION is empty."
 fi
@@ -284,6 +352,10 @@ case "${1:-}" in
 	changelog)
 		shift
 		run_changelog "$@"
+		;;
+	cut)
+		shift
+		run_cut "$@"
 		;;
 	push)
 		shift
