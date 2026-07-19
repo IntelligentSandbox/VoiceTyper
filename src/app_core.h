@@ -18,8 +18,7 @@ struct AppFrameResult
 	ModelTransitionFailure ModelFailure;
 };
 
-inline
-void
+inline void
 app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 {
 	AppState->IsRecording = false;
@@ -50,15 +49,13 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	query_hotkey_settings(AppState);
 }
 
-inline
-AppFrameResult
+inline AppFrameResult
 app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool HotkeysEnabled)
 {
 	AppFrameResult Result = {};
 	Result.ModelFailure = runtime_finish_model_transition(AppState);
 
-	if (!HotkeysEnabled || AppState->IsModelTransitioning.load())
-		return Result;
+	if (!HotkeysEnabled || AppState->IsModelTransitioning.load()) return Result;
 
 	bool RecordKeyIsDown       = is_hotkey_down(AppState->RecordHotkey);
 	bool CancelRecordKeyIsDown = is_hotkey_down(AppState->CancelRecordHotkey);
@@ -67,25 +64,19 @@ app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool 
 
 	if (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE)
 	{
-		if (RecordKeyIsDown && !FrameState->RecordKeyWasDown)
-			runtime_toggle_recording(AppState);
+		if (RecordKeyIsDown && !FrameState->RecordKeyWasDown) runtime_toggle_recording(AppState);
 	}
 	else
 	{
-		if (RecordKeyIsDown && !FrameState->RecordKeyWasDown)
-			runtime_start_recording(AppState);
-		if (!RecordKeyIsDown && FrameState->RecordKeyWasDown && AppState->IsRecording)
-			runtime_stop_recording(AppState);
+		if (RecordKeyIsDown && !FrameState->RecordKeyWasDown) runtime_start_recording(AppState);
+		if (!RecordKeyIsDown && FrameState->RecordKeyWasDown && AppState->IsRecording) runtime_stop_recording(AppState);
 	}
 
-	if (CancelRecordKeyIsDown && !FrameState->CancelRecordKeyWasDown)
-		runtime_cancel_recording(AppState);
+	if (CancelRecordKeyIsDown && !FrameState->CancelRecordKeyWasDown) runtime_cancel_recording(AppState);
 
-	if (StreamKeyIsDown && !FrameState->StreamKeyWasDown)
-		runtime_toggle_streaming(AppState);
+	if (StreamKeyIsDown && !FrameState->StreamKeyWasDown) runtime_toggle_streaming(AppState);
 
-	if (LoadModelKeyIsDown && !FrameState->LoadModelKeyWasDown)
-		Result.ModelFailure = runtime_toggle_stt_model_load(AppState);
+	if (LoadModelKeyIsDown && !FrameState->LoadModelKeyWasDown) Result.ModelFailure = runtime_toggle_stt_model_load(AppState);
 
 	FrameState->RecordKeyWasDown       = RecordKeyIsDown;
 	FrameState->CancelRecordKeyWasDown = CancelRecordKeyIsDown;
@@ -95,17 +86,13 @@ app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool 
 	return Result;
 }
 
-inline
-void
+inline void
 app_shutdown_runtime(GlobalState *AppState)
 {
 	AppState->StreamingFinalizeOnStop.store(false);
 	AppState->CaptureRunning.store(false);
-	if (AppState->CaptureThread.joinable())
-		AppState->CaptureThread.join();
-	if (AppState->ModelTransitionThread.joinable())
-		AppState->ModelTransitionThread.join();
+	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
+	if (AppState->ModelTransitionThread.joinable()) AppState->ModelTransitionThread.join();
 
-	if (is_whisper_model_loaded(&AppState->WhisperState))
-		unload_whisper_model(&AppState->WhisperState);
+	if (is_whisper_model_loaded(&AppState->WhisperState)) unload_whisper_model(&AppState->WhisperState);
 }

@@ -4,8 +4,7 @@
 
 #include <string>
 
-inline
-bool
+inline bool
 save_hotkey_setting(const char *Name, int Modifiers, int Key)
 {
 	auto Map = read_settings_map();
@@ -14,8 +13,7 @@ save_hotkey_setting(const char *Name, int Modifiers, int Key)
 	return write_settings_map(Map);
 }
 
-inline
-bool
+inline bool
 load_hotkey_setting(const char *Name, int *OutModifiers, int *OutKey)
 {
 	auto Map = read_settings_map();
@@ -29,8 +27,7 @@ load_hotkey_setting(const char *Name, int *OutModifiers, int *OutKey)
 	return true;
 }
 
-inline
-bool
+inline bool
 save_bool_setting(const char *Name, bool Value)
 {
 	auto Map = read_settings_map();
@@ -38,8 +35,7 @@ save_bool_setting(const char *Name, bool Value)
 	return write_settings_map(Map);
 }
 
-inline
-bool
+inline bool
 load_bool_setting(const char *Name, bool *OutValue)
 {
 	auto Map = read_settings_map();
@@ -49,8 +45,7 @@ load_bool_setting(const char *Name, bool *OutValue)
 	return true;
 }
 
-inline
-bool
+inline bool
 save_string_setting(const char *Name, const char *Value)
 {
 	auto Map = read_settings_map();
@@ -58,8 +53,7 @@ save_string_setting(const char *Name, const char *Value)
 	return write_settings_map(Map);
 }
 
-inline
-bool
+inline bool
 load_string_setting(const char *Name, std::string *OutValue)
 {
 	auto Map = read_settings_map();
@@ -69,8 +63,7 @@ load_string_setting(const char *Name, std::string *OutValue)
 	return true;
 }
 
-inline
-bool
+inline bool
 save_int_setting(const char *Name, int Value)
 {
 	auto Map = read_settings_map();
@@ -78,8 +71,7 @@ save_int_setting(const char *Name, int Value)
 	return write_settings_map(Map);
 }
 
-inline
-bool
+inline bool
 load_int_setting(const char *Name, int *OutValue)
 {
 	auto Map = read_settings_map();
@@ -100,8 +92,7 @@ load_int_setting(const char *Name, int *OutValue)
 	return true;
 }
 
-inline
-bool
+inline bool
 save_window_size_setting(int Width, int Height)
 {
 	auto Map = read_settings_map();
@@ -110,8 +101,7 @@ save_window_size_setting(int Width, int Height)
 	return write_settings_map(Map);
 }
 
-inline
-bool
+inline bool
 load_window_size_setting(int *OutWidth, int *OutHeight)
 {
 	auto Map = read_settings_map();

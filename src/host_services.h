@@ -19,16 +19,14 @@ std::string platform_get_exe_dir();
 bool platform_ensure_directory(const std::string &Path);
 std::vector<PlatformFileInfo> platform_list_files(const std::string &Dir);
 
-inline
-std::string
+inline std::string
 platform_path_from_universal(const std::string &Path)
 {
 #ifdef _WIN32
 	std::string Result = Path;
 	for (char &Ch : Result)
 	{
-		if (Ch == '/')
-			Ch = '\\';
+		if (Ch == '/') Ch = '\\';
 	}
 	return Result;
 #else
@@ -36,19 +34,16 @@ platform_path_from_universal(const std::string &Path)
 #endif
 }
 
-inline
-std::string
+inline std::string
 platform_join_path(const std::string &Base, const std::string &Relative)
 {
 	std::string Result = Base;
 	for (char &Ch : Result)
 	{
-		if (Ch == '\\')
-			Ch = '/';
+		if (Ch == '\\') Ch = '/';
 	}
 
-	if (!Result.empty() && Result.back() != '/')
-		Result += '/';
+	if (!Result.empty() && Result.back() != '/') Result += '/';
 	Result += Relative;
 
 	return platform_path_from_universal(Result);

@@ -7,23 +7,20 @@
 #include <map>
 #include <string>
 
-inline
-std::string
+inline std::string
 get_settings_file_path()
 {
 	return platform_join_path(platform_get_exe_dir(), "settings.ini");
 }
 
-inline
-void
+inline void
 cleanup_legacy_settings_json()
 {
 	std::string Path = platform_join_path(platform_get_exe_dir(), "settings.json");
 	remove(Path.c_str());
 }
 
-inline
-void
+inline void
 migrate_legacy_data_dir_settings()
 {
 	std::string NewPath = get_settings_file_path();
@@ -46,8 +43,7 @@ migrate_legacy_data_dir_settings()
 	rename(OldPath.c_str(), NewPath.c_str());
 }
 
-inline
-std::map<std::string, std::string>
+inline std::map<std::string, std::string>
 read_settings_map()
 {
 	std::map<std::string, std::string> Map;
@@ -72,14 +68,12 @@ read_settings_map()
 	return Map;
 }
 
-inline
-bool
+inline bool
 write_settings_map(const std::map<std::string, std::string> &Map)
 {
 	std::string Path = get_settings_file_path();
 	std::string Dir = Path.substr(0, Path.find_last_of("\\/"));
-	if (!platform_ensure_directory(Dir))
-		return false;
+	if (!platform_ensure_directory(Dir)) return false;
 
 	FILE *F = fopen(Path.c_str(), "w");
 	if (!F) return false;

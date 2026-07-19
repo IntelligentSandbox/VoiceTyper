@@ -4,28 +4,22 @@
 
 #include <string>
 
-inline
-bool
+inline bool
 app_key_is_down(AppKeyCode Key)
 {
 	return platform_is_key_down(Key);
 }
 
-inline
-std::string
+inline std::string
 app_key_label(AppKeyCode Key)
 {
-	if (Key == APP_KEY_NONE)
-		return "";
+	if (Key == APP_KEY_NONE) return "";
 
-	if (Key >= APP_KEY_F1 && Key <= APP_KEY_F24)
-		return "F" + std::to_string(Key - APP_KEY_F1 + 1);
+	if (Key >= APP_KEY_F1 && Key <= APP_KEY_F24) return "F" + std::to_string(Key - APP_KEY_F1 + 1);
 
-	if (Key >= 'A' && Key <= 'Z')
-		return std::string(1, (char)Key);
+	if (Key >= 'A' && Key <= 'Z') return std::string(1, (char)Key);
 
-	if (Key >= '0' && Key <= '9')
-		return std::string(1, (char)Key);
+	if (Key >= '0' && Key <= '9') return std::string(1, (char)Key);
 
 	switch (Key)
 	{
@@ -48,8 +42,7 @@ app_key_label(AppKeyCode Key)
 	}
 }
 
-inline
-std::string
+inline std::string
 hotkey_to_label(const HotkeyConfig &Config)
 {
 	std::string Label;
@@ -61,8 +54,7 @@ hotkey_to_label(const HotkeyConfig &Config)
 
 	if (Config.VirtualKey == APP_KEY_NONE)
 	{
-		if (!Label.empty() && Label.back() == '+')
-			Label.pop_back();
+		if (!Label.empty() && Label.back() == '+') Label.pop_back();
 		return Label;
 	}
 
@@ -70,8 +62,7 @@ hotkey_to_label(const HotkeyConfig &Config)
 	return Label;
 }
 
-inline
-AppHotkeyModifiers
+inline AppHotkeyModifiers
 poll_modifier_state()
 {
 	AppHotkeyModifiers Mods = 0;
@@ -82,8 +73,7 @@ poll_modifier_state()
 	return Mods;
 }
 
-inline
-AppKeyCode
+inline AppKeyCode
 poll_nonmodifier_key()
 {
 	for (AppKeyCode Key = 'A'; Key <= 'Z'; Key++)
@@ -111,8 +101,7 @@ poll_nonmodifier_key()
 	return APP_KEY_NONE;
 }
 
-inline
-bool
+inline bool
 check_modifier_state(AppHotkeyModifiers Modifiers)
 {
 	bool CtrlRequired  = (Modifiers & HOTKEY_MOD_CTRL)  != 0;
@@ -137,8 +126,7 @@ check_modifier_state(AppHotkeyModifiers Modifiers)
 	return true;
 }
 
-inline
-bool
+inline bool
 is_hotkey_down(const HotkeyConfig &Config)
 {
 	if (!check_modifier_state(Config.Modifiers)) return false;

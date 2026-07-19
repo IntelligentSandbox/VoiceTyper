@@ -22,8 +22,7 @@
 // Platform interface implementations (declared in platform.h)
 // ---------------------------------------------------------------------------
 
-inline
-std::vector<AudioInputDeviceInfo>
+inline std::vector<AudioInputDeviceInfo>
 platform_query_audio_devices()
 {
 	std::vector<AudioInputDeviceInfo> Devices;
@@ -31,8 +30,7 @@ platform_query_audio_devices()
 	UINT NumDevices = waveInGetNumDevs();
 
 	HRESULT CoHr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-	if (CoHr == RPC_E_CHANGED_MODE)
-		CoHr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+	if (CoHr == RPC_E_CHANGED_MODE) CoHr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 	bool ComOwned = (CoHr == S_OK);
 
 	IMMDeviceEnumerator *pEnumerator = nullptr;
@@ -82,8 +80,7 @@ platform_query_audio_devices()
 				PropVariantInit(&VarName);
 				if (pProps->GetValue(PKEY_Device_FriendlyName, &VarName) == S_OK)
 				{
-					if (VarName.vt == VT_LPWSTR && VarName.pwszVal)
-						Ep.Name = VarName.pwszVal;
+					if (VarName.vt == VT_LPWSTR && VarName.pwszVal) Ep.Name = VarName.pwszVal;
 					PropVariantClear(&VarName);
 				}
 				pProps->Release();
@@ -99,8 +96,7 @@ platform_query_audio_devices()
 	for (UINT i = 0; i < NumDevices; i++)
 	{
 		WAVEINCAPS2W Caps = {};
-		if (waveInGetDevCapsW(i, (LPWAVEINCAPSW)&Caps, sizeof(Caps)) != MMSYSERR_NOERROR)
-			continue;
+		if (waveInGetDevCapsW(i, (LPWAVEINCAPSW)&Caps, sizeof(Caps)) != MMSYSERR_NOERROR) continue;
 
 		AudioInputDeviceInfo Info;
 		Info.Index = (int)i;
@@ -121,8 +117,7 @@ platform_query_audio_devices()
 			Info.Name = FullName;
 			GotName = true;
 
-			if (DefaultEndpointId && Ep.Id == DefaultEndpointId)
-				Info.IsDefault = true;
+			if (DefaultEndpointId && Ep.Id == DefaultEndpointId) Info.IsDefault = true;
 			break;
 		}
 
@@ -138,12 +133,9 @@ platform_query_audio_devices()
 		Devices.push_back(Info);
 	}
 
-	if (DefaultEndpointId)
-		CoTaskMemFree(DefaultEndpointId);
-	if (pEnumerator)
-		pEnumerator->Release();
-	if (ComOwned)
-		CoUninitialize();
+	if (DefaultEndpointId) CoTaskMemFree(DefaultEndpointId);
+	if (pEnumerator) pEnumerator->Release();
+	if (ComOwned) CoUninitialize();
 
 	return Devices;
 }
@@ -239,10 +231,8 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 	HWND HWnd = (HWND)Window;
 	if (!HWnd || !Utf8 || Utf8[0] == '\0') return;
 
-	if (CharByChar)
-		platform_inject_text_char_by_char(HWnd, Utf8);
-	else
-		platform_inject_text_via_paste(HWnd, Utf8);
+	if (CharByChar) platform_inject_text_char_by_char(HWnd, Utf8);
+	else platform_inject_text_via_paste(HWnd, Utf8);
 }
 
 inline void *
@@ -291,8 +281,7 @@ platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs)
 		Wfx.nAvgBytesPerSec = Wfx.nSamplesPerSec * Wfx.nBlockAlign;
 
 		HWAVEOUT HWaveOut = nullptr;
-		if (waveOutOpen(&HWaveOut, WAVE_MAPPER, &Wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
-			return;
+		if (waveOutOpen(&HWaveOut, WAVE_MAPPER, &Wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) return;
 
 		short *Buffer = new short[NumSamples];
 		const float PeakAmplitude = (FixedVolume / 100.0f) * 32767.0f;
@@ -314,8 +303,7 @@ platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs)
 
 			Amp *= DecayPerSample;
 			float Env = Amp;
-			if (i < AttackSamples)
-				Env *= (float)i / (float)AttackSamples;
+			if (i < AttackSamples) Env *= (float)i / (float)AttackSamples;
 
 			Sample *= PeakAmplitude * Env;
 			if (Sample > 32767.0f) Sample = 32767.0f;
@@ -348,8 +336,7 @@ platform_is_key_down(AppKeyCode Key)
 	return (GetAsyncKeyState((int)Key) & 0x8000) != 0;
 }
 
-inline
-std::string
+inline std::string
 platform_get_exe_path()
 {
 	char ExePath[MAX_PATH] = {};
@@ -357,33 +344,27 @@ platform_get_exe_path()
 	return std::string(ExePath);
 }
 
-inline
-std::string
+inline std::string
 platform_get_exe_dir()
 {
 	std::string ExePath = platform_get_exe_path();
 	size_t LastSlash = ExePath.find_last_of("\\/");
-	if (LastSlash != std::string::npos)
-		ExePath.resize(LastSlash);
+	if (LastSlash != std::string::npos) ExePath.resize(LastSlash);
 	return ExePath;
 }
 
-inline
-bool
+inline bool
 platform_ensure_directory(const std::string &Path)
 {
-	if (Path.empty())
-		return false;
+	if (Path.empty()) return false;
 
-	if (CreateDirectoryA(Path.c_str(), nullptr))
-		return true;
+	if (CreateDirectoryA(Path.c_str(), nullptr)) return true;
 
 	DWORD Error = GetLastError();
 	return Error == ERROR_ALREADY_EXISTS;
 }
 
-inline
-std::vector<PlatformFileInfo>
+inline std::vector<PlatformFileInfo>
 platform_list_files(const std::string &Dir)
 {
 	std::vector<PlatformFileInfo> Files;
@@ -391,13 +372,11 @@ platform_list_files(const std::string &Dir)
 	std::string Pattern = platform_join_path(Dir, "*");
 	HANDLE Hf = FindFirstFileA(Pattern.c_str(), &Fd);
 
-	if (Hf == INVALID_HANDLE_VALUE)
-		return Files;
+	if (Hf == INVALID_HANDLE_VALUE) return Files;
 
 	do
 	{
-		if (Fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			continue;
+		if (Fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
 
 		LARGE_INTEGER FileSize;
 		FileSize.LowPart = Fd.nFileSizeLow;

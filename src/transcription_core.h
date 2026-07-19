@@ -49,10 +49,7 @@ transcribe_pcm_to_string(
 	for (int i = 0; i < NumSegments; i++)
 	{
 		const char *Text = whisper_full_get_segment_text(Context, i);
-		if (Text && Text[0] != '\0')
-		{
-			*OutText += Text;
-		}
+		if (Text && Text[0] != '\0') *OutText += Text;
 	}
 
 	size_t Start = OutText->find_first_not_of(" \t\n\r");
