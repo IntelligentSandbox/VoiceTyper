@@ -124,6 +124,9 @@ struct UiRuntimeState
 	double ToastExpireTime;
 	ColorRgba ToastBackgroundColor;
 	int ToastSerial; // if user overflows this they need a life (but will never happen bc no one will use this slopapp but me.)
+	bool IsCrashDialogOpen;
+	bool CrashDialogOpened;
+	std::vector<std::string> PendingCrashDumps;
 };
 
 struct GlobalState : CoreRuntimeState

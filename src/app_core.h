@@ -30,6 +30,9 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
 	AppState->Platform.OwnWindow = OwnWindow;
 	AppState->Ui.IsSettingsDialogOpen = false;
+	AppState->Ui.IsCrashDialogOpen = false;
+	AppState->Ui.CrashDialogOpened = false;
+	AppState->Ui.PendingCrashDumps.clear();
 	AppState->PlayRecordSound = false;
 	AppState->StartSoundFreq = SOUND_DEFAULT_START_FREQ;
 	AppState->StopSoundFreq = SOUND_DEFAULT_STOP_FREQ;

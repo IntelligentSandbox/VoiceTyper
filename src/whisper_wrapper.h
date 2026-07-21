@@ -3,9 +3,6 @@
 #include "whisper.h"
 #include <string>
 
-static void
-whisper_log_suppress(ggml_log_level, const char *, void *) {}
-
 struct WhisperModelState
 {
 	whisper_context *Context;
@@ -21,7 +18,6 @@ init_whisper_state(WhisperModelState *State)
 	State->IsLoaded = false;
 	State->LoadedModelIndex = -1;
 	State->ModelPath = "";
-	whisper_log_set(whisper_log_suppress, nullptr);
 }
 
 // Returns true on success, false on failure.
