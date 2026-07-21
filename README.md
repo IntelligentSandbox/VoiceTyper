@@ -40,3 +40,21 @@ Optional
 - NVIDIA CUDA toolkit (e.g. v13.2)
 
 To download ggml whisper models, get them from huggingface [here](https://huggingface.co/ggerganov/whisper.cpp/tree/main).
+
+## CUDA Support
+The CUDA build ships kernels for the following NVIDIA GPU architectures:
+
+| Architecture | sm_xx | Consumer GPUs |
+| --- | --- | --- |
+| Turing | 75 | RTX 20-series, GTX 16-series |
+| Ampere | 86 | RTX 30-series |
+| Ada Lovelace | 89 | RTX 40-series |
+| Blackwell | 120 | RTX 50-series |
+
+Turing and Ampere are built as PTX (JIT-compiled on first run on any newer GPU), so the binary is forward-compatible with future architectures. Ada and Blackwell are built as pre-compiled SASS to avoid the JIT cost on the most common current cards.
+
+**Driver requirement**: CUDA 13.x requires an NVIDIA driver from the R575 branch or newer on Windows. Older drivers will fail at CUDA initialization with `cudaErrorInsufficientDriver`, regardless of GPU model.
+
+**Older GPUs not supported**: Maxwell (GTX 900-series), Pascal (GTX 1000-series), and Volta (V100) are not compatible with the CUDA 13.x toolkit and are not included in the build. Users with these GPUs should use the CPU build instead.
+
+To customize the architecture list at build time, pass `-DCMAKE_CUDA_ARCHITECTURES=<list>` to cmake. See the [CMake CUDA_ARCHITECTURES documentation](https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html) for the format.
