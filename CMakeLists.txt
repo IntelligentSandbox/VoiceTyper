@@ -92,7 +92,7 @@ endif()
 # they avoid the JIT cost. Override with -DCMAKE_CUDA_ARCHITECTURES=... to
 # customize for a specific deployment.
 if(VOICETYPER_CUDA AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-	set(CMAKE_CUDA_ARCHITECTURES "75-virtual;75-real;80-virtual;86-real;89-real;120a-real;121a-real" CACHE STRING "CUDA architectures to build for")
+	set(CMAKE_CUDA_ARCHITECTURES "75-real;80-virtual;86-real;89-real;120a-real;121a-real" CACHE STRING "CUDA architectures to build for")
 endif()
 
 if(MSVC)
