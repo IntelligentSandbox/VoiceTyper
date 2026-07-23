@@ -7,3 +7,4 @@ docs/
 .dev/
 .claude/settings.local.json
 compile_commands.json
+result*
