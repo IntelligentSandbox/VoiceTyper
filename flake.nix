@@ -70,6 +70,57 @@
 				'';
 			};
 
+			cuda =
+				let
+					unfreePkgs = import nixpkgs {
+						inherit system;
+						config.allowUnfree = true;
+					};
+					cudaPackages = unfreePkgs.cudaPackages_13;
+					cudaRuntimeLibs = [
+						cudaPackages.cuda_cudart
+						cudaPackages.libcublas
+					];
+				in
+				cudaPackages.backendStdenv.mkDerivation {
+					pname = "voicetyper-cuda";
+					version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
+					src = ./.;
+
+					nativeBuildInputs = with unfreePkgs; [
+						cmake
+						makeWrapper
+						pkg-config
+						cudaPackages.cuda_nvcc
+					];
+
+					buildInputs = with unfreePkgs; [
+						SDL2
+						libGL
+						libX11
+						libXcursor
+						libXext
+						libXfixes
+						libXi
+						libXinerama
+						libXrandr
+						cudaPackages.cuda_cudart
+						cudaPackages.libcublas
+					];
+
+					cmakeBuildType = "Release";
+					cmakeFlags = [
+						"-DVOICETYPER_CUDA=ON"
+						"-DVOICETYPER_APP_IPO=OFF"
+					];
+
+					postInstall = ''
+						wrapProgram $out/bin/VoiceTyper \
+							--prefix LD_LIBRARY_PATH : ${unfreePkgs.lib.makeLibraryPath (runtimeLibs ++ cudaRuntimeLibs)} \
+							--run 'export VOICETYPER_DATA_DIR="''${VOICETYPER_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/voicetyper}"'
+					'';
+				};
+
 			static = pkgs.stdenv.mkDerivation {
 				pname = "voicetyper-static";
 				version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
