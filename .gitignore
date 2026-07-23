@@ -8,3 +8,5 @@ docs/
 .claude/settings.local.json
 compile_commands.json
 result*
+bench_*.err
+bench_*.log

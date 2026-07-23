@@ -45,17 +45,17 @@
 					pkg-config
 				];
 
-			buildInputs = with pkgs; [
-				SDL2
-				libGL
-				libX11
-				libXcursor
-				libXext
-				libXfixes
-				libXi
-				libXinerama
-				libXrandr
-			];
+        buildInputs = with pkgs; [
+          SDL2
+          libGL
+          libX11
+          libXcursor
+          libXext
+          libXfixes
+          libXi
+          libXinerama
+          libXrandr
+        ];
 
 				cmakeBuildType = "Release";
 				cmakeFlags = [
@@ -76,7 +76,7 @@
 						inherit system;
 						config.allowUnfree = true;
 					};
-					cudaPackages = unfreePkgs.cudaPackages_13;
+					cudaPackages = unfreePkgs.cudaPackages_13_0;
 					cudaRuntimeLibs = [
 						cudaPackages.cuda_cudart
 						cudaPackages.libcublas
