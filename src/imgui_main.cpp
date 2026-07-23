@@ -17,6 +17,7 @@
 #include "settings.h"
 #include "app_core.h"
 #include "imgui_ui.h"
+#include "diagnostics.h"
 
 #ifndef VOICETYPER_APP_UPDATE_HZ
 #define VOICETYPER_APP_UPDATE_HZ 100
@@ -342,6 +343,8 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /*ShowCmd*/)
 {
+	init_diagnostics();
+
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	HICON AppIcon = LoadIconW(Instance, MAKEINTRESOURCEW(101));
@@ -389,6 +392,12 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	g_AppState = AppState;
 
 	app_initialize_runtime(AppState, Hwnd);
+
+	check_for_previous_crash_dumps(&AppState->Ui.PendingCrashDumps);
+	if (!AppState->Ui.PendingCrashDumps.empty())
+	{
+		AppState->Ui.IsCrashDialogOpen = true;
+	}
 
 	platform_set_taskbar_icon((void*)Hwnd, APP_ICON_PATH);
 
@@ -494,6 +503,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	cleanup_device_d3d();
 	DestroyWindow(Hwnd);
 	UnregisterClassW(Wc.lpszClassName, Instance);
+
+	shutdown_diagnostics();
 
 	return 0;
 }

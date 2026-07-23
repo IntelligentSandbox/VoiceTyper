@@ -6,6 +6,7 @@
 #include "input.h"
 #include "settings.h"
 #include "control.h"
+#include "diagnostics.h"
 
 #include <cstdio>
 
@@ -476,6 +477,76 @@ render_toast_ui(GlobalState *AppState, ImGuiIO &Io)
 }
 
 // ---------------------------------------------------------------------------
+// Crash Detected Dialog
+// ---------------------------------------------------------------------------
+static void
+render_crash_dialog_ui(GlobalState *AppState)
+{
+	if (AppState->Ui.IsCrashDialogOpen && !AppState->Ui.CrashDialogOpened)
+	{
+		ImGui::OpenPopup("Crash Detected");
+		AppState->Ui.CrashDialogOpened = true;
+	}
+
+	if (!AppState->Ui.IsCrashDialogOpen) return;
+
+	ImVec2 Display = ImGui::GetIO().DisplaySize;
+	ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), Display);
+	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	if (!ImGui::BeginPopupModal("Crash Detected", nullptr,
+		ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	{
+		return;
+	}
+
+	ImGui::TextWrapped(
+		"VoiceTyper appears to have crashed on a previous run. "
+		"A crash report has been saved next to the executable that the developer "
+		"can use to diagnose the problem. A debug log is also saved alongside it.");
+
+	ImGui::Separator();
+
+	ImGui::Text("Crash report file(s):");
+	ImGui::Spacing();
+
+	for (const std::string &Path : AppState->Ui.PendingCrashDumps)
+	{
+		ImGui::TextWrapped("%s", Path.c_str());
+	}
+
+	ImGui::Separator();
+
+	float AvailWidth = ImGui::GetContentRegionAvail().x;
+	float Spacing = ImGui::GetStyle().ItemSpacing.x;
+	float BtnWidth = (AvailWidth - Spacing) / 2;
+	ImVec2 BtnSize = ImVec2(BtnWidth, 40);
+
+	if (colored_button("Open Folder", BtnSize, BUTTON_COLOR_GREY))
+	{
+		if (!AppState->Ui.PendingCrashDumps.empty())
+		{
+			platform_open_folder_selecting_file(AppState->Ui.PendingCrashDumps[0]);
+		}
+	}
+
+	ImGui::SameLine();
+
+	if (colored_button("Dismiss##CrashDialog", BtnSize, BUTTON_COLOR_GREY))
+	{
+		for (const std::string &Path : AppState->Ui.PendingCrashDumps)
+		{
+			mark_crash_dump_seen(Path);
+		}
+
+		AppState->Ui.PendingCrashDumps.clear();
+		AppState->Ui.IsCrashDialogOpen = false;
+		ImGui::CloseCurrentPopup();
+	}
+
+	ImGui::EndPopup();
+}
+
+// ---------------------------------------------------------------------------
 // Main Window
 // ---------------------------------------------------------------------------
 inline void
@@ -651,6 +722,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	}
 
 	render_settings_ui(AppState);
+	render_crash_dialog_ui(AppState);
 
 	ImGui::End();
 

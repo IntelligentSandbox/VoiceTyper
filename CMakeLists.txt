@@ -82,6 +82,19 @@ else()
 	set(GGML_CUDA OFF CACHE BOOL "" FORCE)
 endif()
 
+# Compile CUDA kernels for a broad set of consumer NVIDIA architectures rather
+# than only the GPU present at build time (ggml defaults CMAKE_CUDA_ARCHITECTURES
+# to "native" when GGML_NATIVE is ON, which produces SASS for one specific sm_xx
+# and no PTX fallback — the resulting binary fails with
+# cudaErrorNoKernelImageForDeviceInfo on any other GPU).
+# The -virtual entries emit PTX that JIT-compiles on any newer arch at first
+# run; the -real entries emit SASS for the most common current consumer GPUs so
+# they avoid the JIT cost. Override with -DCMAKE_CUDA_ARCHITECTURES=... to
+# customize for a specific deployment.
+if(VOICETYPER_CUDA AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+	set(CMAKE_CUDA_ARCHITECTURES "75-virtual;80-virtual;86-real;89-real;120a-real;121a-real" CACHE STRING "CUDA architectures to build for")
+endif()
+
 if(MSVC)
 	add_compile_options(
 		$<$<COMPILE_LANGUAGE:C>:/MP>
