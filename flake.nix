@@ -81,6 +81,17 @@
 						cudaPackages.cuda_cudart
 						cudaPackages.libcublas
 					];
+			# Opt-in ccache for dev iteration. nix builds run as a nixbld user
+			# under a strict sandbox (sandbox=true, sandbox-fallback=false), so
+			# the cache must live at a stable path outside any private home and
+			# be exposed per-build via `--option extra-sandbox-paths`. tools/
+			# nix-build.sh wires VOICETYPER_CCACHE and that sandbox hole together
+			# so the hole only exists on ccache builds. Default dir is chmod 1777
+			# so both the repo owner and nixbld can populate it; override with
+			# CCACHE_DIR. Reading env at eval time requires --impure.
+			enableCcache = builtins.getEnv "VOICETYPER_CCACHE" == "1";
+			ccacheDir = let d = builtins.getEnv "CCACHE_DIR"; in
+				if d != "" then d else "/var/cache/voicetyper-ccache";
 				in
 				cudaPackages.backendStdenv.mkDerivation {
 					pname = "voicetyper-cuda";
@@ -92,7 +103,7 @@
 						makeWrapper
 						pkg-config
 						cudaPackages.cuda_nvcc
-					];
+					] ++ unfreePkgs.lib.optional enableCcache ccache;
 
 					buildInputs = with unfreePkgs; [
 						SDL2
@@ -112,7 +123,13 @@
 					cmakeFlags = [
 						"-DVOICETYPER_CUDA=ON"
 						"-DVOICETYPER_APP_IPO=OFF"
+					] ++ unfreePkgs.lib.optionals enableCcache [
+						"-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+						"-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+						"-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache"
 					];
+
+					CCACHE_DIR = unfreePkgs.lib.optionalString enableCcache ccacheDir;
 
 					postInstall = ''
 						wrapProgram $out/bin/VoiceTyper \

@@ -5,6 +5,7 @@ vad_models/
 dist/
 docs/
 .dev/
+.ccache/
 .claude/settings.local.json
 compile_commands.json
 result*
