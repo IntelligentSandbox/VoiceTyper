@@ -1,10 +1,16 @@
 ## Environment
-You are running on **Windows 11** cmd.exe, but you have access to git bash `bash`.
-Depending on your agent harness, you will be able to directly access bash commands here.
-You are always ran from the root dir of this project.
-Use Unix commands and forward slashes for paths: `ls`, `cp`, `mv`.
-Reference paths using relative paths like `./src/audio_pipeline.h`.
-All paths will be linux style under git bash: `/c/dir1/dir2`.
+You are always run from the root dir of this project. Use Unix commands and forward
+slashes for paths (`ls`, `cp`, `mv`) and reference paths relatively, e.g. `./src/audio_pipeline.h`.
+
+Detect the host platform at the start of each session by running `uname -s`, since the
+same project is built on both Windows and NixOS/Linux and the tooling differs:
+- `Linux`            -> native Linux (NixOS). Native paths like `/home/<user>/VoiceTyper`.
+                       Use the `tools/nix-build.sh` flake builds (see Project Overview).
+- `MINGW*` / `MSYS*` -> Windows under git bash. Paths like `/c/dir1/dir2`.
+                       Use the `tools/build.sh` Visual Studio builds (see Project Overview).
+
+Match build commands and any platform-specific source (`src/*_win32.*`, `src/*_linux.*`)
+to the detected platform rather than assuming one.
 
 ## Project Overview
 This is a voice typing application that runs as a native application on the host OS.
@@ -13,8 +19,16 @@ via **Whisper.cpp** (an external project and core dependency).
 The application's primary responsibility is facilitating user control of:
     audio input -> Whisper.cpp model -> insert text into focused text input field (if available)
 
+Windows (Visual Studio toolchain):
     bash tools/build.sh          - release cpu build
     bash tools/build.sh cuda     - release cuda build
+
+NixOS / Linux (nix flake, defined in flake.nix, driven by tools/nix-build.sh):
+    tools/nix-build.sh           - release cpu build (.#default)
+    tools/nix-build.sh cuda      - release cuda build (.#cuda, needs allowUnfree)
+    tools/nix-build.sh cuda --ccache - cuda build with ccache (needs /var/cache/voicetyper-ccache, see tools/nix-build.sh)
+    tools/nix-build.sh static    - release statically-linked build (.#static)
+    tools/nix-build.sh appimage  - release AppImage build (.#appimage)
 
 ## Workflow
 1. Read `.dev/tasks.md` at the start of every session. The user may give you an explicit request, which should take priority over the tasklist. However, if the tasklist contains items that may conflict with the one-off request, notify the user and ask what to do.
