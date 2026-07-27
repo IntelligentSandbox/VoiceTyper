@@ -5,13 +5,18 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
-      packages = forAllSystems (system:
+      packages = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           runtimeLibs = with pkgs; [
@@ -90,7 +95,10 @@
               # so both the repo owner and nixbld can populate it; override with
               # CCACHE_DIR. Reading env at eval time requires --impure.
               enableCcache = builtins.getEnv "VOICETYPER_CCACHE" == "1";
-              ccacheDir = let d = builtins.getEnv "CCACHE_DIR"; in
+              ccacheDir =
+                let
+                  d = builtins.getEnv "CCACHE_DIR";
+                in
                 if d != "" then d else "/var/cache/voicetyper-ccache";
             in
             cudaPackages.backendStdenv.mkDerivation {
@@ -98,12 +106,15 @@
               version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
               src = ./.;
 
-              nativeBuildInputs = with unfreePkgs; [
-                cmake
-                makeWrapper
-                pkg-config
-                cudaPackages.cuda_nvcc
-              ] ++ unfreePkgs.lib.optional enableCcache ccache;
+              nativeBuildInputs =
+                with unfreePkgs;
+                [
+                  cmake
+                  makeWrapper
+                  pkg-config
+                  cudaPackages.cuda_nvcc
+                ]
+                ++ unfreePkgs.lib.optional enableCcache ccache;
 
               buildInputs = with unfreePkgs; [
                 SDL2
@@ -123,7 +134,8 @@
               cmakeFlags = [
                 "-DVOICETYPER_CUDA=ON"
                 "-DVOICETYPER_APP_IPO=OFF"
-              ] ++ unfreePkgs.lib.optionals enableCcache [
+              ]
+              ++ unfreePkgs.lib.optionals enableCcache [
                 "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
                 "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
                 "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache"
@@ -200,7 +212,10 @@
               };
               cudaPackages = unfreePkgs.cudaPackages_13_0;
               enableCcache = builtins.getEnv "VOICETYPER_CCACHE" == "1";
-              ccacheDir = let d = builtins.getEnv "CCACHE_DIR"; in
+              ccacheDir =
+                let
+                  d = builtins.getEnv "CCACHE_DIR";
+                in
                 if d != "" then d else "/var/cache/voicetyper-ccache";
             in
             cudaPackages.backendStdenv.mkDerivation {
@@ -208,12 +223,15 @@
               version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
               src = ./.;
 
-              nativeBuildInputs = with unfreePkgs; [
-                cmake
-                patchelf
-                pkg-config
-                cudaPackages.cuda_nvcc
-              ] ++ unfreePkgs.lib.optional enableCcache ccache;
+              nativeBuildInputs =
+                with unfreePkgs;
+                [
+                  cmake
+                  patchelf
+                  pkg-config
+                  cudaPackages.cuda_nvcc
+                ]
+                ++ unfreePkgs.lib.optional enableCcache ccache;
 
               buildInputs = with unfreePkgs; [
                 sdl2-compat
@@ -235,7 +253,8 @@
                 "-DVOICETYPER_APP_IPO=OFF"
                 "-DVOICETYPER_STATIC=ON"
                 "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
-              ] ++ unfreePkgs.lib.optionals enableCcache [
+              ]
+              ++ unfreePkgs.lib.optionals enableCcache [
                 "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
                 "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
                 "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache"
@@ -247,7 +266,8 @@
 
               preConfigure = ''
                 export LDFLAGS="-static-libgcc -static-libstdc++"
-              '' + unfreePkgs.lib.optionalString enableCcache ''
+              ''
+              + unfreePkgs.lib.optionalString enableCcache ''
                 export CCACHE_BASEDIR="$PWD"
               '';
 
@@ -399,7 +419,10 @@
               };
               cudaPackages = unfreePkgs.cudaPackages_13_0;
               enableCcache = builtins.getEnv "VOICETYPER_CCACHE" == "1";
-              ccacheDir = let d = builtins.getEnv "CCACHE_DIR"; in
+              ccacheDir =
+                let
+                  d = builtins.getEnv "CCACHE_DIR";
+                in
                 if d != "" then d else "/var/cache/voicetyper-ccache";
             in
             cudaPackages.backendStdenv.mkDerivation {
@@ -407,13 +430,16 @@
               version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
               src = ./.;
 
-              nativeBuildInputs = with unfreePkgs; [
-                cmake
-                patchelf
-                pkg-config
-                squashfsTools
-                cudaPackages.cuda_nvcc
-              ] ++ unfreePkgs.lib.optional enableCcache ccache;
+              nativeBuildInputs =
+                with unfreePkgs;
+                [
+                  cmake
+                  patchelf
+                  pkg-config
+                  squashfsTools
+                  cudaPackages.cuda_nvcc
+                ]
+                ++ unfreePkgs.lib.optional enableCcache ccache;
 
               buildInputs = with unfreePkgs; [
                 sdl2-compat
@@ -435,7 +461,8 @@
                 "-DVOICETYPER_APP_IPO=OFF"
                 "-DVOICETYPER_STATIC=ON"
                 "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
-              ] ++ unfreePkgs.lib.optionals enableCcache [
+              ]
+              ++ unfreePkgs.lib.optionals enableCcache [
                 "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
                 "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
                 "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache"
@@ -447,7 +474,8 @@
 
               preConfigure = ''
                 export LDFLAGS="-static-libgcc -static-libstdc++"
-              '' + unfreePkgs.lib.optionalString enableCcache ''
+              ''
+              + unfreePkgs.lib.optionalString enableCcache ''
                 export CCACHE_BASEDIR="$PWD"
               '';
 
@@ -535,7 +563,8 @@
               dontStrip = true;
               fixupPhase = "true";
             };
-        });
+        }
+      );
 
       apps = forAllSystems (system: {
         default = {
@@ -544,7 +573,8 @@
         };
       });
 
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
         in
@@ -572,7 +602,8 @@
               export VOICETYPER_DATA_DIR="''${VOICETYPER_DATA_DIR:-$PWD/.local/share/voicetyper}"
             '';
           };
-        });
+        }
+      );
 
       checks = forAllSystems (system: {
         default = self.packages.${system}.default;
