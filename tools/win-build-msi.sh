@@ -33,7 +33,7 @@ fi
 
 if [ ! -d "$BUILD_OUTPUT" ]; then
 	echo "Error: build output directory '$BUILD_OUTPUT' does not exist."
-	echo "Run 'tools/build.sh${USE_CUDA:+ cuda}' first."
+	echo "Run 'tools/win-build.sh${USE_CUDA:+ cuda}' first."
 	exit 1
 fi
 

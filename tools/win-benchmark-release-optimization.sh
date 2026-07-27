@@ -20,7 +20,7 @@ BUILD_JOBS="${VOICETYPER_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)}"
 
 usage() {
 	cat <<EOF
-Usage: tools/benchmark_release_optimization.sh --audio <path> [options]
+Usage: tools/win-benchmark-release-optimization.sh --audio <path> [options]
 
 Options:
   --model <path>          Default: stt_models/ggml-base.en.bin

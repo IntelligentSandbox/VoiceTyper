@@ -70,7 +70,7 @@ require_build_output() {
 	fi
 
 	echo "Error: $variant build output '$build_output' does not exist."
-	echo "Run '$build_command' first, or run 'tools/package.sh build'."
+	echo "Run '$build_command' first, or run 'tools/win-package.sh build'."
 	exit 1
 }
 
@@ -130,8 +130,8 @@ if [ "$REBUILD" = "1" ]; then
 	rm -rf "$CUDA_BUILD"
 	rm -rf "$CPU_BUILD"
 else
-	require_build_output "$CUDA_BUILD" "cuda" "tools/build.sh cuda"
-	require_build_output "$CPU_BUILD" "cpu" "tools/build.sh"
+	require_build_output "$CUDA_BUILD" "cuda" "tools/win-build.sh cuda"
+	require_build_output "$CPU_BUILD" "cpu" "tools/win-build.sh"
 fi
 rm -rf "$DIST_DIR"
 rm -rf "$STAGE_DIR"
@@ -141,13 +141,13 @@ if [ "$REBUILD" = "1" ]; then
 	echo ""
 	echo "=== Building Release (CUDA) ==="
 	START=$SECONDS
-	tools/build.sh cuda
+	tools/win-build.sh cuda
 	echo "    Build took $((SECONDS - START))s"
 
 	echo ""
 	echo "=== Building Release (CPU) ==="
 	START=$SECONDS
-	tools/build.sh
+	tools/win-build.sh
 	echo "    Build took $((SECONDS - START))s"
 fi
 

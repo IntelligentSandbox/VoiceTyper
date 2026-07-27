@@ -3,7 +3,7 @@ setlocal EnableExtensions
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "TARGET_SCRIPT=%SCRIPT_DIR%\win-release.sh"
+set "TARGET_SCRIPT=%SCRIPT_DIR%\release-all.sh"
 set "GIT_BASH="
 
 if not exist "%TARGET_SCRIPT%" goto missing_script

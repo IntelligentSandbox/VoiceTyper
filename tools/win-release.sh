@@ -13,9 +13,9 @@ CHANGELOG_FILE="$DIST_DIR/release-notes-$TAG.md"
 usage() {
 	cat <<EOF
 Usage:
-  tools/release.sh changelog [--git|--github] [--file PATH]
-  tools/release.sh cut [--draft] [--prerelease] [--file PATH] [--remote NAME]
-  tools/release.sh push [--draft] [--prerelease] [--file PATH] [--remote NAME]
+  tools/win-release.sh changelog [--git|--github] [--file PATH]
+  tools/win-release.sh cut [--draft] [--prerelease] [--file PATH] [--remote NAME]
+  tools/win-release.sh push [--draft] [--prerelease] [--file PATH] [--remote NAME]
 
 Actions:
   changelog   Regenerate editable release notes for $TAG.
@@ -201,18 +201,18 @@ collect_release_assets() {
 
 		basename="$(basename "$file")"
 		if [[ "$basename" != *"-v${VERSION}-"* ]]; then
-			die "Dist artifact '$basename' does not match version $VERSION. Remove stale $DIST_DIR contents and re-run 'tools/package.sh'."
+			die "Dist artifact '$basename' does not match version $VERSION. Remove stale $DIST_DIR contents and re-run 'tools/win-package.sh'."
 		fi
 
 		RELEASE_ASSETS+=("$file")
 	done
 
 	if [ ! -f "$CHANGELOG_FILE" ]; then
-		die "Release notes file '$CHANGELOG_FILE' does not exist. Run 'tools/release.sh changelog' first."
+		die "Release notes file '$CHANGELOG_FILE' does not exist. Run 'tools/win-release.sh changelog' first."
 	fi
 
 	if [ "${#RELEASE_ASSETS[@]}" -eq 0 ]; then
-		die "No package artifacts found in $DIST_DIR. Run 'tools/package.sh' first."
+		die "No package artifacts found in $DIST_DIR. Run 'tools/win-package.sh' first."
 	fi
 }
 
@@ -315,7 +315,7 @@ run_cut() {
 	' EXIT
 
 	echo "Running clean build + package..."
-	tools/package.sh build
+	tools/win-package.sh build
 
 	if [ ! -f "$CHANGELOG_FILE" ]; then
 		echo "Generating release notes (git-based)..."

@@ -7,7 +7,7 @@ same project is built on both Windows and NixOS/Linux and the tooling differs:
 - `Linux`            -> native Linux (NixOS). Native paths like `/home/<user>/VoiceTyper`.
                        Use the `tools/nix-build.sh` flake builds (see Project Overview).
 - `MINGW*` / `MSYS*` -> Windows under git bash. Paths like `/c/dir1/dir2`.
-                       Use the `tools/build.sh` Visual Studio builds (see Project Overview).
+                       Use the `tools/win-build.sh` Visual Studio builds (see Project Overview).
 
 Match build commands and any platform-specific source (`src/*_win32.*`, `src/*_linux.*`)
 to the detected platform rather than assuming one.
@@ -20,8 +20,8 @@ The application's primary responsibility is facilitating user control of:
     audio input -> Whisper.cpp model -> insert text into focused text input field (if available)
 
 Windows (Visual Studio toolchain):
-    bash tools/build.sh          - release cpu build
-    bash tools/build.sh cuda     - release cuda build
+    bash tools/win-build.sh          - release cpu build
+    bash tools/win-build.sh cuda     - release cuda build
 
 NixOS / Linux (nix flake, defined in flake.nix, driven by tools/nix-build.sh):
     tools/nix-build.sh           - release cpu build (.#default)
@@ -29,6 +29,15 @@ NixOS / Linux (nix flake, defined in flake.nix, driven by tools/nix-build.sh):
     tools/nix-build.sh cuda --ccache - cuda build with ccache (needs /var/cache/voicetyper-ccache, see tools/nix-build.sh)
     tools/nix-build.sh static    - release statically-linked build (.#static)
     tools/nix-build.sh appimage  - release AppImage build (.#appimage)
+    tools/nix-build.sh cuda-static   - portable CUDA static executable (.#cuda-static, bundles cudart/cublas, needs allowUnfree)
+    tools/nix-build.sh cuda-appimage - self-contained CUDA AppImage (.#cuda-appimage, needs allowUnfree)
+
+Releases (run from a Windows host in git bash):
+    tools/release-all.sh            - build + package Windows cpu/cuda and portable Linux (cpu + cuda: static + AppImage)
+                                      outputs and create a GitHub release. Builds Windows locally and sshes into
+                                      the NixOS box (VOICETYPER_NIX_SSH, default 'rock') for the portable Linux
+                                      outputs. Linux packaging: tools/nix-package.sh.
+    tools/win-release.sh            - Windows-only release flow (tag + windows package + release).
 
 ## Workflow
 1. Read `.dev/tasks.md` at the start of every session. The user may give you an explicit request, which should take priority over the tasklist. However, if the tasklist contains items that may conflict with the one-off request, notify the user and ask what to do.
@@ -51,6 +60,7 @@ replacing the `[PLAN]` entry, and stop for review before proceeding.
 
 ### Indentation & Formatting
 - Use **tab characters** for indentation (not spaces)
+- Exception: `*.nix` files use **2 spaces** per [Nix RFC 166](https://github.com/NixOS/rfcs/blob/master/rfcs/0166-nix-formatting.md). Run `nixfmt` (available in the nix devShell via `nix develop`) to canonicalize.
 - Use **LF line endings**
 - Keep lines under **120 characters**; unroll onto multiple lines if needed
 
