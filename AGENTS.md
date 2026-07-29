@@ -26,11 +26,16 @@ Windows (Visual Studio toolchain):
 NixOS / Linux (nix flake, defined in flake.nix, driven by tools/nix-build.sh):
     tools/nix-build.sh           - release cpu build (.#default)
     tools/nix-build.sh cuda      - release cuda build (.#cuda, needs allowUnfree)
-    tools/nix-build.sh cuda --ccache - cuda build with ccache (needs /var/cache/voicetyper-ccache, see tools/nix-build.sh)
-    tools/nix-build.sh static    - release statically-linked build (.#static)
-    tools/nix-build.sh appimage  - release AppImage build (.#appimage)
-    tools/nix-build.sh cuda-static   - portable CUDA static executable (.#cuda-static, bundles cudart/cublas, needs allowUnfree)
+    tools/nix-build.sh static    - release statically-linked build (.#static, musl, truly static)
+    tools/nix-build.sh appimage  - release AppImage build (.#appimage, FHS-portable)
+    tools/nix-build.sh cuda-static   - portable CUDA bundle (.#cuda-static, bundles ld-linux +
+                                      full .so closure incl. cudart/cublas; not truly static.
+                                      needs allowUnfree)
     tools/nix-build.sh cuda-appimage - self-contained CUDA AppImage (.#cuda-appimage, needs allowUnfree)
+
+    Any of the above can be combined with `--ccache` (e.g. `tools/nix-build.sh static --ccache`)
+    to reuse object files across rebuilds. Requires a ccache dir that nixbld can write
+    (default /var/cache/voicetyper-ccache, or $CCACHE_DIR; see tools/nix-build.sh).
 
 Releases (run from a Windows host in git bash):
     tools/release-all.sh            - build + package Windows cpu/cuda and portable Linux (cpu + cuda: static + AppImage)

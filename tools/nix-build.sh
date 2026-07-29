@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -13,12 +13,13 @@ usage() {
 	cat <<EOF
 Usage: tools/nix-build.sh [package] [--ccache] [-- <nix-args>...]
   package    default | cuda | static | cuda-static | appimage | cuda-appimage   (default: default)
-  --ccache   enable ccache (cuda / cuda-static / cuda-appimage packages). Requires
-             a ccache dir that nixbld can write (default /var/cache/voicetyper-ccache,
-             or \$CCACHE_DIR). The sandbox hole is applied for this build only.
+  --ccache   enable ccache for any package. Requires a ccache dir that nixbld
+             can write (default /var/cache/voicetyper-ccache, or \$CCACHE_DIR).
+             The sandbox hole is applied for this build only.
 
 Examples:
   tools/nix-build.sh
+  tools/nix-build.sh static --ccache
   tools/nix-build.sh cuda --ccache
   tools/nix-build.sh cuda-static --ccache
   tools/nix-build.sh cuda-appimage --ccache
@@ -40,8 +41,8 @@ NIX_ARGS=("$@")
 
 if [ "$USE_CCACHE" = "1" ]; then
 	case "$PACKAGE" in
-		cuda|cuda-static|cuda-appimage) ;;
-		*) echo "ccache is only wired into the cuda / cuda-static / cuda-appimage packages." >&2; exit 1 ;;
+		default|cuda|static|cuda-static|appimage|cuda-appimage) ;;
+		*) echo "unknown package for ccache: $PACKAGE" >&2; exit 1 ;;
 	esac
 	CCACHE_DIR="${CCACHE_DIR:-$CCACHE_DIR_DEFAULT}"
 	if [ ! -d "$CCACHE_DIR" ]; then

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -79,7 +79,28 @@ stage_models() {
 }
 
 # Stage a static binary (CPU or CUDA) into a clean directory layout and tar it.
-# Layout: VoiceTyper, lib/ (cuda only), stt_models/ + vad_models/ (optional).
+# The tarball extracts to a single top-level directory whose name matches the
+# tarball stem (e.g. VoiceTyper-v0.1.10-x86_64-linux-cpu-static-base-en/), with
+# the binary, lib/ (cuda only), and any model files nested inside.
+#
+# CPU layout (truly static, no dynamic deps):
+#   VoiceTyper-v...-cpu-static.../
+#     VoiceTyper
+#     stt_models/  (optional)
+#     vad_models/  (optional)
+#
+# CUDA layout (self-contained bundle, see flake.nix cuda-static):
+#   VoiceTyper-v...-cuda-static.../
+#     bin/
+#       VoiceTyper        # shell wrapper invoking lib/ld-linux + libexec/...
+#       VoiceTyperBench
+#     libexec/
+#       VoiceTyper        # actual ELF binary (rpath $ORIGIN/../lib)
+#       VoiceTyperBench
+#     lib/                # full transitive .so closure + ld-linux + CUDA runtime
+#     stt_models/  (optional)
+#     vad_models/  (optional)
+#
 #   result_link  : nix result symlink (e.g. "result-static")
 #   variant      : "cpu" | "cuda"
 #   model_variant: "" | "base-en" | "base-en-silero"
@@ -90,25 +111,26 @@ package_static() {
 	local suffix=""
 	[ -n "$model_variant" ] && suffix="-${model_variant}"
 	local name="VoiceTyper-v${VERSION}-${PLATFORM}-${variant}-static${suffix}.tar.gz"
+	local top="${name%.tar.gz}"
 	local stage="build/stage_${PLATFORM}_${variant}_static${suffix}"
+	local root="$stage/$top"
 
 	rm -rf "$stage"
-	mkdir -p "$stage"
-
-	cp "$result_link/bin/VoiceTyper" "$stage/VoiceTyper"
-	chmod +w "$stage/VoiceTyper"
+	mkdir -p "$root"
 
 	if [ "$variant" = "cuda" ]; then
-		mkdir -p "$stage/lib"
-		cp "$result_link"/lib/lib*.so.* "$stage/lib/" 2>/dev/null || true
-		local patchelf_bin
-		patchelf_bin=$(get_tool patchelf patchelf)
-		"$patchelf_bin" --set-rpath '$ORIGIN/lib' "$stage/VoiceTyper"
+		cp -r "$result_link/bin" "$root/bin"
+		cp -r "$result_link/libexec" "$root/libexec"
+		cp -r "$result_link/lib" "$root/lib"
+		find "$root" -type f \( -name '*.so*' -o -name 'VoiceTyper*' \) -exec chmod +w {} \;
+	else
+		cp "$result_link/bin/VoiceTyper" "$root/VoiceTyper"
+		chmod +w "$root/VoiceTyper"
 	fi
 
-	stage_models "$stage" "$model_variant"
+	stage_models "$root" "$model_variant"
 
-	tar -C "$stage" -czf "$DIST_DIR/$name" .
+	tar -C "$stage" -czf "$DIST_DIR/$name" "$top"
 	echo "    packaged $name"
 }
 
