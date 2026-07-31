@@ -47,22 +47,59 @@
             libXrandr
           ];
 
+          # X11/ALSA client libs that the portable bundles ship next to the
+          # bundled libSDL2.so. The dynamic SDL2 build loads them via dlopen
+          # (SDL_X11_SHARED / SDL_ALSA_SHARED) rather than DT_NEEDED, so they
+          # don't show up in ldd's closure of libSDL2 and must be copied
+          # explicitly.
+          xorgLibs = with pkgs; [
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXext
+            xorg.libXfixes
+            xorg.libXi
+            xorg.libXinerama
+            xorg.libXrandr
+            xorg.libXScrnSaver
+            xorg.libxcb
+            alsa-lib
+          ];
+
           # nixpkgs's SDL2 attribute is sdl2-compat, which dlopens SDL3 at
-          # runtime and therefore cannot be statically linked. For the static
-          # packages we instead build the real SDL2 (libsdl-org/SDL 2.32.x)
-          # from upstream source against pkgsStatic (musl + static X11/audio
-          # client libs). Only ALSA is enabled as the audio backend (see
-          # cmakeFlags below — PipeWire and PulseAudio are OFF); ALSA is the
-          # lowest common denominator and PipeWire/PulseAudio expose an ALSA
-          # compat shim, so audio still works on those systems. ALSA only
-          # needs the kernel API at runtime, so the resulting binary still
-          # runs on any Linux (including NixOS) without system .so deps.
-          staticSDL2 =
+          # runtime and therefore cannot be bundled in a self-contained way.
+          # For the portable packages we instead build the real SDL2
+          # (libsdl-org/SDL 2.32.x) from upstream source. buildSDL2
+          # parameterizes the two variants used across the flake:
+          #   static = true  -> pkgsStatic (musl), SDL_STATIC=ON, for the
+          #                     truly-static `static` package.
+          #   static = false -> glibc, SDL_SHARED=ON, for the portable bundles
+          #                     (cuda-static, appimage, cuda-appimage) that
+          #                     ship the libSDL2 .so closure next to the app.
+          # Only ALSA is enabled as the audio backend (see cmakeFlags below —
+          # PipeWire and PulseAudio are OFF); ALSA is the lowest common
+          # denominator and PipeWire/PulseAudio expose an ALSA compat shim, so
+          # audio still works on those systems. ALSA only needs the kernel API
+          # at runtime, so the resulting static binary still runs on any Linux
+          # (including NixOS) without system .so deps.
+          buildSDL2 =
+            { static }:
             let
-              spkgs = pkgs.pkgsStatic;
+              spkgs = if static then pkgs.pkgsStatic else pkgs;
+              xorgLibs = with spkgs; [
+                xorg.libX11
+                xorg.libXcursor
+                xorg.libXext
+                xorg.libXfixes
+                xorg.libXi
+                xorg.libXinerama
+                xorg.libXrandr
+                xorg.libXScrnSaver
+                xorg.libxcb
+                alsa-lib
+              ];
             in
             spkgs.stdenv.mkDerivation (finalAttrs: {
-              pname = "SDL2-static";
+              pname = if static then "SDL2-static" else "SDL2-dynamic";
               version = "2.32.10";
               src = pkgs.fetchurl {
                 url = "https://github.com/libsdl-org/SDL/releases/download/release-${finalAttrs.version}/SDL2-${finalAttrs.version}.tar.gz";
@@ -78,24 +115,17 @@
               # build (its GLdispatch asm doesn't cross-compile to musl), but
               # the non-static libglvnd is header-only enough for SDL2's
               # <GL/gl.h> / <GL/glext.h> / <GL/glx.h> feature probes.
-              buildInputs = [
-                pkgs.libglvnd
-              ];
-              propagatedBuildInputs = with spkgs; [
-                xorg.libX11
-                xorg.libXcursor
-                xorg.libXext
-                xorg.libXfixes
-                xorg.libXi
-                xorg.libXinerama
-                xorg.libXrandr
-                xorg.libXScrnSaver
-                xorg.libxcb
-                alsa-lib
-              ];
+              buildInputs = [ pkgs.libglvnd ] ++ pkgs.lib.optionals (!static) xorgLibs;
+              # The static build pulls the X11/ALSA client libs in at link
+              # time via sdl2.pc's Libs.private, so they must be propagated to
+              # downstream consumers. The shared build records them as
+              # DT_NEEDED of libSDL2.so instead. Both variants still propagate
+              # xorgLibs so downstream apps can find the X11 headers that
+              # SDL_syswm.h includes.
+              propagatedBuildInputs = xorgLibs;
               cmakeFlags = [
-                "-DSDL_SHARED=OFF"
-                "-DSDL_STATIC=ON"
+                (if static then "-DSDL_SHARED=OFF" else "-DSDL_SHARED=ON")
+                (if static then "-DSDL_STATIC=ON" else "-DSDL_STATIC=OFF")
                 "-DSDL_TEST=OFF"
                 # SDL_OPENGL is needed so SDL_GL_CreateContext /
                 # SDL_GL_GetProcAddress / SDL_GL_*Attribute are compiled in.
@@ -110,10 +140,17 @@
                 "-DSDL_ALSA=ON"
                 "-DSDL_PIPEWIRE=OFF"
                 "-DSDL_PULSEAUDIO=OFF"
-                "-DSDL_RPATH=OFF"
+                # SDL_RPATH=ON gives libSDL2.so an install rpath pointing at
+                # its X11/ALSA deps in the nix store so the shared lib works
+                # directly out of the nix build; the portable bundles
+                # re-patchelf the bundled copy to $ORIGIN in their postFixup.
+                (if static then "-DSDL_RPATH=OFF" else "-DSDL_RPATH=ON")
                 "-DSDL_LIBC=ON"
                 "-DSDL_PTHREADS=ON"
-                "-DSDL_LOADSO=OFF"
+                # The static build links everything at link time and cannot
+                # dlopen (musl has no dlopen); the shared build needs
+                # SDL_LoadObject for its X11 GL backend's runtime libGL lookup.
+                (if static then "-DSDL_LOADSO=OFF" else "-DSDL_LOADSO=ON")
               ];
               # Two trivial build fixes against modern nixpkgs headers.
               #   1. ALSA: snd_pcm_info_free returns void (per <alsa/pcm.h>)
@@ -165,17 +202,36 @@
                 includedir=@dev@/include
 
                 Name: sdl2
-                Description: Simple DirectMedia Layer static library (VoiceTyper internal build)
+                Description: Simple DirectMedia Layer @kind@ library (VoiceTyper internal build)
                 Version: @version@
                 Requires.private: alsa
                 Libs: -L''${libdir} -lSDL2 -pthread -lm
-                Libs.private: -lasound -lxcb -lX11 -lXau -lXdmcp -lXcursor -lXext -lXfixes -lXi -lXinerama -lXrandr -lXss -lXrender
+                @libs_private_line@
                 Cflags: -I''${includedir} -I''${includedir}/SDL2 -D_REENTRANT
                 EOF
                 substituteInPlace $dev/lib/pkgconfig/sdl2.pc \
                   --replace-fail '@out@' "$out" \
                   --replace-fail '@dev@' "$dev" \
                   --replace-fail '@version@' "${finalAttrs.version}"
+                ${
+                  if static then
+                    ''
+                      # Static build: pull in the X11/ALSA client libs from
+                      # Libs.private (pkg-config adds them automatically because
+                      # the resolved library is an archive).
+                      substituteInPlace $dev/lib/pkgconfig/sdl2.pc \
+                        --replace-fail '@kind@' 'static' \
+                        --replace-fail '@libs_private_line@' 'Libs.private: -lasound -lxcb -lX11 -lXau -lXdmcp -lXcursor -lXext -lXfixes -lXi -lXinerama -lXrandr -lXss -lXrender'
+                    ''
+                  else
+                    ''
+                      # Shared build: the X11/ALSA libs are DT_NEEDED of
+                      # libSDL2.so, so no Libs.private is needed.
+                      sed -i '/^@libs_private_line@$/d' $dev/lib/pkgconfig/sdl2.pc
+                      substituteInPlace $dev/lib/pkgconfig/sdl2.pc \
+                        --replace-fail '@kind@' 'shared'
+                    ''
+                }
               '';
               # bin/sdl2-config hardcodes paths to the includes in dev, so
               # without outputBin=dev it lives in out and creates an out->dev
@@ -187,6 +243,14 @@
                 "dev"
               ];
             });
+
+          # musl static SDL2 for the `static` package.
+          staticSDL2 = buildSDL2 { static = true; };
+
+          # glibc shared SDL2 for the portable bundles (cuda-static, appimage,
+          # cuda-appimage). The app links libSDL2.so; the bundles ship the
+          # .so and its X11/ALSA closure next to the binary.
+          dynamicSDL2 = buildSDL2 { static = false; };
 
           # ---- ccache toggle (shared by every package) ----------------------
           # Reading $VOICETYPER_CCACHE / $CCACHE_DIR at eval time requires
@@ -271,6 +335,8 @@
                 wrapProgram $out/bin/VoiceTyper \
                   --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs} \
                   --run 'export VOICETYPER_DATA_DIR="''${VOICETYPER_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/voicetyper}"'
+                # Clean up build artifacts from ggml/whisper cmake install targets
+                rm -rf $out/lib $out/include
               '';
             }
             // ccacheEnv
@@ -331,6 +397,8 @@
                   wrapProgram $out/bin/VoiceTyper \
                     --prefix LD_LIBRARY_PATH : ${unfreePkgs.lib.makeLibraryPath (runtimeLibs ++ cudaRuntimeLibs)} \
                     --run 'export VOICETYPER_DATA_DIR="''${VOICETYPER_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/voicetyper}"'
+                  # Clean up build artifacts from ggml/whisper cmake install targets
+                  rm -rf $out/lib $out/include
                 '';
               }
               // ccacheEnv
@@ -376,9 +444,11 @@
 
                 # pkgsStatic already wires -static into LDFLAGS for the whole
                 # stdenv, so the resulting binary has no PT_INTERP and no
-                # DT_NEEDED entries (other than what ggml/whisper pull in,
-                # which is also built static here). Nothing to patch in
-                # postInstall.
+                # DT_NEEDED entries. Clean up build artifacts left by the
+                # ggml/whisper cmake install targets.
+                postInstall = ''
+                  rm -rf $out/lib $out/include
+                '';
               }
               // ccacheEnv
             );
@@ -418,16 +488,8 @@
                   ]
                   ++ pkgs.lib.optional enableCcache ccache;
 
-                buildInputs = with unfreePkgs; [
-                  sdl2-compat
-                  libGL
-                  libX11
-                  libXcursor
-                  libXext
-                  libXfixes
-                  libXi
-                  libXinerama
-                  libXrandr
+                buildInputs = [
+                  dynamicSDL2
                   cudaPackages.cuda_cudart
                   cudaPackages.libcublas
                 ];
@@ -490,6 +552,49 @@
                                   cp -Lf ${cudaPackages.libcublas.lib}/lib/libcublas.so.* $out/lib/
                                   cp -Lf ${cudaPackages.libcublas.lib}/lib/libcublasLt.so.* $out/lib/
 
+                                  # The bundled libSDL2.so dlopens the X11/ALSA
+                                  # client libs at runtime (SDL_X11_SHARED /
+                                  # SDL_ALSA_SHARED) instead of listing them as
+                                  # DT_NEEDED, so ldd of the binary never sees
+                                  # them. Copy the full X11/ALSA .so set
+                                  # explicitly, then pull the transitive closure
+                                  # of everything in the bundle (libxcb ->
+                                  # libXau/libXdmcp, libXcursor -> libXrender,
+                                  # ...) via ldd.
+                                  for libdir in ${
+                                    pkgs.lib.replaceStrings [ ":" ] [ " " ] (pkgs.lib.makeLibraryPath xorgLibs)
+                                  }; do
+                                    for so in "$libdir"/lib*.so*; do
+                                      [ -f "$so" ] || continue
+                                      base="$(basename "$so")"
+                                      case "$base" in
+                                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                                        *) [ -e "$out/lib/$base" ] || cp -Lf "$so" $out/lib/ 2>/dev/null || true ;;
+                                      esac
+                                    done
+                                  done
+                                  for so in $out/lib/*.so*; do
+                                    for dep in $(ldd "$so" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
+                                      base="$(basename "$dep")"
+                                      case "$base" in
+                                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                                        *) [ -e "$out/lib/$base" ] || cp -Lf "$dep" $out/lib/ 2>/dev/null || true ;;
+                                      esac
+                                    done
+                                  done
+
+                                  # cmake install targets for the ggml/whisper
+                                  # subprojects place static archives, cmake
+                                  # config files, pkg-config files, and header
+                                  # files into $out/. These are build artifacts,
+                                  # not runtime deps — strip them so the
+                                  # portable bundle contains only the .so
+                                  # closure needed at runtime.
+                                  rm -f $out/lib/*.a
+                                  rm -rf $out/lib/cmake
+                                  rm -rf $out/lib/pkgconfig
+                                  rm -rf $out/include
+
                                   # Bundle the glibc dynamic linker. On NixOS the kernel
                                   # cannot find /lib64/ld-linux-x86-64.so.2, so the wrapper
                                   # script invokes this copy directly. ldd already copied it
@@ -499,28 +604,6 @@
                                   chmod +w $out/lib/ld-linux-x86-64.so.2 2>/dev/null || true
                                   cp -Lf ${cudaPackages.backendStdenv.cc.bintools.dynamicLinker} \
                                     $out/lib/ld-linux-x86-64.so.2
-
-                                  # Rewrite the binaries to look in the bundled lib dir first,
-                                  # then fall back to standard NVIDIA driver locations so
-                                  # libcuda.so.1 (which we deliberately do NOT bundle) is found
-                                  # at runtime. The interpreter path doesn't actually matter —
-                                  # the wrapper never lets the kernel consult PT_INTERP — but
-                                  # we set it to the FHS path so the binary still works on
-                                  # non-NixOS systems if someone runs it directly.
-                                  #
-                                  # rpath entries (in search order):
-                                  #   $ORIGIN/../lib              bundled .so closure
-                                  #   /run/opengl-driver/lib      NixOS NVIDIA driver location
-                                  #   /usr/lib/x86_64-linux-gnu   Debian/Ubuntu FHS libcuda.so.1
-                                  #   /lib/x86_64-linux-gnu       Debian/Ubuntu alt
-                                  #   /usr/lib64                  RPM-based FHS libcuda.so.1
-                                  #   /lib64                      RPM-based alt
-                                  #   /usr/local/cuda/lib64       manually-installed CUDA toolkit
-                                  for bin in $out/libexec/VoiceTyper $out/libexec/VoiceTyperBench; do
-                                    patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 \
-                                             --set-rpath '$ORIGIN/../lib:/run/opengl-driver/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib64:/lib64:/usr/local/cuda/lib64' \
-                                             "$bin"
-                                  done
 
                                   # Wrapper scripts that exec the bundled ld-linux directly,
                                   # bypassing kernel PT_INTERP lookup (which fails on NixOS).
@@ -542,6 +625,48 @@
                                     sed -i "s|BIN_PLACEHOLDER|$bin|" $out/bin/$bin
                                     chmod +x $out/bin/$bin
                                   done
+                '';
+
+                # Re-apply the rpaths in postFixup (after nixpkgs's fixupPhase
+                # runs patchelf --shrink-rpath, which trims absolute fallback
+                # paths that don't exist on the build machine — notably the
+                # NVIDIA driver locations — down to just $ORIGIN/../lib).
+                postFixup = ''
+                  chmod +w $out/libexec/VoiceTyper $out/libexec/VoiceTyperBench
+
+                  # Rewrite the binaries to look in the bundled lib dir first,
+                  # then fall back to standard NVIDIA driver locations so
+                  # libcuda.so.1 (which we deliberately do NOT bundle) is found
+                  # at runtime. The interpreter path doesn't actually matter —
+                  # the wrapper never lets the kernel consult PT_INTERP — but
+                  # we set it to the FHS path so the binary still works on
+                  # non-NixOS systems if someone runs it directly.
+                  #
+                  # rpath entries (in search order):
+                  #   $ORIGIN/../lib              bundled .so closure
+                  #   /run/opengl-driver/lib      NixOS NVIDIA driver location
+                  #   /usr/lib/x86_64-linux-gnu   Debian/Ubuntu FHS libcuda.so.1
+                  #   /lib/x86_64-linux-gnu       Debian/Ubuntu alt
+                  #   /usr/lib64                  RPM-based FHS libcuda.so.1
+                  #   /lib64                      RPM-based alt
+                  #   /usr/local/cuda/lib64       manually-installed CUDA toolkit
+                  for bin in $out/libexec/VoiceTyper $out/libexec/VoiceTyperBench; do
+                    patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 \
+                             --set-rpath '$ORIGIN/../lib:/run/opengl-driver/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib64:/lib64:/usr/local/cuda/lib64' \
+                             "$bin"
+                  done
+
+                  # Point every bundled non-glibc .so at its own directory so
+                  # the bundled X11/ALSA/SDL2 libs find each other (and their
+                  # own deps) on machines without those libs installed. glibc
+                  # core files are skipped — patchelf must not touch ld-linux.
+                  for so in $out/lib/*.so*; do
+                    base="$(basename "$so")"
+                    case "$base" in
+                      ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                      *) chmod +w "$so"; patchelf --set-rpath '$ORIGIN' "$so" ;;
+                    esac
+                  done
                 '';
 
                 # nixpkgs fixupPhase rewrites the wrapper shebang to point at
@@ -568,16 +693,8 @@
                 ]
                 ++ pkgs.lib.optional enableCcache ccache;
 
-              buildInputs = with pkgs; [
-                sdl2-compat
-                libGL
-                libX11
-                libXcursor
-                libXext
-                libXfixes
-                libXi
-                libXinerama
-                libXrandr
+              buildInputs = [
+                dynamicSDL2
               ];
 
               cmakeBuildType = "Release";
@@ -608,6 +725,7 @@
 
                 Binary="$PWD/VoiceTyper"
                 cp -f Release_cpu/VoiceTyper "$Binary"
+                chmod +w "$Binary"
                 patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 --remove-rpath "$Binary"
 
                 AppDir="$PWD/AppDir"
@@ -616,9 +734,54 @@
                 cp -f "$Binary" "$AppDir/usr/bin/VoiceTyper"
                 chmod +x "$AppDir/usr/bin/VoiceTyper"
 
-                SdlLib=$(find ${pkgs.sdl2-compat}/lib -name 'libSDL2-2.0.so.0' | head -1)
+                SdlLib=$(find ${dynamicSDL2}/lib -name 'libSDL2-2.0.so.0' | head -1)
                 if [ -n "$SdlLib" ]; then
                   cp -L "$SdlLib" "$AppDir/usr/lib/"
+                  # Copy the X11/ALSA closure that libSDL2 needs (ldd resolves
+                  # the full transitive DT_NEEDED closure). glibc core libs are
+                  # excluded — AppImage hosts provide their own glibc, and the
+                  # interpreter is the host's /lib64/ld-linux-x86-64.so.2.
+                  for lib in $(ldd "$SdlLib" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
+                    base="$(basename "$lib")"
+                    case "$base" in
+                      ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                      *) cp -Lf "$lib" "$AppDir/usr/lib/" ;;
+                    esac
+                  done
+                  # libSDL2.so dlopens the X11/ALSA client libs at runtime
+                  # (SDL_X11_SHARED / SDL_ALSA_SHARED) instead of listing them
+                  # as DT_NEEDED, so ldd "$SdlLib" above can't see them. Copy
+                  # the full X11/ALSA .so set explicitly, then pull the
+                  # transitive closure of every bundled lib (libxcb ->
+                  # libXau/libXdmcp, libXcursor -> libXrender, ...) via ldd.
+                  for libdir in ${pkgs.lib.replaceStrings [ ":" ] [ " " ] (pkgs.lib.makeLibraryPath xorgLibs)}; do
+                    for so in "$libdir"/lib*.so*; do
+                      [ -f "$so" ] || continue
+                      base="$(basename "$so")"
+                      case "$base" in
+                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                        *) [ -e "$AppDir/usr/lib/$base" ] || cp -Lf "$so" "$AppDir/usr/lib/" 2>/dev/null || true ;;
+                      esac
+                    done
+                  done
+                  for so in "$AppDir"/usr/lib/*.so*; do
+                    for dep in $(ldd "$so" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
+                      base="$(basename "$dep")"
+                      case "$base" in
+                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                        *) [ -e "$AppDir/usr/lib/$base" ] || cp -Lf "$dep" "$AppDir/usr/lib/" 2>/dev/null || true ;;
+                      esac
+                    done
+                  done
+                  # Point libSDL2 and every bundled dep at their own dir so the
+                  # bundle is self-contained (each lib resolves its own deps
+                  # via $ORIGIN).
+                  for so in "$AppDir"/usr/lib/*.so*; do
+                    [ -f "$so" ] || continue
+                    chmod +w "$so"
+                    patchelf --set-rpath '$ORIGIN' "$so"
+                  done
+                  chmod +w "$AppDir/usr/bin/VoiceTyper"
                   patchelf --set-rpath '$ORIGIN/../lib' "$AppDir/usr/bin/VoiceTyper"
                 fi
 
@@ -712,16 +875,8 @@
                   ]
                   ++ pkgs.lib.optional enableCcache ccache;
 
-                buildInputs = with unfreePkgs; [
-                  sdl2-compat
-                  libGL
-                  libX11
-                  libXcursor
-                  libXext
-                  libXfixes
-                  libXi
-                  libXinerama
-                  libXrandr
+                buildInputs = [
+                  dynamicSDL2
                   cudaPackages.cuda_cudart
                   cudaPackages.libcublas
                 ];
@@ -752,6 +907,7 @@
 
                   Binary="$PWD/VoiceTyper"
                   cp -f Release_cuda/VoiceTyper "$Binary"
+                  chmod +w "$Binary"
                   patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 --remove-rpath "$Binary"
 
                   AppDir="$PWD/AppDir"
@@ -760,15 +916,63 @@
                   cp -f "$Binary" "$AppDir/usr/bin/VoiceTyper"
                   chmod +x "$AppDir/usr/bin/VoiceTyper"
 
-                  SdlLib=$(find ${pkgs.sdl2-compat}/lib -name 'libSDL2-2.0.so.0' | head -1)
+                  SdlLib=$(find ${dynamicSDL2}/lib -name 'libSDL2-2.0.so.0' | head -1)
                   if [ -n "$SdlLib" ]; then
                     cp -L "$SdlLib" "$AppDir/usr/lib/"
+                    # Copy the X11/ALSA closure that libSDL2 needs (ldd
+                    # resolves the full transitive DT_NEEDED closure). glibc
+                    # core libs are excluded — AppImage hosts provide their own
+                    # glibc, and the interpreter is the host's
+                    # /lib64/ld-linux-x86-64.so.2.
+                    for lib in $(ldd "$SdlLib" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
+                      base="$(basename "$lib")"
+                      case "$base" in
+                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                        *) cp -Lf "$lib" "$AppDir/usr/lib/" ;;
+                      esac
+                    done
                   fi
+
+                  # libSDL2.so dlopens the X11/ALSA client libs at runtime
+                  # (SDL_X11_SHARED / SDL_ALSA_SHARED) instead of listing them
+                  # as DT_NEEDED, so ldd "$SdlLib" above can't see them. Copy
+                  # the full X11/ALSA .so set explicitly.
+                  for libdir in ${pkgs.lib.replaceStrings [ ":" ] [ " " ] (pkgs.lib.makeLibraryPath xorgLibs)}; do
+                    for so in "$libdir"/lib*.so*; do
+                      [ -f "$so" ] || continue
+                      base="$(basename "$so")"
+                      case "$base" in
+                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                        *) [ -e "$AppDir/usr/lib/$base" ] || cp -Lf "$so" "$AppDir/usr/lib/" 2>/dev/null || true ;;
+                      esac
+                    done
+                  done
 
                   cp -L ${cudaPackages.cuda_cudart}/lib/libcudart.so.* "$AppDir/usr/lib/" 2>/dev/null || true
                   cp -L ${cudaPackages.libcublas.lib}/lib/libcublas.so.* "$AppDir/usr/lib/"
                   cp -L ${cudaPackages.libcublas.lib}/lib/libcublasLt.so.* "$AppDir/usr/lib/"
 
+                  # Pull the transitive closure of every bundled lib (libxcb
+                  # -> libXau/libXdmcp, libXcursor -> libXrender, ...) via ldd.
+                  for so in "$AppDir"/usr/lib/*.so*; do
+                    for dep in $(ldd "$so" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
+                      base="$(basename "$dep")"
+                      case "$base" in
+                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                        *) [ -e "$AppDir/usr/lib/$base" ] || cp -Lf "$dep" "$AppDir/usr/lib/" 2>/dev/null || true ;;
+                      esac
+                    done
+                  done
+
+                  # Point every bundled lib at its own directory so the bundle
+                  # is self-contained (each lib resolves its own deps via
+                  # $ORIGIN), then point the app at the lib dir.
+                  for so in "$AppDir"/usr/lib/*.so*; do
+                    [ -f "$so" ] || continue
+                    chmod +w "$so"
+                    patchelf --set-rpath '$ORIGIN' "$so"
+                  done
+                  chmod +w "$AppDir/usr/bin/VoiceTyper"
                   patchelf --set-rpath '$ORIGIN/../lib' "$AppDir/usr/bin/VoiceTyper"
 
                   printf '%s\n' \
