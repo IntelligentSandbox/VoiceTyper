@@ -620,6 +620,13 @@
                                     cat > $out/bin/$bin <<'WRAPPER'
                   #!/bin/sh
                   DIR="$(cd "$(dirname "$0")/.." && pwd)"
+                  # Point the bundled glibc's lazy dlopens (libgcc_s for pthread
+                  # cancellation, NSS modules) at the bundled lib dir first: the
+                  # bundled ld-linux otherwise searches a NixOS-only store path
+                  # for libgcc_s that doesn't exist on other distros. libcuda.so.1
+                  # is not in the bundle, so the search falls through to the
+                  # rpath'd NVIDIA driver locations.
+                  export LD_LIBRARY_PATH="$DIR/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
                   exec "$DIR/lib/ld-linux-x86-64.so.2" "$DIR/libexec/BIN_PLACEHOLDER" "$@"
                   WRAPPER
                                     sed -i "s|BIN_PLACEHOLDER|$bin|" $out/bin/$bin
@@ -739,8 +746,8 @@
                   cp -L "$SdlLib" "$AppDir/usr/lib/"
                   # Copy the X11/ALSA closure that libSDL2 needs (ldd resolves
                   # the full transitive DT_NEEDED closure). glibc core libs are
-                  # excluded — AppImage hosts provide their own glibc, and the
-                  # interpreter is the host's /lib64/ld-linux-x86-64.so.2.
+                  # copied separately below — they must be bundled so the app
+                  # runs on any host glibc.
                   for lib in $(ldd "$SdlLib" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
                     base="$(basename "$lib")"
                     case "$base" in
@@ -773,11 +780,28 @@
                       esac
                     done
                   done
+                  # Bundle glibc + the loader so the AppImage runs on any host
+                  # glibc (building against the NixOS toolchain's glibc 2.42
+                  # would otherwise require host glibc >= 2.38, excluding Debian
+                  # 12 / Ubuntu 22.04 / RHEL 9 etc.). AppRun execs the bundled
+                  # loader directly; the bundled libs resolve their deps via
+                  # $ORIGIN and the binary's rpath. libgcc_s is bundled too —
+                  # glibc dlopens it lazily for pthread cancellation.
+                  GLIBC_BASE=${pkgs.glibc}/lib
+                  for so in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 librt.so.1; do
+                    cp -Lf "$GLIBC_BASE/$so" "$AppDir/usr/lib/"
+                  done
+                  cp -Lf ${pkgs.stdenv.cc.cc.lib}/lib/libgcc_s.so.1 "$AppDir/usr/lib/"
                   # Point libSDL2 and every bundled dep at their own dir so the
                   # bundle is self-contained (each lib resolves its own deps
-                  # via $ORIGIN).
+                  # via $ORIGIN). The bundled glibc core is left untouched —
+                  # patchelf'ing the loader is fragile and the core libs resolve
+                  # through the binary's rpath / LD_LIBRARY_PATH instead.
                   for so in "$AppDir"/usr/lib/*.so*; do
                     [ -f "$so" ] || continue
+                    case "$(basename "$so")" in
+                      ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) continue ;;
+                    esac
                     chmod +w "$so"
                     patchelf --set-rpath '$ORIGIN' "$so"
                   done
@@ -798,10 +822,11 @@
                 cp ${./media/voicetyper-icon.png} "$AppDir/VoiceTyper.png"
 
                 printf '%s\n' \
-                  '#!/bin/bash' \
+                  '#!/bin/sh' \
                   'dir="$(dirname "$(readlink -f "$0")")"' \
                   'export VOICETYPER_DATA_DIR="''${VOICETYPER_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/voicetyper}"' \
-                  'exec "$dir/usr/bin/VoiceTyper" "$@"' \
+                  'export LD_LIBRARY_PATH="$dir/usr/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' \
+                  'exec "$dir/usr/lib/ld-linux-x86-64.so.2" "$dir/usr/bin/VoiceTyper" "$@"' \
                   > "$AppDir/AppRun"
                 chmod +x "$AppDir/AppRun"
 
@@ -921,9 +946,8 @@
                     cp -L "$SdlLib" "$AppDir/usr/lib/"
                     # Copy the X11/ALSA closure that libSDL2 needs (ldd
                     # resolves the full transitive DT_NEEDED closure). glibc
-                    # core libs are excluded — AppImage hosts provide their own
-                    # glibc, and the interpreter is the host's
-                    # /lib64/ld-linux-x86-64.so.2.
+                    # core libs are copied separately below — they must be
+                    # bundled so the app runs on any host glibc.
                     for lib in $(ldd "$SdlLib" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
                       base="$(basename "$lib")"
                       case "$base" in
@@ -964,16 +988,37 @@
                     done
                   done
 
+                  # Bundle glibc + the loader so the AppImage runs on any host
+                  # glibc (building against the NixOS toolchain's glibc 2.42
+                  # would otherwise require host glibc >= 2.38, excluding Debian
+                  # 12 / Ubuntu 22.04 / RHEL 9 etc.). AppRun execs the bundled
+                  # loader directly; the bundled libs resolve their deps via
+                  # $ORIGIN and the binary's rpath. libgcc_s is bundled too —
+                  # glibc dlopens it lazily for pthread cancellation.
+                  GLIBC_BASE=${pkgs.glibc}/lib
+                  for so in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 librt.so.1; do
+                    cp -Lf "$GLIBC_BASE/$so" "$AppDir/usr/lib/"
+                  done
+                  cp -Lf ${pkgs.stdenv.cc.cc.lib}/lib/libgcc_s.so.1 "$AppDir/usr/lib/"
+
                   # Point every bundled lib at its own directory so the bundle
                   # is self-contained (each lib resolves its own deps via
-                  # $ORIGIN), then point the app at the lib dir.
+                  # $ORIGIN), then point the app at the lib dir. The bundled
+                  # glibc core is left untouched — patchelf'ing the loader is
+                  # fragile and the core libs resolve through the binary's
+                  # rpath / LD_LIBRARY_PATH instead. The app also falls back to
+                  # standard NVIDIA driver locations (which we deliberately do
+                  # NOT bundle) so libcuda.so.1 is found at runtime.
                   for so in "$AppDir"/usr/lib/*.so*; do
                     [ -f "$so" ] || continue
+                    case "$(basename "$so")" in
+                      ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) continue ;;
+                    esac
                     chmod +w "$so"
                     patchelf --set-rpath '$ORIGIN' "$so"
                   done
                   chmod +w "$AppDir/usr/bin/VoiceTyper"
-                  patchelf --set-rpath '$ORIGIN/../lib' "$AppDir/usr/bin/VoiceTyper"
+                  patchelf --set-rpath '$ORIGIN/../lib:/run/opengl-driver/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib64:/lib64:/usr/local/cuda/lib64' "$AppDir/usr/bin/VoiceTyper"
 
                   printf '%s\n' \
                     '[Desktop Entry]' \
@@ -988,10 +1033,11 @@
                   cp ${./media/voicetyper-icon.png} "$AppDir/VoiceTyper.png"
 
                   printf '%s\n' \
-                    '#!/bin/bash' \
+                    '#!/bin/sh' \
                     'dir="$(dirname "$(readlink -f "$0")")"' \
                     'export VOICETYPER_DATA_DIR="''${VOICETYPER_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/voicetyper}"' \
-                    'exec "$dir/usr/bin/VoiceTyper" "$@"' \
+                    'export LD_LIBRARY_PATH="$dir/usr/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' \
+                    'exec "$dir/usr/lib/ld-linux-x86-64.so.2" "$dir/usr/bin/VoiceTyper" "$@"' \
                     > "$AppDir/AppRun"
                   chmod +x "$AppDir/AppRun"
 
