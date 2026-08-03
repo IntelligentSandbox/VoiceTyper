@@ -89,7 +89,7 @@ inline void
 query_whisper_thread_count(GlobalState *AppState)
 {
 	int LogicalCores = query_logical_processor_count();
-	int ThreadCount  = LogicalCores / 2;
+	int ThreadCount  = (LogicalCores * 3) / 4;
 	if (ThreadCount < 1) ThreadCount = 1;
 
 	AppState->WhisperThreadCount = ThreadCount;
