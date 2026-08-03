@@ -265,13 +265,16 @@ render_settings_ui(GlobalState *AppState)
 	}
 
 	ImGui::Separator();
-	ImGui::Text("Keyboard Shortcuts");
 
 	bool UseToggleMode = (S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
 	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
 	{
 		S->TempRecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
 	}
+
+	ImGui::SetWindowFontScale(1.3f);
+	ImGui::Text("Keyboard Shortcuts");
+	ImGui::SetWindowFontScale(1.0f);
 
 	float AvailWidth = ImGui::GetContentRegionAvail().x;
 	float Spacing = ImGui::GetStyle().ItemSpacing.x;
