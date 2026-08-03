@@ -267,16 +267,10 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::Separator();
 	ImGui::Text("Keyboard Shortcuts");
 
-	ImGui::Text("Record Hotkey Mode");
-	if (ImGui::RadioButton("Hold key to record",
-		S->TempRecordHotkeyMode == RECORDING_HOTKEY_HOLD))
+	bool UseToggleMode = (S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
+	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
 	{
-		S->TempRecordHotkeyMode = RECORDING_HOTKEY_HOLD;
-	}
-	if (ImGui::RadioButton("Press key to start/stop",
-		S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE))
-	{
-		S->TempRecordHotkeyMode = RECORDING_HOTKEY_TOGGLE;
+		S->TempRecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
 	}
 
 	float AvailWidth = ImGui::GetContentRegionAvail().x;
