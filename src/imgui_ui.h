@@ -247,6 +247,12 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::Checkbox("Use character-by-character text injection (instead of paste Ctrl+Shift+V)",
 		&S->TempUseCharByCharInjection);
 
+	bool UseToggleMode = (S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
+	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
+	{
+		S->TempRecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
+	}
+
 	ImGui::Text("CPU Cores for Inference:");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(100);
@@ -257,20 +263,7 @@ render_settings_ui(GlobalState *AppState)
 		if (S->TempWhisperThreadCount > MaxCores) S->TempWhisperThreadCount = MaxCores;
 	}
 
-	if (colored_button("Copy Exe Dir Path", ImVec2(-1.0f, 0.0f), BUTTON_COLOR_GREY))
-	{
-		std::string ExeDir = platform_get_exe_dir();
-		ImGui::SetClipboardText(ExeDir.c_str());
-		show_success_toast(AppState, "Exe dir copied to clipboard!");
-	}
-
 	ImGui::Separator();
-
-	bool UseToggleMode = (S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
-	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
-	{
-		S->TempRecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
-	}
 
 	ImGui::SetWindowFontScale(1.3f);
 	ImGui::Text("Keyboard Shortcuts");
@@ -388,6 +381,15 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::TextWrapped(
 		"Select an action above, then click the box and press your desired combination. "
 		"Modifier-only combos (e.g. Ctrl+Alt) are supported. Escape clears the selected shortcut.");
+
+	ImGui::Separator();
+
+	if (colored_button("Copy Exe Dir Path", ImVec2(0.0f, 0.0f), BUTTON_COLOR_GREY))
+	{
+		std::string ExeDir = platform_get_exe_dir();
+		ImGui::SetClipboardText(ExeDir.c_str());
+		show_success_toast(AppState, "Exe dir copied to clipboard!");
+	}
 
 	ImGui::Separator();
 
