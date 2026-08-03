@@ -49,7 +49,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---------------------------------------------------------------------------
 option(VOICETYPER_CUDA "Enable NVIDIA CUDA GPU inference" OFF)
 option(VOICETYPER_APP_IPO "Enable IPO for VoiceTyper application targets" ON)
-option(VOICETYPER_STATIC "Build a static binary with runtime GL loading (Linux)" OFF)
 option(VOICETYPER_STREAMING_WHISPER_VAD "Enable Whisper VAD for silence-bounded streaming chunks" ON)
 option(VOICETYPER_RECORD_WHISPER_VAD "Enable Whisper VAD for record-mode chunks" ON)
 set(GGML_LTO OFF CACHE BOOL "Enable GGML link time optimization")
@@ -137,12 +136,9 @@ if(WIN32)
 elseif(UNIX AND NOT APPLE)
 	find_package(PkgConfig REQUIRED)
 	pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
-	if(NOT VOICETYPER_STATIC)
-		find_package(OpenGL REQUIRED)
-	endif()
 	list(APPEND IMGUI_SOURCES
 		${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
-		${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+		${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp
 	)
 	set(SOURCES
 		src/imgui_main_linux.cpp
@@ -198,7 +194,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:DEBUG>
 	$<$<BOOL:${VOICETYPER_CUDA}>:VOICETYPER_CUDA>
-	$<$<BOOL:${VOICETYPER_STATIC}>:VOICETYPER_STATIC>
 	VOICETYPER_STREAMING_WHISPER_VAD=$<BOOL:${VOICETYPER_STREAMING_WHISPER_VAD}>
 	VOICETYPER_RECORD_WHISPER_VAD=$<BOOL:${VOICETYPER_RECORD_WHISPER_VAD}>
 	VOICETYPER_APP_UPDATE_HZ=${VOICETYPER_APP_UPDATE_HZ}
@@ -214,18 +209,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 if(UNIX AND NOT APPLE)
-	if(VOICETYPER_STATIC)
-		target_link_libraries(${PROJECT_NAME} PRIVATE
-			PkgConfig::SDL2
-			${CMAKE_DL_LIBS}
-		)
-	else()
-		target_link_libraries(${PROJECT_NAME} PRIVATE
-			PkgConfig::SDL2
-			OpenGL::GL
-			${CMAKE_DL_LIBS}
-		)
-	endif()
+	target_link_libraries(${PROJECT_NAME} PRIVATE
+		PkgConfig::SDL2
+		${CMAKE_DL_LIBS}
+	)
 endif()
 
 if(VOICETYPER_CUDA)

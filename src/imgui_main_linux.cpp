@@ -1,23 +1,9 @@
 #include <SDL.h>
 #include <cstdio>
 
-#ifdef VOICETYPER_STATIC
-typedef void (*GLViewportProc)(int, int, int, int);
-typedef void (*GLClearColorProc)(float, float, float, float);
-typedef void (*GLClearProc)(unsigned int);
-static GLViewportProc   glViewport   = nullptr;
-static GLClearColorProc glClearColor = nullptr;
-static GLClearProc      glClear      = nullptr;
-#ifndef GL_COLOR_BUFFER_BIT
-#define GL_COLOR_BUFFER_BIT 0x00004000
-#endif
-#else
-#include <SDL_opengl.h>
-#endif
-
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
-#include "imgui_impl_opengl3.h"
+#include "imgui_impl_sdlrenderer2.h"
 
 #include "state.h"
 #include "platform_linux.h"
@@ -98,29 +84,27 @@ milliseconds_until_counter(Uint64 Now, Uint64 Deadline)
 }
 
 static void
-render_frame(SDL_Window *Window)
+render_frame(SDL_Renderer *Renderer)
 {
 	if (!g_AppState) return;
 
+	int OutputW = 0;
+	int OutputH = 0;
+	SDL_GetRendererOutputSize(Renderer, &OutputW, &OutputH);
+	if (OutputW <= 0 || OutputH <= 0) return;
+
 	ImGuiIO &Io = ImGui::GetIO();
-	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplSDLRenderer2_NewFrame();
 	ImGui_ImplSDL2_NewFrame();
 	ImGui::NewFrame();
 
 	render_main_ui(g_AppState, Io);
 
 	ImGui::Render();
-
-	int DisplayW = 0;
-	int DisplayH = 0;
-	SDL_GL_GetDrawableSize(Window, &DisplayW, &DisplayH);
-	if (DisplayW <= 0 || DisplayH <= 0) return;
-
-	glViewport(0, 0, DisplayW, DisplayH);
-	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-	SDL_GL_SwapWindow(Window);
+	SDL_SetRenderDrawColor(Renderer, 25, 25, 25, 255);
+	SDL_RenderClear(Renderer);
+	ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), Renderer);
+	SDL_RenderPresent(Renderer);
 }
 
 int
@@ -139,15 +123,6 @@ main(int, char **)
 
 	SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 
-	const char *GlslVersion = "#version 130";
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
 	int WindowWidth = WINDOW_DEFAULT_WIDTH;
 	int WindowHeight = WINDOW_DEFAULT_HEIGHT;
 	load_window_size(&WindowWidth, &WindowHeight);
@@ -158,7 +133,7 @@ main(int, char **)
 		SDL_WINDOWPOS_CENTERED,
 		WindowWidth,
 		WindowHeight,
-		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+		SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
 	if (!Window)
 	{
 		printf("[platform_linux] SDL window creation failed: %s\n", SDL_GetError());
@@ -166,31 +141,14 @@ main(int, char **)
 		return 1;
 	}
 
-	SDL_GLContext GlContext = SDL_GL_CreateContext(Window);
-	if (!GlContext)
+	SDL_Renderer *Renderer = SDL_CreateRenderer(Window, -1, SDL_RENDERER_SOFTWARE);
+	if (!Renderer)
 	{
-		printf("[platform_linux] SDL GL context creation failed: %s\n", SDL_GetError());
+		printf("[platform_linux] SDL renderer creation failed: %s\n", SDL_GetError());
 		SDL_DestroyWindow(Window);
 		SDL_Quit();
 		return 1;
 	}
-
-	SDL_GL_MakeCurrent(Window, GlContext);
-	SDL_GL_SetSwapInterval(1);
-
-#ifdef VOICETYPER_STATIC
-	glViewport   = (GLViewportProc)SDL_GL_GetProcAddress("glViewport");
-	glClearColor = (GLClearColorProc)SDL_GL_GetProcAddress("glClearColor");
-	glClear      = (GLClearProc)SDL_GL_GetProcAddress("glClear");
-	if (!glViewport || !glClearColor || !glClear)
-	{
-		printf("[platform_linux] Failed to load GL function pointers\n");
-		SDL_GL_DeleteContext(GlContext);
-		SDL_DestroyWindow(Window);
-		SDL_Quit();
-		return 1;
-	}
-#endif
 
 	GlobalState AppStateStorage = {};
 	GlobalState *AppState = &AppStateStorage;
@@ -208,8 +166,8 @@ main(int, char **)
 	ImGui::StyleColorsDark();
 	Io.Fonts->AddFontDefault();
 
-	ImGui_ImplSDL2_InitForOpenGL(Window, GlContext);
-	ImGui_ImplOpenGL3_Init(GlslVersion);
+	ImGui_ImplSDL2_InitForSDLRenderer(Window, Renderer);
+	ImGui_ImplSDLRenderer2_Init(Renderer);
 
 	const Uint64 AppUpdateIntervalTicks = performance_interval_for_hz(VOICETYPER_APP_UPDATE_HZ);
 	Uint64 Now = performance_counter_now();
@@ -252,7 +210,7 @@ main(int, char **)
 
 		if (Now >= NextAppTick) NextAppTick = Now + AppUpdateIntervalTicks;
 
-		render_frame(Window);
+		render_frame(Renderer);
 
 		Now = performance_counter_now();
 		Uint32 WaitMs = milliseconds_until_counter(Now, NextAppTick);
@@ -263,11 +221,11 @@ main(int, char **)
 	g_AppState = nullptr;
 	app_shutdown_runtime(AppState);
 
-	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplSDLRenderer2_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
 
-	SDL_GL_DeleteContext(GlContext);
+	SDL_DestroyRenderer(Renderer);
 	SDL_DestroyWindow(Window);
 	SDL_Quit();
 

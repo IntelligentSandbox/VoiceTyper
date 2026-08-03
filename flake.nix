@@ -109,13 +109,7 @@
                 spkgs.buildPackages.cmake
                 spkgs.buildPackages.pkg-config
               ];
-              # GL headers come from glibc libglvnd (mesa would also work);
-              # we don't link libGL — SDL2's X11 GL backend dlopens it at
-              # runtime via SDL_GL_LoadLibrary. pkgsStatic.libglvnd fails to
-              # build (its GLdispatch asm doesn't cross-compile to musl), but
-              # the non-static libglvnd is header-only enough for SDL2's
-              # <GL/gl.h> / <GL/glext.h> / <GL/glx.h> feature probes.
-              buildInputs = [ pkgs.libglvnd ] ++ pkgs.lib.optionals (!static) xorgLibs;
+              buildInputs = pkgs.lib.optionals (!static) xorgLibs;
               # The static build pulls the X11/ALSA client libs in at link
               # time via sdl2.pc's Libs.private, so they must be propagated to
               # downstream consumers. The shared build records them as
@@ -127,12 +121,12 @@
                 (if static then "-DSDL_SHARED=OFF" else "-DSDL_SHARED=ON")
                 (if static then "-DSDL_STATIC=ON" else "-DSDL_STATIC=OFF")
                 "-DSDL_TEST=OFF"
-                # SDL_OPENGL is needed so SDL_GL_CreateContext /
-                # SDL_GL_GetProcAddress / SDL_GL_*Attribute are compiled in.
-                # The actual libGL.so is dlopen'd at runtime by SDL2's X11 GL
-                # backend (X11_GL_LoadLibrary -> GL_LoadObject), so we don't
-                # link libGL here. The GL headers come from libglvnd above.
-                "-DSDL_OPENGL=ON"
+                # The app renders via SDL's software renderer
+                # (imgui_impl_sdlrenderer2) and never creates an OpenGL
+                # window, so GLX/EGL support is compiled out entirely. This
+                # removes the runtime libGL.so dlopen that a truly-static
+                # musl binary cannot perform.
+                "-DSDL_OPENGL=OFF"
                 "-DSDL_OPENGLES=OFF"
                 "-DSDL_VULKAN=OFF"
                 "-DSDL_X11=ON"
@@ -149,7 +143,8 @@
                 "-DSDL_PTHREADS=ON"
                 # The static build links everything at link time and cannot
                 # dlopen (musl has no dlopen); the shared build needs
-                # SDL_LoadObject for its X11 GL backend's runtime libGL lookup.
+                # SDL_LoadObject for its runtime X11/ALSA client library
+                # lookups (SDL_X11_SHARED / SDL_ALSA_SHARED).
                 (if static then "-DSDL_LOADSO=OFF" else "-DSDL_LOADSO=ON")
               ];
               # Two trivial build fixes against modern nixpkgs headers.
@@ -407,10 +402,11 @@
           # Portable CPU build: a truly static binary (musl libc, static SDL2
           # and X11). No dynamic linker, no .so dependencies — runs on any
           # x86_64 Linux including NixOS, where /lib64/ld-linux-x86-64.so.2
-          # does not exist. GL is loaded via dlopen() at runtime. Audio is
-          # ALSA-only (staticSDL2 disables PipeWire / PulseAudio); ALSA is
-          # driven via the kernel API, with PipeWire/PulseAudio exposing
-          # ALSA compat shims on systems that use them.
+          # does not exist. The UI renders via SDL's software renderer (no
+          # OpenGL / no dlopen needed). Audio is ALSA-only (staticSDL2
+          # disables PipeWire / PulseAudio); ALSA is driven via the kernel
+          # API, with PipeWire/PulseAudio exposing ALSA compat shims on
+          # systems that use them.
           static =
             let
               spkgs = pkgs.pkgsStatic;
@@ -435,7 +431,6 @@
                 cmakeFlags = [
                   "-DVOICETYPER_CUDA=OFF"
                   "-DVOICETYPER_APP_IPO=OFF"
-                  "-DVOICETYPER_STATIC=ON"
                   "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
                 ]
                 ++ ccacheCmakeFlags { };
@@ -498,7 +493,6 @@
                 cmakeFlags = [
                   "-DVOICETYPER_CUDA=ON"
                   "-DVOICETYPER_APP_IPO=OFF"
-                  "-DVOICETYPER_STATIC=ON"
                   "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
                 ]
                 ++ ccacheCmakeFlags { cuda = true; };
@@ -708,7 +702,6 @@
               cmakeFlags = [
                 "-DVOICETYPER_CUDA=OFF"
                 "-DVOICETYPER_APP_IPO=OFF"
-                "-DVOICETYPER_STATIC=ON"
                 "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
               ]
               ++ ccacheCmakeFlags { };
@@ -910,7 +903,6 @@
                 cmakeFlags = [
                   "-DVOICETYPER_CUDA=ON"
                   "-DVOICETYPER_APP_IPO=OFF"
-                  "-DVOICETYPER_STATIC=ON"
                   "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
                 ]
                 ++ ccacheCmakeFlags { cuda = true; };
