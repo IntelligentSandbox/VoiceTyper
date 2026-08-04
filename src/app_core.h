@@ -29,7 +29,14 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->IsModelTransitioning.store(false);
 	AppState->ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
 	AppState->Platform.OwnWindow = OwnWindow;
-	AppState->Ui.IsSettingsDialogOpen = false;
+	AppState->Ui.SettingsState.SelectedAction = 0;
+	AppState->Ui.SettingsState.LastPreviewTime = -1.0;
+	AppState->Ui.SettingsState.Capture.Captured = AppState->RecordHotkey;
+	AppState->Ui.SettingsState.Capture.HasCapture = AppState->RecordHotkey.is_valid();
+	AppState->Ui.SettingsState.Capture.IsCapturing = false;
+	AppState->Ui.SettingsState.Capture.PeakModifiers = 0;
+	AppState->Ui.SettingsState.Capture.PeakVirtualKey = 0;
+	AppState->Ui.SettingsState.Capture.ReleaseFrames = 0;
 	AppState->Ui.IsCrashDialogOpen = false;
 	AppState->Ui.CrashDialogOpened = false;
 	AppState->Ui.PendingCrashDumps.clear();

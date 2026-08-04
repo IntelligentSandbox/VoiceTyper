@@ -50,15 +50,6 @@ struct SettingsWindowState
 {
 	int SelectedAction;
 	HotkeyCaptureState Capture;
-	HotkeyConfig TempHotkeys[4];
-	RecordingHotkeyMode TempRecordHotkeyMode;
-	bool TempPlayRecordSound;
-	int TempStartSoundFreq;
-	int TempStopSoundFreq;
-	int TempCancelSoundFreq;
-	bool TempUseCharByCharInjection;
-	bool TempCopyToClipboardWhenNoTarget;
-	int TempWhisperThreadCount;
 	double LastPreviewTime;
 };
 
@@ -120,7 +111,6 @@ struct CoreRuntimeState
 
 struct UiRuntimeState
 {
-	bool IsSettingsDialogOpen;
 	SettingsWindowState SettingsState;
 	std::string ToastMessage;
 	double ToastExpireTime;

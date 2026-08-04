@@ -114,74 +114,75 @@ load_model_button_idle_label(GlobalState *AppState)
 }
 
 // ---------------------------------------------------------------------------
-// Settings Dialog - select action
+// Settings panel helpers (inline in right column)
 // ---------------------------------------------------------------------------
-static void
-settings_select_action(SettingsWindowState *S, int Action)
+static HotkeyConfig *
+settings_action_hotkey_ptr(GlobalState *AppState, int Action)
 {
-	S->SelectedAction = Action;
-	S->Capture.Captured = S->TempHotkeys[Action];
-	S->Capture.HasCapture = S->TempHotkeys[Action].is_valid();
-	S->Capture.IsCapturing = false;
-	S->Capture.PeakModifiers = 0;
-	S->Capture.PeakVirtualKey = 0;
-	S->Capture.ReleaseFrames = 0;
+	switch (Action)
+	{
+	case 0:  return &AppState->RecordHotkey;
+	case 1:  return &AppState->CancelRecordHotkey;
+	case 2:  return &AppState->StreamHotkey;
+	case 3:  return &AppState->LoadModelHotkey;
+	default: return nullptr;
+	}
 }
 
-// ---------------------------------------------------------------------------
-// Settings Dialog - initialize state
-// ---------------------------------------------------------------------------
+static const char *
+settings_action_setting_name(int Action)
+{
+	switch (Action)
+	{
+	case 0:  return "record_hotkey";
+	case 1:  return "cancel_record_hotkey";
+	case 2:  return "stream_hotkey";
+	case 3:  return "load_model_hotkey";
+	default: return "";
+	}
+}
+
 static void
-init_settings_state(GlobalState *AppState)
+settings_save_action_hotkey(GlobalState *AppState, int Action)
+{
+	HotkeyConfig *H = settings_action_hotkey_ptr(AppState, Action);
+	if (!H) return;
+	save_hotkey_setting(settings_action_setting_name(Action),
+		(int)H->Modifiers, (int)H->VirtualKey);
+}
+
+static void
+settings_select_action(GlobalState *AppState, int Action)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
-	S->SelectedAction = 0;
-	S->TempHotkeys[0] = AppState->RecordHotkey;
-	S->TempHotkeys[1] = AppState->CancelRecordHotkey;
-	S->TempHotkeys[2] = AppState->StreamHotkey;
-	S->TempHotkeys[3] = AppState->LoadModelHotkey;
-	S->TempRecordHotkeyMode = AppState->RecordHotkeyMode;
-	S->TempPlayRecordSound = AppState->PlayRecordSound;
-	S->TempStartSoundFreq = AppState->StartSoundFreq;
-	S->TempStopSoundFreq = AppState->StopSoundFreq;
-	S->TempCancelSoundFreq = AppState->CancelSoundFreq;
-	S->TempUseCharByCharInjection = AppState->UseCharByCharInjection;
-	S->TempCopyToClipboardWhenNoTarget = AppState->CopyToClipboardWhenNoTarget;
-	S->TempWhisperThreadCount = AppState->WhisperThreadCount;
-	S->LastPreviewTime = -1.0;
-	S->Capture.Captured = AppState->RecordHotkey;
-	S->Capture.HasCapture = AppState->RecordHotkey.is_valid();
+	S->SelectedAction = Action;
+
+	HotkeyConfig *H = settings_action_hotkey_ptr(AppState, Action);
+	S->Capture.Captured = H ? *H : HotkeyConfig{};
+	S->Capture.HasCapture = S->Capture.Captured.is_valid();
 	S->Capture.IsCapturing = false;
 	S->Capture.PeakModifiers = 0;
 	S->Capture.PeakVirtualKey = 0;
 	S->Capture.ReleaseFrames = 0;
 }
 
-// ---------------------------------------------------------------------------
-// Settings Dialog
-// ---------------------------------------------------------------------------
 static void
-settings_preview_sound(GlobalState *AppState, SettingsWindowState *S, int FreqHz, bool Force)
+settings_preview_sound(GlobalState *AppState, int FreqHz, bool Force)
 {
+	SettingsWindowState *S = &AppState->Ui.SettingsState;
 	double Now = ImGui::GetTime();
 	if (!Force && Now - S->LastPreviewTime < 0.15) return;
 	platform_play_sound(&AppState->Platform, FreqHz, SOUND_PREVIEW_DURATION_MS);
 	S->LastPreviewTime = Now;
 }
 
+// ---------------------------------------------------------------------------
+// Settings panel - rendered inline in the right column
+// ---------------------------------------------------------------------------
 static void
-render_settings_ui(GlobalState *AppState)
+render_settings_panel(GlobalState *AppState)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
-
-	ImVec2 Display = ImGui::GetIO().DisplaySize;
-	float SettingsW = (Display.x < 620.0f) ? Display.x : 620.0f;
-	ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), Display);
-	ImGui::SetNextWindowSize(ImVec2(SettingsW, 0));
-	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) return;
-
-	AppState->Ui.IsSettingsDialogOpen = true;
 
 #ifdef VOICETYPER_CUDA
 	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION_FULL);
@@ -189,10 +190,13 @@ render_settings_ui(GlobalState *AppState)
 	ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION_FULL);
 #endif
 
-	ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
-		&S->TempPlayRecordSound);
+	if (ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
+		&AppState->PlayRecordSound))
+	{
+		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
+	}
 
-	if (S->TempPlayRecordSound)
+	if (AppState->PlayRecordSound)
 	{
 		ImGui::Indent(20.0f);
 
@@ -208,36 +212,51 @@ render_settings_ui(GlobalState *AppState)
 			ImGui::TextUnformatted("Start");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1.0f);
-			if (ImGui::SliderInt("##StartPitch", &S->TempStartSoundFreq,
+			if (ImGui::SliderInt("##StartPitch", &AppState->StartSoundFreq,
 				SOUND_MIN_FREQ, SOUND_MAX_FREQ, "%d Hz"))
 			{
-				settings_preview_sound(AppState, S, S->TempStartSoundFreq, false);
+				settings_preview_sound(AppState, AppState->StartSoundFreq, false);
+				save_int_setting("start_sound_freq", AppState->StartSoundFreq);
 			}
-			if (ImGui::IsItemDeactivated()) settings_preview_sound(AppState, S, S->TempStartSoundFreq, true);
+			if (ImGui::IsItemDeactivated())
+			{
+				settings_preview_sound(AppState, AppState->StartSoundFreq, true);
+				save_int_setting("start_sound_freq", AppState->StartSoundFreq);
+			}
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Stop");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1.0f);
-			if (ImGui::SliderInt("##StopPitch", &S->TempStopSoundFreq,
+			if (ImGui::SliderInt("##StopPitch", &AppState->StopSoundFreq,
 				SOUND_MIN_FREQ, SOUND_MAX_FREQ, "%d Hz"))
 			{
-				settings_preview_sound(AppState, S, S->TempStopSoundFreq, false);
+				settings_preview_sound(AppState, AppState->StopSoundFreq, false);
+				save_int_setting("stop_sound_freq", AppState->StopSoundFreq);
 			}
-			if (ImGui::IsItemDeactivated()) settings_preview_sound(AppState, S, S->TempStopSoundFreq, true);
+			if (ImGui::IsItemDeactivated())
+			{
+				settings_preview_sound(AppState, AppState->StopSoundFreq, true);
+				save_int_setting("stop_sound_freq", AppState->StopSoundFreq);
+			}
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Cancel");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1.0f);
-			if (ImGui::SliderInt("##CancelPitch", &S->TempCancelSoundFreq,
+			if (ImGui::SliderInt("##CancelPitch", &AppState->CancelSoundFreq,
 				SOUND_MIN_FREQ, SOUND_MAX_FREQ, "%d Hz"))
 			{
-				settings_preview_sound(AppState, S, S->TempCancelSoundFreq, false);
+				settings_preview_sound(AppState, AppState->CancelSoundFreq, false);
+				save_int_setting("cancel_sound_freq", AppState->CancelSoundFreq);
 			}
-			if (ImGui::IsItemDeactivated()) settings_preview_sound(AppState, S, S->TempCancelSoundFreq, true);
+			if (ImGui::IsItemDeactivated())
+			{
+				settings_preview_sound(AppState, AppState->CancelSoundFreq, true);
+				save_int_setting("cancel_sound_freq", AppState->CancelSoundFreq);
+			}
 
 			ImGui::EndTable();
 		}
@@ -245,26 +264,33 @@ render_settings_ui(GlobalState *AppState)
 		ImGui::Unindent(20.0f);
 	}
 
-	ImGui::Checkbox("Use character-by-character text injection (instead of paste Ctrl+Shift+V)",
-		&S->TempUseCharByCharInjection);
+	if (ImGui::Checkbox("Use character-by-character text injection (instead of paste Ctrl+Shift+V)",
+		&AppState->UseCharByCharInjection))
+	{
+		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
+	}
 
-	ImGui::Checkbox("If no text input is focused when recording finishes, copy transcription to clipboard",
-		&S->TempCopyToClipboardWhenNoTarget);
+	if (ImGui::Checkbox("If no text input is focused when recording finishes, copy transcription to clipboard",
+		&AppState->CopyToClipboardWhenNoTarget))
+	{
+		save_bool_setting("copy_to_clipboard_when_no_target", AppState->CopyToClipboardWhenNoTarget);
+	}
 
-	bool UseToggleMode = (S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
+	bool UseToggleMode = (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
 	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
 	{
-		S->TempRecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
+		AppState->RecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
+		save_int_setting("record_hotkey_mode", (int)AppState->RecordHotkeyMode);
 	}
 
 	ImGui::Text("CPU Cores for Inference:");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(100);
 	int MaxCores = query_logical_processor_count();
-	if (ImGui::InputInt("##ThreadCount", &S->TempWhisperThreadCount, 1, 1))
+	if (ImGui::InputInt("##ThreadCount", &AppState->WhisperThreadCount, 1, 1))
 	{
-		if (S->TempWhisperThreadCount < 1) S->TempWhisperThreadCount = 1;
-		if (S->TempWhisperThreadCount > MaxCores) S->TempWhisperThreadCount = MaxCores;
+		if (AppState->WhisperThreadCount < 1) AppState->WhisperThreadCount = 1;
+		if (AppState->WhisperThreadCount > MaxCores) AppState->WhisperThreadCount = MaxCores;
 	}
 
 	ImGui::Separator();
@@ -283,10 +309,14 @@ render_settings_ui(GlobalState *AppState)
 	{
 		if (i > 0) ImGui::SameLine();
 		ImVec4 Color = (S->SelectedAction == i) ? BUTTON_COLOR_BLUE : BUTTON_COLOR_GREY;
-		if (colored_button(ActionLabels[i], ActionSize, Color)) settings_select_action(S, i);
+		if (colored_button(ActionLabels[i], ActionSize, Color)) settings_select_action(AppState, i);
 	}
 
-	ImGui::Text("Current: %s", hotkey_to_label(S->TempHotkeys[S->SelectedAction]).c_str());
+	HotkeyConfig *CurrentHotkey = settings_action_hotkey_ptr(AppState, S->SelectedAction);
+	if (CurrentHotkey)
+	{
+		ImGui::Text("Current: %s", hotkey_to_label(*CurrentHotkey).c_str());
+	}
 
 	if (S->Capture.IsCapturing)
 	{
@@ -295,9 +325,12 @@ render_settings_ui(GlobalState *AppState)
 
 		if (app_key_is_down(APP_KEY_ESCAPE))
 		{
+			HotkeyConfig *H = settings_action_hotkey_ptr(AppState, S->SelectedAction);
+			if (H) *H = {};
+			settings_save_action_hotkey(AppState, S->SelectedAction);
+
 			S->Capture.HasCapture = false;
 			S->Capture.Captured = {};
-			S->TempHotkeys[S->SelectedAction] = {};
 			S->Capture.IsCapturing = false;
 			S->Capture.PeakModifiers = 0;
 			S->Capture.PeakVirtualKey = 0;
@@ -319,7 +352,6 @@ render_settings_ui(GlobalState *AppState)
 				S->Capture.Captured.Modifiers = S->Capture.PeakModifiers;
 				S->Capture.Captured.VirtualKey = S->Capture.PeakVirtualKey;
 				S->Capture.HasCapture = true;
-				S->TempHotkeys[S->SelectedAction] = S->Capture.Captured;
 			}
 			else if (S->Capture.PeakModifiers != 0 || S->Capture.PeakVirtualKey != 0)
 			{
@@ -329,7 +361,11 @@ render_settings_ui(GlobalState *AppState)
 					S->Capture.Captured.Modifiers = S->Capture.PeakModifiers;
 					S->Capture.Captured.VirtualKey = S->Capture.PeakVirtualKey;
 					S->Capture.HasCapture = true;
-					S->TempHotkeys[S->SelectedAction] = S->Capture.Captured;
+
+					HotkeyConfig *H = settings_action_hotkey_ptr(AppState, S->SelectedAction);
+					if (H) *H = S->Capture.Captured;
+					settings_save_action_hotkey(AppState, S->SelectedAction);
+
 					S->Capture.IsCapturing = false;
 					S->Capture.PeakModifiers = 0;
 					S->Capture.PeakVirtualKey = 0;
@@ -394,59 +430,6 @@ render_settings_ui(GlobalState *AppState)
 		ImGui::SetClipboardText(ExeDir.c_str());
 		show_success_toast(AppState, "Exe dir copied to clipboard!");
 	}
-
-	ImGui::Separator();
-
-	float BottomBtnWidth = (AvailWidth - Spacing) / 2;
-	ImVec2 BottomSize = ImVec2(BottomBtnWidth, 40);
-
-	if (colored_button("Save##Settings", BottomSize, BUTTON_COLOR_GREEN))
-	{
-		AppState->RecordHotkey       = S->TempHotkeys[0];
-		AppState->CancelRecordHotkey = S->TempHotkeys[1];
-		AppState->StreamHotkey       = S->TempHotkeys[2];
-		AppState->LoadModelHotkey    = S->TempHotkeys[3];
-		AppState->RecordHotkeyMode   = S->TempRecordHotkeyMode;
-
-		save_hotkey_setting("record_hotkey",
-			(int)AppState->RecordHotkey.Modifiers, (int)AppState->RecordHotkey.VirtualKey);
-		save_hotkey_setting("cancel_record_hotkey",
-			(int)AppState->CancelRecordHotkey.Modifiers, (int)AppState->CancelRecordHotkey.VirtualKey);
-		save_hotkey_setting("stream_hotkey",
-			(int)AppState->StreamHotkey.Modifiers, (int)AppState->StreamHotkey.VirtualKey);
-		save_hotkey_setting("load_model_hotkey",
-			(int)AppState->LoadModelHotkey.Modifiers, (int)AppState->LoadModelHotkey.VirtualKey);
-		save_int_setting("record_hotkey_mode", (int)AppState->RecordHotkeyMode);
-
-		AppState->PlayRecordSound = S->TempPlayRecordSound;
-		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
-
-		AppState->StartSoundFreq = S->TempStartSoundFreq;
-		AppState->StopSoundFreq = S->TempStopSoundFreq;
-		AppState->CancelSoundFreq = S->TempCancelSoundFreq;
-		save_int_setting("start_sound_freq", AppState->StartSoundFreq);
-		save_int_setting("stop_sound_freq", AppState->StopSoundFreq);
-		save_int_setting("cancel_sound_freq", AppState->CancelSoundFreq);
-
-		AppState->UseCharByCharInjection = S->TempUseCharByCharInjection;
-		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
-
-		AppState->CopyToClipboardWhenNoTarget = S->TempCopyToClipboardWhenNoTarget;
-		save_bool_setting("copy_to_clipboard_when_no_target", AppState->CopyToClipboardWhenNoTarget);
-
-		AppState->WhisperThreadCount = S->TempWhisperThreadCount;
-
-		ImGui::CloseCurrentPopup();
-		AppState->Ui.IsSettingsDialogOpen = false;
-	}
-	ImGui::SameLine();
-	if (colored_button("Cancel##Settings", BottomSize, BUTTON_COLOR_GREY))
-	{
-		ImGui::CloseCurrentPopup();
-		AppState->Ui.IsSettingsDialogOpen = false;
-	}
-
-	ImGui::EndPopup();
 }
 
 static void
@@ -553,18 +536,11 @@ render_crash_dialog_ui(GlobalState *AppState)
 }
 
 // ---------------------------------------------------------------------------
-// Main Window
+// Left column - recording controls and model selectors
 // ---------------------------------------------------------------------------
-inline void
-render_main_ui(GlobalState *AppState, ImGuiIO &Io)
+static void
+render_left_panel(GlobalState *AppState)
 {
-	ImGui::SetNextWindowPos(ImVec2(0, 0));
-	ImGui::SetNextWindowSize(Io.DisplaySize);
-	ImGui::Begin(
-		"VoiceTyper", nullptr,
-		ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-
 	ImVec2 FullWidth = ImVec2(-1, 0);
 	ImVec2 BigButton = ImVec2(-1, 60);
 	ImVec2 SmallButton = ImVec2(-1, 40);
@@ -714,20 +690,53 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 		}
 		if (Busy) ImGui::EndDisabled();
 	}
+}
 
-	ImGui::Separator();
+// ---------------------------------------------------------------------------
+// Bottom bar - placeholder for future content (timings, etc.)
+// ---------------------------------------------------------------------------
+static void
+render_bottom_bar(GlobalState *AppState)
+{
+	(void)AppState;
+}
 
-	// Settings Button
-	{
-		bool Enabled = !Busy;
-		if (colored_button("Settings", SmallButton, BUTTON_COLOR_GREY, Enabled))
-		{
-			init_settings_state(AppState);
-			ImGui::OpenPopup("Settings");
-		}
-	}
+// ---------------------------------------------------------------------------
+// Main Window
+// ---------------------------------------------------------------------------
+inline void
+render_main_ui(GlobalState *AppState, ImGuiIO &Io)
+{
+	ImGui::SetNextWindowPos(ImVec2(0, 0));
+	ImGui::SetNextWindowSize(Io.DisplaySize);
+	ImGui::Begin(
+		"VoiceTyper", nullptr,
+		ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
-	render_settings_ui(AppState);
+	const float Padding = 16.0f;
+	const float ColumnWidth = (Io.DisplaySize.x - Padding * 3.0f) * 0.5f;
+
+	ImGui::SetCursorPos(ImVec2(Padding, Padding));
+	ImGui::BeginChild("##LeftColumn", ImVec2(ColumnWidth, 0.0f),
+		ImGuiChildFlags_AutoResizeY,
+		ImGuiWindowFlags_NoScrollbar);
+	render_left_panel(AppState);
+	ImGui::EndChild();
+	const float LeftEndY = ImGui::GetCursorPosY();
+
+	ImGui::SetCursorPos(ImVec2(Padding * 2.0f + ColumnWidth, Padding));
+	ImGui::BeginChild("##RightColumn", ImVec2(ColumnWidth, 0.0f),
+		ImGuiChildFlags_AutoResizeY,
+		ImGuiWindowFlags_NoScrollbar);
+	render_settings_panel(AppState);
+	ImGui::EndChild();
+	const float RightEndY = ImGui::GetCursorPosY();
+
+	float TallerEndY = (LeftEndY > RightEndY) ? LeftEndY : RightEndY;
+	ImGui::SetCursorPos(ImVec2(Padding, TallerEndY + Padding));
+	render_bottom_bar(AppState);
+
 	render_crash_dialog_ui(AppState);
 
 	ImGui::End();

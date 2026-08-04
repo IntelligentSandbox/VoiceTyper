@@ -384,7 +384,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		return 1;
 	}
 
-	ShowWindow(Hwnd, SW_SHOWDEFAULT);
+	ShowWindow(Hwnd, SW_SHOWMAXIMIZED);
 	UpdateWindow(Hwnd);
 
 	GlobalState AppStateStorage = {};
@@ -450,7 +450,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			AppFrameResult FrameResult = app_update_runtime_frame(
 				AppState,
 				&FrameState,
-				!AppState->Ui.IsSettingsDialogOpen);
+				!AppState->Ui.SettingsState.Capture.IsCapturing);
 			show_model_transition_failure(AppState, FrameResult.ModelFailure);
 
 			NextAppTick += AppUpdateIntervalTicks;

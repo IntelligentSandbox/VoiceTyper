@@ -133,7 +133,7 @@ main(int, char **)
 		SDL_WINDOWPOS_CENTERED,
 		WindowWidth,
 		WindowHeight,
-		SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+		SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_MAXIMIZED);
 	if (!Window)
 	{
 		printf("[platform_linux] SDL window creation failed: %s\n", SDL_GetError());
@@ -200,7 +200,7 @@ main(int, char **)
 			AppFrameResult FrameResult = app_update_runtime_frame(
 				AppState,
 				&FrameState,
-				!AppState->Ui.IsSettingsDialogOpen);
+				!AppState->Ui.SettingsState.Capture.IsCapturing);
 			show_model_transition_failure(AppState, FrameResult.ModelFailure);
 
 			NextAppTick += AppUpdateIntervalTicks;
