@@ -115,6 +115,9 @@ package_static() {
 	local stage="build/stage_${PLATFORM}_${variant}_static${suffix}"
 	local root="$stage/$top"
 
+	if [ -d "$stage" ]; then
+		chmod -R u+w "$stage"
+	fi
 	rm -rf "$stage"
 	mkdir -p "$root"
 
@@ -122,7 +125,7 @@ package_static() {
 		cp -r "$result_link/bin" "$root/bin"
 		cp -r "$result_link/libexec" "$root/libexec"
 		cp -r "$result_link/lib" "$root/lib"
-		find "$root" -type f \( -name '*.so*' -o -name 'VoiceTyper*' \) -exec chmod +w {} \;
+		chmod -R u+w "$root"
 	else
 		cp "$result_link/bin/VoiceTyper" "$root/VoiceTyper"
 		chmod +w "$root/VoiceTyper"
