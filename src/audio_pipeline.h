@@ -53,8 +53,12 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD) return;
 
 	std::string Transcription;
+	std::chrono::steady_clock::time_point TxStart = std::chrono::steady_clock::now();
 	int Ret = transcribe_pcm_to_string(
 		AppState->WhisperState.Context, Params, Chunk.data(), (int)Chunk.size(), &Transcription);
+	std::chrono::steady_clock::time_point TxEnd = std::chrono::steady_clock::now();
+	double TxMs = std::chrono::duration<double, std::milli>(TxEnd - TxStart).count();
+	if (Ret == 0) AppState->LastTranscriptionMs.store(TxMs);
 
 	if (Ret != 0)
 	{
@@ -72,11 +76,15 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 			if (AppState->CopyToClipboardWhenNoTarget)
 				platform_set_clipboard_text(&AppState->Platform, Transcription.c_str());
 		}
+		std::chrono::steady_clock::time_point PasteStart = std::chrono::steady_clock::now();
 		platform_inject_text(
 			&AppState->Platform,
 			TargetWindow,
 			Transcription.c_str(),
 			AppState->UseCharByCharInjection);
+		std::chrono::steady_clock::time_point PasteEnd = std::chrono::steady_clock::now();
+		double PasteMs = std::chrono::duration<double, std::milli>(PasteEnd - PasteStart).count();
+		AppState->LastPasteMs.store(PasteMs);
 	}
 }
 

@@ -5,6 +5,8 @@
 #include "settings.h"
 #include "sounds.h"
 
+#include <chrono>
+
 inline void
 runtime_update_audio_input_selection(GlobalState *AppState, int Index)
 {
@@ -22,10 +24,14 @@ runtime_model_transition_thread(GlobalState *AppState, int ModelIndex,
 
 	if (ModelIndex >= 0)
 	{
+		std::chrono::steady_clock::time_point Start = std::chrono::steady_clock::now();
 		Success = load_whisper_model(
 			&AppState->WhisperState,
 			AppState->STTModelPaths[ModelIndex].c_str(),
 			ModelIndex, InferenceDeviceIndex);
+		std::chrono::steady_clock::time_point End = std::chrono::steady_clock::now();
+		double Ms = std::chrono::duration<double, std::milli>(End - Start).count();
+		if (Success) AppState->LastModelLoadMs.store(Ms);
 	}
 
 	if (!Success) AppState->ModelTransitionFailureCode.store((int)FailureCode);

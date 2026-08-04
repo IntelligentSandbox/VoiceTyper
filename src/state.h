@@ -107,6 +107,12 @@ struct CoreRuntimeState
 
 	// Inference threading
 	int WhisperThreadCount;
+
+	// Latest operation timings (milliseconds). -1.0 means "no measurement yet".
+	// Written from worker threads, read from the UI thread.
+	std::atomic<double> LastModelLoadMs;
+	std::atomic<double> LastTranscriptionMs;
+	std::atomic<double> LastPasteMs;
 };
 
 struct UiRuntimeState

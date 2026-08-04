@@ -48,6 +48,10 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->CopyToClipboardWhenNoTarget = false;
 	AppState->RecordHotkeyMode = default_recording_hotkey_mode();
 
+	AppState->LastModelLoadMs.store(-1.0);
+	AppState->LastTranscriptionMs.store(-1.0);
+	AppState->LastPasteMs.store(-1.0);
+
 	init_whisper_state(&AppState->WhisperState);
 
 	cleanup_legacy_settings_json();

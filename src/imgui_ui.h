@@ -693,12 +693,32 @@ render_left_panel(GlobalState *AppState)
 }
 
 // ---------------------------------------------------------------------------
-// Bottom bar - placeholder for future content (timings, etc.)
+// Bottom bar - live operation timings
 // ---------------------------------------------------------------------------
+static std::string
+format_timing_ms(double Ms)
+{
+	if (Ms < 0.0) return "\xe2\x80\x94";
+
+	char Buf[64];
+	if (Ms < 1000.0) snprintf(Buf, sizeof(Buf), "%.4f ms", Ms);
+	else snprintf(Buf, sizeof(Buf), "%.4f s", Ms / 1000.0);
+	return std::string(Buf);
+}
+
 static void
 render_bottom_bar(GlobalState *AppState)
 {
-	(void)AppState;
+	ImGui::Separator();
+
+	ImGui::TextDisabled("Timings");
+	ImGui::SameLine();
+
+	ImGui::Text("Model load: %s", format_timing_ms(AppState->LastModelLoadMs.load()).c_str());
+	ImGui::SameLine();
+	ImGui::Text("Transcription: %s", format_timing_ms(AppState->LastTranscriptionMs.load()).c_str());
+	ImGui::SameLine();
+	ImGui::Text("Paste: %s", format_timing_ms(AppState->LastPasteMs.load()).c_str());
 }
 
 // ---------------------------------------------------------------------------
