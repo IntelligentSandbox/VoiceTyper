@@ -15,7 +15,7 @@ THREAD_COUNT="$(nproc 2>/dev/null || echo 1)"
 OUTPUT_PATH="build/bench/results.jsonl"
 APPEND_OUTPUT=0
 INCREMENTAL=0
-INCREMENTAL_SOURCE="src/imgui_main.cpp"
+INCREMENTAL_SOURCE="src/imgui_main_windows.cpp"
 BUILD_JOBS="${VOICETYPER_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)}"
 
 usage() {
@@ -33,7 +33,7 @@ Options:
   --output <path>         Default: build/bench/results.jsonl
   --append                Append instead of overwrite
   --incremental           Measure incremental rebuild after touching one source file
-  --incremental-source <path>  Default: src/imgui_main.cpp
+  --incremental-source <path>  Default: src/imgui_main_windows.cpp
 EOF
 }
 

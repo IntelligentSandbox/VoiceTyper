@@ -129,7 +129,7 @@ if(WIN32)
 		${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
 	)
 	set(SOURCES
-		src/imgui_main.cpp
+		src/imgui_main_windows.cpp
 		${IMGUI_SOURCES}
 	)
 	set(APP_ICON_RESOURCE "${CMAKE_SOURCE_DIR}/src/resources.rc")
