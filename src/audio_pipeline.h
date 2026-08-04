@@ -66,7 +66,12 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	{
 		void *TargetWindow = platform_get_foreground_window(&AppState->Platform);
 		if (TargetWindow == AppState->Platform.OwnWindow) TargetWindow = nullptr;
-		if (!TargetWindow) printf("[transcription] %s\n", Transcription.c_str());
+		if (!TargetWindow)
+		{
+			printf("[transcription] %s\n", Transcription.c_str());
+			if (AppState->CopyToClipboardWhenNoTarget)
+				platform_set_clipboard_text(&AppState->Platform, Transcription.c_str());
+		}
 		platform_inject_text(
 			&AppState->Platform,
 			TargetWindow,

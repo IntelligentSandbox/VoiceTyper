@@ -146,6 +146,7 @@ init_settings_state(GlobalState *AppState)
 	S->TempStopSoundFreq = AppState->StopSoundFreq;
 	S->TempCancelSoundFreq = AppState->CancelSoundFreq;
 	S->TempUseCharByCharInjection = AppState->UseCharByCharInjection;
+	S->TempCopyToClipboardWhenNoTarget = AppState->CopyToClipboardWhenNoTarget;
 	S->TempWhisperThreadCount = AppState->WhisperThreadCount;
 	S->LastPreviewTime = -1.0;
 	S->Capture.Captured = AppState->RecordHotkey;
@@ -246,6 +247,9 @@ render_settings_ui(GlobalState *AppState)
 
 	ImGui::Checkbox("Use character-by-character text injection (instead of paste Ctrl+Shift+V)",
 		&S->TempUseCharByCharInjection);
+
+	ImGui::Checkbox("If no text input is focused when recording finishes, copy transcription to clipboard",
+		&S->TempCopyToClipboardWhenNoTarget);
 
 	bool UseToggleMode = (S->TempRecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
 	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
@@ -426,6 +430,9 @@ render_settings_ui(GlobalState *AppState)
 
 		AppState->UseCharByCharInjection = S->TempUseCharByCharInjection;
 		save_bool_setting("use_char_by_char_injection", AppState->UseCharByCharInjection);
+
+		AppState->CopyToClipboardWhenNoTarget = S->TempCopyToClipboardWhenNoTarget;
+		save_bool_setting("copy_to_clipboard_when_no_target", AppState->CopyToClipboardWhenNoTarget);
 
 		AppState->WhisperThreadCount = S->TempWhisperThreadCount;
 

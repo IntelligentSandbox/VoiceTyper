@@ -38,6 +38,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->StopSoundFreq = SOUND_DEFAULT_STOP_FREQ;
 	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;
 	AppState->UseCharByCharInjection = false;
+	AppState->CopyToClipboardWhenNoTarget = false;
 	AppState->RecordHotkeyMode = default_recording_hotkey_mode();
 
 	init_whisper_state(&AppState->WhisperState);

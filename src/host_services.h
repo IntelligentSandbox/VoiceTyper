@@ -10,6 +10,7 @@ struct GlobalState;
 bool platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex);
 std::vector<AudioInputDeviceInfo> platform_query_audio_devices();
 void platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *Utf8, bool CharByChar);
+void platform_set_clipboard_text(PlatformRuntimeState *Platform, const char *Utf8);
 void *platform_get_foreground_window(PlatformRuntimeState *Platform);
 void platform_set_taskbar_icon(void *Window, const char *PngPath);
 void platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs);

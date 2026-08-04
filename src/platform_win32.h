@@ -173,20 +173,20 @@ platform_inject_text_char_by_char(HWND TargetWindow, const char *Utf8Text)
 	SendInput((UINT)Inputs.size(), Inputs.data(), sizeof(INPUT));
 }
 
-static void
-platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text)
+static bool
+platform_set_clipboard_text_win32(const char *Utf8Text)
 {
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
-	if (WideLen <= 1) return;
+	if (WideLen <= 1) return false;
 
-	if (!OpenClipboard(nullptr)) return;
+	if (!OpenClipboard(nullptr)) return false;
 	EmptyClipboard();
 
 	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, WideLen * sizeof(wchar_t));
 	if (!hMem)
 	{
 		CloseClipboard();
-		return;
+		return false;
 	}
 
 	wchar_t *pMem = (wchar_t *)GlobalLock(hMem);
@@ -194,6 +194,16 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text)
 	GlobalUnlock(hMem);
 	SetClipboardData(CF_UNICODETEXT, hMem);
 	CloseClipboard();
+	return true;
+}
+
+static void
+platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text)
+{
+	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
+	if (WideLen <= 1) return;
+
+	if (!platform_set_clipboard_text_win32(Utf8Text)) return;
 
 	SetForegroundWindow(TargetWindow);
 	Sleep(50);
@@ -233,6 +243,14 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 
 	if (CharByChar) platform_inject_text_char_by_char(HWnd, Utf8);
 	else platform_inject_text_via_paste(HWnd, Utf8);
+}
+
+inline void
+platform_set_clipboard_text(PlatformRuntimeState *Platform, const char *Utf8)
+{
+	(void)Platform;
+	if (!Utf8 || Utf8[0] == '\0') return;
+	platform_set_clipboard_text_win32(Utf8);
 }
 
 inline void *

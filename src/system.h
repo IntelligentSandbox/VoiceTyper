@@ -147,4 +147,8 @@ query_hotkey_settings(GlobalState *AppState)
 
 	bool CharByChar = false;
 	if (load_bool_setting("use_char_by_char_injection", &CharByChar)) AppState->UseCharByCharInjection = CharByChar;
+
+	bool CopyToClipboard = false;
+	if (load_bool_setting("copy_to_clipboard_when_no_target", &CopyToClipboard))
+		AppState->CopyToClipboardWhenNoTarget = CopyToClipboard;
 }

@@ -62,6 +62,15 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 	SDL_SetClipboardText(Utf8);
 }
 
+inline void
+platform_set_clipboard_text(PlatformRuntimeState *Platform, const char *Utf8)
+{
+	(void)Platform;
+	if (!Utf8 || Utf8[0] == '\0') return;
+
+	SDL_SetClipboardText(Utf8);
+}
+
 inline void *
 platform_get_foreground_window(PlatformRuntimeState *Platform)
 {

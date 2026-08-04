@@ -57,6 +57,7 @@ struct SettingsWindowState
 	int TempStopSoundFreq;
 	int TempCancelSoundFreq;
 	bool TempUseCharByCharInjection;
+	bool TempCopyToClipboardWhenNoTarget;
 	int TempWhisperThreadCount;
 	double LastPreviewTime;
 };
@@ -82,6 +83,7 @@ struct CoreRuntimeState
 	int StopSoundFreq;
 	int CancelSoundFreq;
 	bool UseCharByCharInjection;
+	bool CopyToClipboardWhenNoTarget;
 
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;
