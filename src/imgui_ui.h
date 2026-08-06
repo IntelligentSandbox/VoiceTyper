@@ -186,11 +186,15 @@ render_settings_panel(GlobalState *AppState)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
 
-#ifdef VOICETYPER_CUDA
-	ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION_FULL);
-#else
-	ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION_FULL);
-#endif
+	if (AppState->InferenceDevicesLoaded.load(std::memory_order_acquire) &&
+		AppState->InferenceDevices.size() > 1)
+	{
+		ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION_FULL);
+	}
+	else
+	{
+		ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION_FULL);
+	}
 
 	if (ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
 		&AppState->PlayRecordSound))
@@ -686,16 +690,36 @@ render_left_panel(GlobalState *AppState)
 
 	// Inference Device
 	{
+		bool DevicesLoaded = AppState->InferenceDevicesLoaded.load(std::memory_order_acquire);
+		if (!DevicesLoaded)
+		{
+			refresh_inference_devices(AppState);
+		}
+
 		ImGui::Text("Inference Device");
 		int SelectedInferenceDeviceIndex = AppState->CurrentInferenceDeviceIndex;
 		if (Busy) ImGui::BeginDisabled();
 		ImGui::SetNextItemWidth(FullWidth.x);
-		if (string_combo("##InferenceDevice", &SelectedInferenceDeviceIndex,
-			AppState->InferenceDevices))
+		if (DevicesLoaded)
 		{
-			update_inference_device_selection(AppState, SelectedInferenceDeviceIndex);
+			if (string_combo("##InferenceDevice", &SelectedInferenceDeviceIndex,
+				AppState->InferenceDevices))
+			{
+				update_inference_device_selection(AppState, SelectedInferenceDeviceIndex);
+			}
+		}
+		else
+		{
+			static const char *LoadingItems[] = {"CPU"};
+			int LoadingIdx = 0;
+			ImGui::Combo("##InferenceDevice", &LoadingIdx, LoadingItems, 1);
 		}
 		if (Busy) ImGui::EndDisabled();
+		if (!DevicesLoaded)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("(loading GPU devices...)");
+		}
 	}
 }
 

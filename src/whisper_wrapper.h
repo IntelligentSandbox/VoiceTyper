@@ -1,6 +1,7 @@
 #pragma once
 
 #include "whisper.h"
+#include "ggml-backend.h"
 #include <string>
 
 struct WhisperModelState
@@ -35,6 +36,16 @@ load_whisper_model(WhisperModelState *State, const char *ModelPath,
 
 	bool UseGpu = (InferenceDeviceIndex > 0);
 	int GpuDevice = UseGpu ? (InferenceDeviceIndex - 1) : 0;
+
+	if (UseGpu)
+	{
+		ggml_backend_dev_t GpuDev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
+		if (GpuDev == nullptr)
+		{
+			UseGpu = false;
+			GpuDevice = 0;
+		}
+	}
 
 	whisper_context_params ContextParams = whisper_context_default_params();
 	ContextParams.use_gpu = UseGpu;

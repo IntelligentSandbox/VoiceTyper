@@ -63,6 +63,8 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	query_available_stt_models(AppState);
 	query_whisper_thread_count(AppState);
 	query_hotkey_settings(AppState);
+
+	refresh_inference_devices(AppState);
 }
 
 inline AppFrameResult
@@ -111,6 +113,7 @@ app_shutdown_runtime(GlobalState *AppState)
 	AppState->CaptureRunning.store(false);
 	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
 	if (AppState->ModelTransitionThread.joinable()) AppState->ModelTransitionThread.join();
+	if (AppState->InferenceDevicesThread.joinable()) AppState->InferenceDevicesThread.join();
 
 	if (is_whisper_model_loaded(&AppState->WhisperState)) unload_whisper_model(&AppState->WhisperState);
 }

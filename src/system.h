@@ -3,6 +3,7 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <cstdio>
 
 inline int
 query_logical_processor_count()
@@ -15,9 +16,7 @@ query_logical_processor_count()
 
 #include "settings.h"
 
-#ifdef VOICETYPER_CUDA
-	#include "ggml-cuda.h"
-#endif
+#include "ggml-backend.h"
 
 // ---------------------------------------------------------------------------
 // System queries
@@ -58,31 +57,89 @@ query_inference_devices(GlobalState *AppState)
 	AppState->InferenceDevices.push_back("CPU");
 	AppState->CurrentInferenceDeviceIndex = 0;
 
-#ifdef VOICETYPER_CUDA
-	int DeviceCount = ggml_backend_cuda_get_device_count();
-	for (int i = 0; i < DeviceCount; i++)
-	{
-		char Description[128] = {};
-		ggml_backend_cuda_get_device_description(i, Description, sizeof(Description));
-
-		std::string Label = "GPU: ";
-		Label += Description;
-		AppState->InferenceDevices.push_back(Label);
-	}
-#endif
-
 	std::string SavedDevice;
 	if (load_string_setting("inference_device", &SavedDevice))
 	{
-		for (int i = 0; i < (int)AppState->InferenceDevices.size(); i++)
+		if (SavedDevice == "CPU")
 		{
-			if (AppState->InferenceDevices[i] == SavedDevice)
-			{
-				AppState->CurrentInferenceDeviceIndex = i;
-				break;
-			}
+			AppState->CurrentInferenceDeviceIndex = 0;
+		}
+		else
+		{
+			AppState->PendingInferenceDeviceName = SavedDevice;
 		}
 	}
+}
+
+inline void
+refresh_inference_devices(GlobalState *AppState)
+{
+	if (AppState->InferenceDevicesLoaded.load(std::memory_order_acquire)) return;
+	if (AppState->InferenceDevicesLoading.exchange(true)) return;
+
+	AppState->InferenceDevicesThread = std::thread([AppState]()
+	{
+		std::string ExeDir = platform_get_exe_dir();
+
+#ifdef _WIN32
+		std::string PluginPath = platform_join_path(ExeDir, "cuda/ggml-cuda.dll");
+#else
+		std::string PluginPath = platform_join_path(ExeDir, "cuda/libggml-cuda.so");
+#endif
+
+		FILE *F = std::fopen(PluginPath.c_str(), "rb");
+		if (!F)
+		{
+			AppState->InferenceDevicesLoaded.store(true, std::memory_order_release);
+			AppState->InferenceDevicesLoading.store(false);
+			return;
+		}
+		std::fclose(F);
+
+		ggml_backend_reg_t Reg = ggml_backend_load(PluginPath.c_str());
+		if (Reg == nullptr)
+		{
+			AppState->InferenceDevicesLoaded.store(true, std::memory_order_release);
+			AppState->InferenceDevicesLoading.store(false);
+			return;
+		}
+
+		std::vector<std::string> NewDevices;
+		NewDevices.push_back("CPU");
+
+		size_t DevCount = ggml_backend_dev_count();
+		for (size_t i = 0; i < DevCount; i++)
+		{
+			ggml_backend_dev_t Dev = ggml_backend_dev_get(i);
+			if (!Dev) continue;
+
+			if (ggml_backend_dev_type(Dev) != GGML_BACKEND_DEVICE_TYPE_GPU) continue;
+
+			const char *Desc = ggml_backend_dev_description(Dev);
+			std::string Label = "GPU: ";
+			Label += (Desc ? Desc : "Unknown");
+			NewDevices.push_back(Label);
+		}
+
+		int NewIndex = 0;
+		if (!AppState->PendingInferenceDeviceName.empty())
+		{
+			for (int i = 0; i < (int)NewDevices.size(); i++)
+			{
+				if (NewDevices[i] == AppState->PendingInferenceDeviceName)
+				{
+					NewIndex = i;
+					break;
+				}
+			}
+			AppState->PendingInferenceDeviceName.clear();
+		}
+
+		AppState->InferenceDevices = NewDevices;
+		AppState->CurrentInferenceDeviceIndex = NewIndex;
+		AppState->InferenceDevicesLoaded.store(true, std::memory_order_release);
+		AppState->InferenceDevicesLoading.store(false);
+	});
 }
 
 inline void

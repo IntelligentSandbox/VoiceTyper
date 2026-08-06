@@ -127,6 +127,10 @@ struct CoreRuntimeState
 	// Inference Device
 	int CurrentInferenceDeviceIndex;
 	std::vector<std::string> InferenceDevices;
+	std::atomic<bool> InferenceDevicesLoaded = false;
+	std::atomic<bool> InferenceDevicesLoading = false;
+	std::thread InferenceDevicesThread;
+	std::string PendingInferenceDeviceName;
 
 	// Whisper Wrapper
 	int CurrentSTTModelIndex;
