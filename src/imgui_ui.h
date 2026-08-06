@@ -7,6 +7,8 @@
 #include "settings.h"
 #include "control.h"
 #include "diagnostics.h"
+#include "model_catalog.h"
+#include "model_downloader.h"
 
 #include <cstdio>
 
@@ -654,6 +656,11 @@ render_left_panel(GlobalState *AppState)
 			}
 			if (Busy) ImGui::EndDisabled();
 		}
+
+		if (colored_button("Download Models...", SmallButton, BUTTON_COLOR_GREY))
+		{
+			AppState->Ui.Download.IsModalOpen = true;
+		}
 	}
 
 	// Load Model Button
@@ -706,6 +713,29 @@ format_timing_ms(double Ms)
 	return std::string(Buf);
 }
 
+static std::string
+format_bytes(int64_t Bytes)
+{
+	char Buf[32];
+	if (Bytes >= 1073741824) snprintf(Buf, sizeof(Buf), "%.2f GB", Bytes / 1073741824.0);
+	else if (Bytes >= 1048576) snprintf(Buf, sizeof(Buf), "%d MB", (int)(Bytes / 1048576));
+	else if (Bytes >= 1024) snprintf(Buf, sizeof(Buf), "%d KB", (int)(Bytes / 1024));
+	else snprintf(Buf, sizeof(Buf), "%d B", (int)Bytes);
+	return std::string(Buf);
+}
+
+static bool
+model_filename_installed(GlobalState *AppState, const std::string &Filename)
+{
+	for (const std::string &Path : AppState->STTModelPaths)
+	{
+		size_t Slash = Path.find_last_of("\\/");
+		std::string Fname = (Slash == std::string::npos) ? Path : Path.substr(Slash + 1);
+		if (Fname == Filename) return true;
+	}
+	return false;
+}
+
 static void
 render_bottom_bar(GlobalState *AppState)
 {
@@ -719,6 +749,152 @@ render_bottom_bar(GlobalState *AppState)
 	ImGui::Text("Transcription: %s", format_timing_ms(AppState->LastTranscriptionMs.load()).c_str());
 	ImGui::SameLine();
 	ImGui::Text("Paste: %s", format_timing_ms(AppState->LastPasteMs.load()).c_str());
+}
+
+// ---------------------------------------------------------------------------
+// Model downloader modal
+// ---------------------------------------------------------------------------
+static void
+render_download_modal(GlobalState *AppState)
+{
+	ModelDownloadState *D = &AppState->Ui.Download;
+
+	poll_model_download(AppState);
+
+	if (D->JustFinished)
+	{
+		bool Succ = D->Succeeded.load();
+		bool Fail = D->Failed.load();
+		bool Cancel = D->CancelRequested.load();
+		D->JustFinished = false;
+
+		if (Succ)
+		{
+			query_available_stt_models(AppState);
+			std::string Msg = std::string("Downloaded ") + D->CurrentModelName;
+			show_success_toast(AppState, Msg.c_str());
+		}
+		else if (Fail && !Cancel)
+		{
+			std::string Msg = std::string("Failed to download ") + D->CurrentModelName;
+			show_toast(AppState, Msg.c_str());
+		}
+	}
+
+	if (!D->IsModalOpen) return;
+
+	ImVec2 Display = ImGui::GetIO().DisplaySize;
+	ImGui::SetNextWindowSize(ImVec2(Display.x * 0.6f, Display.y * 0.7f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+
+	bool Open = true;
+	if (ImGui::Begin("Download STT Models", &Open, ImGuiWindowFlags_NoCollapse))
+	{
+		bool Running = D->IsRunning.load();
+		if (Running)
+		{
+			ImGui::Text("Downloading %s...", D->CurrentModelName.c_str());
+
+			int64_t Done = D->DownloadedBytes.load();
+			int64_t Total = D->TotalBytes.load();
+			float Frac = (Total > 0) ? (float)((double)Done / (double)Total) : 0.0f;
+			if (Frac > 1.0f) Frac = 1.0f;
+			ImGui::ProgressBar(Frac, ImVec2(-1.0f, 0.0f));
+
+			ImGui::Text("%s / %s", format_bytes(Done).c_str(), format_bytes(Total).c_str());
+
+			ImGui::Spacing();
+			if (ImGui::Button("Cancel Download")) cancel_model_download(AppState);
+		}
+		else
+		{
+			ImGui::TextDisabled("Source: huggingface.co/ggerganov/whisper.cpp");
+			ImGui::Spacing();
+
+			if (ImGui::BeginTable("##CatalogTable", 3,
+				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+				ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+				ImGui::TableHeadersRow();
+
+				for (const CatalogModel &M : get_model_catalog())
+				{
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted(M.Name);
+					ImGui::TableSetColumnIndex(1);
+					ImGui::TextDisabled("%s", format_bytes(M.SizeBytes).c_str());
+					ImGui::TableSetColumnIndex(2);
+
+					std::string Filename = catalog_model_filename(M.Name);
+					bool Installed = model_filename_installed(AppState, Filename);
+					std::string Label = Installed ? "Re-download" : "Download";
+					Label += "##cat-";
+					Label += M.Name;
+					if (ImGui::Button(Label.c_str(), ImVec2(-1.0f, 0.0f)))
+					{
+						D->PendingModelName = M.Name;
+						D->PendingUrl = catalog_model_url(M.Name);
+						std::string SttDir = platform_join_path(platform_get_exe_dir(), "stt_models");
+						D->PendingDestPath = platform_join_path(SttDir, Filename);
+						D->PendingSize = M.SizeBytes;
+						if (Installed) D->WantsOverwriteConfirm = true;
+						else
+						{
+							platform_ensure_directory(platform_join_path(platform_get_exe_dir(), "stt_models"));
+							start_model_download(AppState, M.Name, D->PendingUrl, D->PendingDestPath, M.SizeBytes);
+						}
+					}
+				}
+				ImGui::EndTable();
+			}
+		}
+
+		ImGui::Separator();
+		if (ImGui::Button("Close")) D->IsModalOpen = false;
+
+		if (D->WantsOverwriteConfirm)
+		{
+			ImGui::OpenPopup("Overwrite Model?");
+			D->WantsOverwriteConfirm = false;
+		}
+
+		ImVec2 Center = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+		ImGui::SetNextWindowPos(Center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+		if (ImGui::BeginPopupModal("Overwrite Model?", nullptr,
+			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+		{
+			ImGui::Text("Model '%s' already exists.", D->PendingModelName.c_str());
+			ImGui::TextWrapped("Downloading will overwrite the existing weights file. This cannot be undone.");
+			ImGui::Spacing();
+
+			float AvailWidth = ImGui::GetContentRegionAvail().x;
+			float Spacing = ImGui::GetStyle().ItemSpacing.x;
+			float BtnW = (AvailWidth - Spacing) * 0.5f;
+
+			if (ImGui::Button("Overwrite", ImVec2(BtnW, 0)))
+			{
+				platform_ensure_directory(platform_join_path(platform_get_exe_dir(), "stt_models"));
+				std::string Name = D->PendingModelName;
+				std::string Url = D->PendingUrl;
+				std::string Dest = D->PendingDestPath;
+				int64_t Size = D->PendingSize;
+				ImGui::CloseCurrentPopup();
+				start_model_download(AppState, Name, Url, Dest, Size);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(BtnW, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+	}
+	ImGui::End();
+
+	if (!Open) D->IsModalOpen = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -761,5 +937,6 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 
 	ImGui::End();
 
+	render_download_modal(AppState);
 	render_toast_ui(AppState, Io);
 }

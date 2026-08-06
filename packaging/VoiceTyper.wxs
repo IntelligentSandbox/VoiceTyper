@@ -22,9 +22,6 @@
 		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
 			<Files Include="$(var.BuildOutput)\**">
 				<Exclude Files="$(var.BuildOutput)\settings.ini" />
-				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-small.en.bin" />
-				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-medium.en.bin" />
-				<Exclude Files="$(var.BuildOutput)\stt_models\ggml-large-v3-turbo.bin" />
 			</Files>
 		</ComponentGroup>
 

@@ -53,6 +53,49 @@ struct SettingsWindowState
 	double LastPreviewTime;
 };
 
+struct ModelDownloadState
+{
+	std::atomic<bool> IsRunning;
+	std::atomic<bool> CancelRequested;
+	std::atomic<bool> Succeeded;
+	std::atomic<bool> Failed;
+	std::atomic<int64_t> DownloadedBytes;
+	std::atomic<int64_t> TotalBytes;
+#ifndef _WIN32
+	std::atomic<int64_t> ChildPid;
+#endif
+
+	std::string CurrentModelName;
+	bool JustFinished;
+	bool IsModalOpen;
+	bool WantsOverwriteConfirm;
+	std::string PendingModelName;
+	std::string PendingUrl;
+	std::string PendingDestPath;
+	int64_t PendingSize;
+
+	std::thread Thread;
+
+	ModelDownloadState() :
+		IsRunning(false),
+		CancelRequested(false),
+		Succeeded(false),
+		Failed(false),
+		DownloadedBytes(0),
+		TotalBytes(0),
+#ifndef _WIN32
+		ChildPid(0),
+#endif
+		JustFinished(false),
+		IsModalOpen(false),
+		WantsOverwriteConfirm(false),
+		PendingSize(0)
+	{}
+
+	ModelDownloadState(const ModelDownloadState &) = delete;
+	ModelDownloadState &operator=(const ModelDownloadState &) = delete;
+};
+
 // ---------------------------------------------------------------------------
 // Application State
 // ---------------------------------------------------------------------------
@@ -118,6 +161,7 @@ struct CoreRuntimeState
 struct UiRuntimeState
 {
 	SettingsWindowState SettingsState;
+	ModelDownloadState Download;
 	std::string ToastMessage;
 	double ToastExpireTime;
 	ColorRgba ToastBackgroundColor;

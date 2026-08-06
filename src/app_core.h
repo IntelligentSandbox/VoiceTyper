@@ -2,6 +2,7 @@
 
 #include "input.h"
 #include "model_assets.h"
+#include "model_downloader.h"
 #include "runtime_control.h"
 #include "system.h"
 
@@ -104,6 +105,8 @@ app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool 
 inline void
 app_shutdown_runtime(GlobalState *AppState)
 {
+	shutdown_model_download(AppState);
+
 	AppState->StreamingFinalizeOnStop.store(false);
 	AppState->CaptureRunning.store(false);
 	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();

@@ -24,31 +24,21 @@ PACKAGE_PLATFORM="x64_win"
 CPU_BUILD="build/Release_cpu"
 CUDA_BUILD="build/Release_cuda"
 STAGE_DIR="build/package_${PACKAGE_PLATFORM}"
-CPU_MODELS_STAGE="$STAGE_DIR/cpu-base-en-silero"
-CUDA_NO_MODELS_STAGE="$STAGE_DIR/cuda-no-models"
-CUDA_MODELS_STAGE="$STAGE_DIR/cuda-base-en-silero"
+CPU_STAGE="$STAGE_DIR/cpu"
+CUDA_STAGE="$STAGE_DIR/cuda"
 CPU_EXE_DIST="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu.exe"
-CPU_MODELS_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu-base-en-silero.zip"
-CUDA_NO_MODELS_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda-no-models.zip"
-CUDA_MODELS_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda-base-en-silero.zip"
+CPU_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu.zip"
+CUDA_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda.zip"
 CPU_MSI="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu.msi"
 CUDA_MSI="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda.msi"
 
-keep_only_base_en_and_silero() {
+# STT models are no longer shipped in dist artifacts — the in-app downloader
+# fetches them from huggingface.co/ggerganov/whisper.cpp on demand. The VAD
+# model is small (~2 MB) and required for streaming/record silence detection,
+# so it is still bundled.
+remove_stt_models() {
 	local build_output="$1"
-
 	rm -rf "$build_output/stt_models"
-	mkdir -p "$build_output/stt_models"
-	cp stt_models/ggml-base.en.bin "$build_output/stt_models/"
-
-	rm -rf "$build_output/vad_models"
-	mkdir -p "$build_output/vad_models"
-	cp vad_models/ggml-silero-v5.1.2.bin "$build_output/vad_models/"
-}
-
-remove_models() {
-	local build_output="$1"
-	rm -rf "$build_output/stt_models" "$build_output/vad_models"
 }
 
 copy_build_output() {
@@ -154,12 +144,10 @@ fi
 echo ""
 echo "=== Staging package inputs ($PACKAGE_PLATFORM) ==="
 START=$SECONDS
-copy_build_output "$CUDA_BUILD" "$CUDA_NO_MODELS_STAGE"
-remove_models "$CUDA_NO_MODELS_STAGE"
-copy_build_output "$CUDA_BUILD" "$CUDA_MODELS_STAGE"
-keep_only_base_en_and_silero "$CUDA_MODELS_STAGE"
-copy_build_output "$CPU_BUILD" "$CPU_MODELS_STAGE"
-keep_only_base_en_and_silero "$CPU_MODELS_STAGE"
+copy_build_output "$CUDA_BUILD" "$CUDA_STAGE"
+remove_stt_models "$CUDA_STAGE"
+copy_build_output "$CPU_BUILD" "$CPU_STAGE"
+remove_stt_models "$CPU_STAGE"
 cp "$CPU_BUILD/VoiceTyper.exe" "$CPU_EXE_DIST"
 echo "    Staging took $((SECONDS - START))s"
 
@@ -168,11 +156,10 @@ echo "=== Creating package artifacts ($PACKAGE_PLATFORM) ==="
 START=$SECONDS
 JOB_PIDS=()
 JOB_NAMES=()
-run_job "CUDA no-models zip" zip_dir "$CUDA_NO_MODELS_STAGE" "$CUDA_NO_MODELS_ZIP"
-run_job "CUDA base.en + silero zip" zip_dir "$CUDA_MODELS_STAGE" "$CUDA_MODELS_ZIP"
-run_job "CUDA MSI" build_msi_from_dir "$CUDA_MODELS_STAGE" "$CUDA_MSI"
-run_job "CPU base.en + silero zip" zip_dir "$CPU_MODELS_STAGE" "$CPU_MODELS_ZIP"
-run_job "CPU MSI" build_msi_from_dir "$CPU_MODELS_STAGE" "$CPU_MSI"
+run_job "CUDA zip" zip_dir "$CUDA_STAGE" "$CUDA_ZIP"
+run_job "CUDA MSI" build_msi_from_dir "$CUDA_STAGE" "$CUDA_MSI"
+run_job "CPU zip" zip_dir "$CPU_STAGE" "$CPU_ZIP"
+run_job "CPU MSI" build_msi_from_dir "$CPU_STAGE" "$CPU_MSI"
 wait_for_jobs
 echo "    Package artifacts took $((SECONDS - START))s"
 

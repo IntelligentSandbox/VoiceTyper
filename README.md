@@ -39,7 +39,7 @@ To compile the project for yourself, you will need:
 Optional
 - NVIDIA CUDA toolkit (e.g. v13.2)
 
-To download ggml whisper models, get them from huggingface [here](https://huggingface.co/ggerganov/whisper.cpp/tree/main).
+To download ggml whisper models, get them from huggingface [here](https://huggingface.co/ggerganov/whisper.cpp/tree/main), or use the in-app **Download Models...** button (next to the STT model selector) to fetch them automatically. Released builds no longer bundle STT model weights.
 
 ## CUDA Support
 The CUDA build ships kernels for the following NVIDIA GPU architectures:

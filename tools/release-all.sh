@@ -77,11 +77,12 @@ if [ "$SKIP_LINUX" -eq 0 ]; then
 	require_command scp
 fi
 
-# Model files are .gitignore'd so they don't travel with git checkout on the
-# NixOS box — they need to be staged explicitly. Both Windows and Linux
-# packaging read them from the working tree.
-for f in stt_models/ggml-base.en.bin vad_models/ggml-silero-v5.1.2.bin; do
-	[ -f "$f" ] || die "Model file '$f' not found (needed for model-bundled variants)."
+# The VAD model file is .gitignore'd so it doesn't travel with git checkout on
+# the NixOS box — it needs to be staged explicitly. STT models are no longer
+# shipped in dist artifacts (the in-app downloader fetches them on demand from
+# huggingface.co/ggerganov/whisper.cpp).
+for f in vad_models/ggml-silero-v5.1.2.bin; do
+	[ -f "$f" ] || die "Model file '$f' not found (needed by Linux portable bundles)."
 done
 
 tag_exists_locally() {
@@ -141,8 +142,8 @@ if [ "$SKIP_LINUX" -eq 0 ]; then
 	echo "Syncing remote tree to $COMMIT..."
 	ssh "$NIX_SSH" "cd $NIX_REPO && git fetch --all --tags && git checkout '$COMMIT'"
 
-	echo "Staging model files to the NixOS box..."
-	tar -cf - stt_models/ggml-base.en.bin vad_models/ggml-silero-v5.1.2.bin \
+	echo "Staging VAD model file to the NixOS box..."
+	tar -cf - vad_models/ggml-silero-v5.1.2.bin \
 		| ssh "$NIX_SSH" "cd $NIX_REPO && tar -xf -"
 
 	echo "Building + packaging on the NixOS box..."
