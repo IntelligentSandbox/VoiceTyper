@@ -47,7 +47,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---------------------------------------------------------------------------
 # Build options
 # ---------------------------------------------------------------------------
-option(VOICETYPER_CUDA "Enable NVIDIA CUDA GPU inference" OFF)
+option(VOICETYPER_BUILD_CUDA_PLUGIN "Build the ggml-cuda dynamic-load plugin MODULE (requires CUDA toolkit). When OFF (default) the exe has zero CUDA awareness and CUDA is discovered at runtime by loading the plugin from the cuda/ folder shipped next to the exe." OFF)
 option(VOICETYPER_APP_IPO "Enable IPO for VoiceTyper application targets" ON)
 option(VOICETYPER_STREAMING_WHISPER_VAD "Enable Whisper VAD for silence-bounded streaming chunks" ON)
 option(VOICETYPER_RECORD_WHISPER_VAD "Enable Whisper VAD for record-mode chunks" ON)
@@ -67,7 +67,9 @@ endif()
 # ---------------------------------------------------------------------------
 # whisper.cpp configuration
 # ---------------------------------------------------------------------------
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL ON CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
@@ -75,7 +77,7 @@ set(GGML_METAL OFF CACHE BOOL "" FORCE)
 set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
 set(GGML_SYCL OFF CACHE BOOL "" FORCE)
 
-if(VOICETYPER_CUDA)
+if(VOICETYPER_BUILD_CUDA_PLUGIN)
 	set(GGML_CUDA ON CACHE BOOL "" FORCE)
 else()
 	set(GGML_CUDA OFF CACHE BOOL "" FORCE)
@@ -90,7 +92,7 @@ endif()
 # run; the -real entries emit SASS for the most common current consumer GPUs so
 # they avoid the JIT cost. Override with -DCMAKE_CUDA_ARCHITECTURES=... to
 # customize for a specific deployment.
-if(VOICETYPER_CUDA AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+if(VOICETYPER_BUILD_CUDA_PLUGIN AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
 	set(CMAKE_CUDA_ARCHITECTURES "75-real;80-virtual;86-real;89-real;120a-real;121a-real" CACHE STRING "CUDA architectures to build for")
 endif()
 
@@ -149,8 +151,8 @@ else()
 	message(FATAL_ERROR "Unsupported platform")
 endif()
 
-if(VOICETYPER_CUDA)
-	set(VARIANT_SUFFIX "_cuda")
+if(VOICETYPER_BUILD_CUDA_PLUGIN)
+	set(VARIANT_SUFFIX "_cuda-plugin")
 else()
 	set(VARIANT_SUFFIX "_cpu")
 endif()
@@ -177,6 +179,21 @@ function(apply_voicetyper_bench_target_options TARGET_NAME)
 	)
 endfunction()
 
+function(apply_voicetyper_shared_lib_output_dirs TARGET_NAME)
+	set_target_properties(${TARGET_NAME} PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VOICETYPER_RELEASE_OUTPUT_DIR}"
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VOICETYPER_DEBUG_OUTPUT_DIR}"
+		LIBRARY_OUTPUT_DIRECTORY_RELEASE "${VOICETYPER_RELEASE_OUTPUT_DIR}"
+		LIBRARY_OUTPUT_DIRECTORY_DEBUG "${VOICETYPER_DEBUG_OUTPUT_DIR}"
+	)
+endfunction()
+
+foreach(_voicetyper_shared_lib whisper ggml ggml-base ggml-cpu ggml-cuda)
+	if(TARGET ${_voicetyper_shared_lib})
+		apply_voicetyper_shared_lib_output_dirs(${_voicetyper_shared_lib})
+	endif()
+endforeach()
+
 if(WIN32)
 	add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${APP_ICON_RESOURCE})
 else()
@@ -193,7 +210,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:DEBUG>
-	$<$<BOOL:${VOICETYPER_CUDA}>:VOICETYPER_CUDA>
 	VOICETYPER_STREAMING_WHISPER_VAD=$<BOOL:${VOICETYPER_STREAMING_WHISPER_VAD}>
 	VOICETYPER_RECORD_WHISPER_VAD=$<BOOL:${VOICETYPER_RECORD_WHISPER_VAD}>
 	VOICETYPER_APP_UPDATE_HZ=${VOICETYPER_APP_UPDATE_HZ}
@@ -215,10 +231,6 @@ if(UNIX AND NOT APPLE)
 	)
 endif()
 
-if(VOICETYPER_CUDA)
-	target_link_libraries(${PROJECT_NAME} PRIVATE ggml-cuda)
-endif()
-
 add_executable(VoiceTyperBench src/benchmark_main.cpp)
 apply_voicetyper_bench_target_options(VoiceTyperBench)
 
@@ -230,18 +242,9 @@ target_include_directories(VoiceTyperBench PRIVATE
 
 target_compile_definitions(VoiceTyperBench PRIVATE
 	$<$<CONFIG:Debug>:DEBUG>
-	$<$<BOOL:${VOICETYPER_CUDA}>:VOICETYPER_CUDA>
 	VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
 )
 
 target_link_libraries(VoiceTyperBench PRIVATE whisper)
-
-if(VOICETYPER_CUDA)
-	target_link_libraries(VoiceTyperBench PRIVATE ggml-cuda)
-endif()
-
-if(WIN32 AND VOICETYPER_CUDA)
-	find_package(CUDAToolkit REQUIRED)
-endif()
 
 install(TARGETS ${PROJECT_NAME} VoiceTyperBench RUNTIME DESTINATION bin)

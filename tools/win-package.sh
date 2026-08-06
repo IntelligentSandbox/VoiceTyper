@@ -26,9 +26,9 @@ CUDA_BUILD="build/Release_cuda"
 STAGE_DIR="build/package_${PACKAGE_PLATFORM}"
 CPU_STAGE="$STAGE_DIR/cpu"
 CUDA_STAGE="$STAGE_DIR/cuda"
-CPU_EXE_DIST="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu.exe"
 CPU_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu.zip"
 CUDA_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda.zip"
+CUDA_ADDON_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda-addon.zip"
 CPU_MSI="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu.msi"
 CUDA_MSI="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda.msi"
 
@@ -81,6 +81,15 @@ build_msi_from_dir() {
 		-d "BuildOutput=$(pwd)/$build_output" \
 		-d "ProductVersion=$VERSION" \
 		packaging/VoiceTyper.wxs
+}
+
+zip_cuda_addon() {
+	local source_build="$1"
+	local output_zip="$2"
+	local absolute_output_zip
+
+	absolute_output_zip="$(pwd)/$output_zip"
+	(cd "$source_build" && 7z a -tzip "$absolute_output_zip" cuda/ > /dev/null)
 }
 
 run_job() {
@@ -148,7 +157,6 @@ copy_build_output "$CUDA_BUILD" "$CUDA_STAGE"
 remove_stt_models "$CUDA_STAGE"
 copy_build_output "$CPU_BUILD" "$CPU_STAGE"
 remove_stt_models "$CPU_STAGE"
-cp "$CPU_BUILD/VoiceTyper.exe" "$CPU_EXE_DIST"
 echo "    Staging took $((SECONDS - START))s"
 
 echo ""
@@ -158,6 +166,7 @@ JOB_PIDS=()
 JOB_NAMES=()
 run_job "CUDA zip" zip_dir "$CUDA_STAGE" "$CUDA_ZIP"
 run_job "CUDA MSI" build_msi_from_dir "$CUDA_STAGE" "$CUDA_MSI"
+run_job "CUDA add-on zip" zip_cuda_addon "$CUDA_BUILD" "$CUDA_ADDON_ZIP"
 run_job "CPU zip" zip_dir "$CPU_STAGE" "$CPU_ZIP"
 run_job "CPU MSI" build_msi_from_dir "$CPU_STAGE" "$CPU_MSI"
 wait_for_jobs
