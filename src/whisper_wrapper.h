@@ -2,6 +2,7 @@
 
 #include "whisper.h"
 #include "ggml-backend.h"
+#include "diagnostics.h"
 #include <string>
 
 struct WhisperModelState
@@ -42,6 +43,8 @@ load_whisper_model(WhisperModelState *State, const char *ModelPath,
 		ggml_backend_dev_t GpuDev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
 		if (GpuDev == nullptr)
 		{
+			diag_write_log_line(GGML_LOG_LEVEL_WARN,
+				"GPU inference requested but no GPU backend is registered (cuda/ plugin absent or unloadable); falling back to CPU.\n");
 			UseGpu = false;
 			GpuDevice = 0;
 		}

@@ -79,6 +79,21 @@ runtime_start_model_transition(GlobalState *AppState, int ModelIndex,
 inline ModelTransitionFailure
 runtime_update_inference_device_selection(GlobalState *AppState, int Index)
 {
+	// Resolution path for the inference-device selection vs. the background
+	// GPU probe (refresh_inference_devices in system.h):
+	//   * The worker builds the GPU list in a local vector and only publishes
+	//     it to InferenceDevices (and flips InferenceDevicesLoaded) once the
+	//     probe finishes. So while !Loaded the list contains only "CPU" and a
+	//     GPU index is out of range — the bounds check below rejects it.
+	//   * The UI dropdown (imgui_ui.h) only renders the real list once Loaded
+	//     is true, so a user can't pick a GPU entry before the probe completes.
+	//   * A SAVED GPU preference that is still pending is stashed into
+	//     PendingInferenceDeviceName by query_inference_devices at startup and
+	//     resolved by the worker once the GPU list is published.
+	// Should a GPU index (Index > 0) ever reach us before the list is loaded
+	// (programmatic caller / future UI), defer by saving the desired name and
+	// letting the worker resolve it — but the current architecture makes this
+	// unreachable, so we simply treat an out-of-range selection as a no-op.
 	if (Index < 0 || Index >= (int)AppState->InferenceDevices.size()) return MODEL_TRANSITION_FAILURE_NONE;
 
 	int PreviousIndex = AppState->CurrentInferenceDeviceIndex;
