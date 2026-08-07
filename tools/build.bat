@@ -3,7 +3,7 @@ setlocal EnableExtensions
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "TARGET_SCRIPT=%SCRIPT_DIR%\win-build.sh"
+set "TARGET_SCRIPT=%SCRIPT_DIR%\release.sh"
 set "GIT_BASH="
 
 if not exist "%TARGET_SCRIPT%" goto missing_script
@@ -21,10 +21,10 @@ echo Install Git for Windows or add bash.exe to PATH.
 exit /b 1
 
 :missing_script
-echo Error: build script was not found at "%TARGET_SCRIPT%".
+echo Error: release script was not found at "%TARGET_SCRIPT%".
 exit /b 1
 
 :run_script
 cd /d "%SCRIPT_DIR%\.."
-"%GIT_BASH%" "%TARGET_SCRIPT%" %*
+"%GIT_BASH%" "%TARGET_SCRIPT%" --internal-windows-build %*
 exit /b %ERRORLEVEL%

@@ -5,9 +5,11 @@ slashes for paths (`ls`, `cp`, `mv`) and reference paths relatively, e.g. `./src
 Detect the host platform at the start of each session by running `uname -s`, since the
 same project is built on both Windows and NixOS/Linux and the tooling differs:
 - `Linux`            -> native Linux (NixOS). Native paths like `/home/<user>/VoiceTyper`.
-                       Use the `tools/nix-build.sh` flake builds (see Project Overview).
+                       The nix flake packages (.#default, .#cuda, .#static, .#cuda-static,
+                       .#appimage, .#cuda-appimage) are invoked directly via `nix build`;
+                       `tools/release.sh --linux` orchestrates them remotely for releases.
 - `MINGW*` / `MSYS*` -> Windows under git bash. Paths like `/c/dir1/dir2`.
-                       Use the `tools/win-build.sh` Visual Studio builds (see Project Overview).
+                       Use `tools/release.sh` for the Visual Studio build + package flow.
 
 Match build commands and any platform-specific source (`src/*_win32.*`, `src/*_linux.*`)
 to the detected platform rather than assuming one.
@@ -19,30 +21,28 @@ via **Whisper.cpp** (an external project and core dependency).
 The application's primary responsibility is facilitating user control of:
     audio input -> Whisper.cpp model -> insert text into focused text input field (if available)
 
-Windows (Visual Studio toolchain):
-    bash tools/win-build.sh          - release cpu build
-    bash tools/win-build.sh cuda     - release cuda build
+Build, package, and release are all handled by a single script (run from the
+repo root). Flags compose:
 
-NixOS / Linux (nix flake, defined in flake.nix, driven by tools/nix-build.sh):
-    tools/nix-build.sh           - release cpu build (.#default)
-    tools/nix-build.sh cuda      - release cuda build (.#cuda, needs allowUnfree)
-    tools/nix-build.sh static    - release statically-linked build (.#static, musl, truly static)
-    tools/nix-build.sh appimage  - release AppImage build (.#appimage, FHS-portable)
-    tools/nix-build.sh cuda-static   - portable CUDA bundle (.#cuda-static, bundles ld-linux +
-                                      full .so closure incl. cudart/cublas; not truly static.
-                                      needs allowUnfree)
-    tools/nix-build.sh cuda-appimage - self-contained CUDA AppImage (.#cuda-appimage, needs allowUnfree)
+    tools/release.sh                  build + package Windows (cpu + cuda)  -> dist/
+    tools/release.sh --release        build + package + create a DRAFT GitHub release
+    tools/release.sh --tag --release  cut v<VERSION> tag + build + package + DRAFT release
+    tools/release.sh ... --linux      also build + package portable Linux (cpu + cuda:
+                                      static + AppImage) on the remote NixOS box over ssh
+                                      (VOICETYPER_NIX_SSH, default 'rock')
 
-    Any of the above can be combined with `--ccache` (e.g. `tools/nix-build.sh static --ccache`)
-    to reuse object files across rebuilds. Requires a ccache dir that nixbld can write
-    (default /var/cache/voicetyper-ccache, or $CCACHE_DIR; see tools/nix-build.sh).
+The script inlines the Visual Studio (cmake) / 7z / WiX MSI steps for Windows
+and the nix flake builds for Linux. Only DRAFT releases are ever created
+automatically — publish from the GitHub UI. `--ccache` reuses object files across
+CUDA nix rebuilds (needs a ccache dir nixbld can write; default
+/var/cache/voicetyper-ccache, or $CCACHE_DIR).
 
-Releases (run from a Windows host in git bash):
-    tools/release-all.sh            - build + package Windows cpu/cuda outputs locally and create a GitHub release.
-                                      Windows-only by default; pass --linux to also build + package the portable
-                                      Linux (cpu + cuda: static + AppImage) outputs by ssh-ing into the NixOS box
-                                      (VOICETYPER_NIX_SSH, default 'rock'). Linux packaging: tools/nix-package.sh.
-    tools/win-release.sh            - Windows-only release flow (tag + windows package + release).
+For a quick dev build without packaging, invoke cmake directly, e.g.:
+    cmake -S . -B build/cpu -G "Visual Studio 17 2022" -A x64
+    cmake --build build/cpu --config Release
+
+On NixOS the individual flake packages can still be built directly for dev:
+    nix build .#default | .#cuda | .#static | .#cuda-static | .#appimage | .#cuda-appimage
 
 ## Workflow
 1. Read `.dev/tasks.md` at the start of every session. The user may give you an explicit request, which should take priority over the tasklist. However, if the tasklist contains items that may conflict with the one-off request, notify the user and ask what to do.

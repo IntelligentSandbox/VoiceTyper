@@ -249,7 +249,7 @@
 
           # ---- ccache toggle (shared by every package) ----------------------
           # Reading $VOICETYPER_CCACHE / $CCACHE_DIR at eval time requires
-          # --impure; tools/nix-build.sh sets VOICETYPER_CCACHE=1 and opens
+          # --impure; tools/release.sh sets VOICETYPER_CCACHE=1 and opens
           # the sandbox hole only when --ccache is passed. Default dir is
           # chmod 1777 so both the repo owner and nixbld can populate it.
           # Override the location with $CCACHE_DIR.
