@@ -48,6 +48,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Build options
 # ---------------------------------------------------------------------------
 option(VOICETYPER_BUILD_CUDA_PLUGIN "Build the ggml-cuda dynamic-load plugin MODULE (requires CUDA toolkit). When OFF (default) the exe has zero CUDA awareness and CUDA is discovered at runtime by loading the plugin from the cuda/ folder shipped next to the exe." OFF)
+option(VOICETYPER_BUILD_BENCH "Build the standalone VoiceTyperBench dev tool (CPU-only). OFF by default; the bench is no longer part of the normal application build or releases." OFF)
 option(VOICETYPER_APP_IPO "Enable IPO for VoiceTyper application targets" ON)
 option(VOICETYPER_STREAMING_WHISPER_VAD "Enable Whisper VAD for silence-bounded streaming chunks" ON)
 option(VOICETYPER_RECORD_WHISPER_VAD "Enable Whisper VAD for record-mode chunks" ON)
@@ -231,20 +232,25 @@ if(UNIX AND NOT APPLE)
 	)
 endif()
 
-add_executable(VoiceTyperBench src/benchmark_main.cpp)
-apply_voicetyper_bench_target_options(VoiceTyperBench)
+if(VOICETYPER_BUILD_BENCH)
+	add_executable(VoiceTyperBench src/benchmark_main.cpp)
+	apply_voicetyper_bench_target_options(VoiceTyperBench)
 
-target_include_directories(VoiceTyperBench PRIVATE
-	${CMAKE_CURRENT_SOURCE_DIR}/src
-	${CMAKE_CURRENT_SOURCE_DIR}/src/external/whisper.cpp/include
-	${CMAKE_CURRENT_SOURCE_DIR}/src/external/whisper.cpp/ggml/include
-)
+	target_include_directories(VoiceTyperBench PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/src
+		${CMAKE_CURRENT_SOURCE_DIR}/src/external/whisper.cpp/include
+		${CMAKE_CURRENT_SOURCE_DIR}/src/external/whisper.cpp/ggml/include
+	)
 
-target_compile_definitions(VoiceTyperBench PRIVATE
-	$<$<CONFIG:Debug>:DEBUG>
-	VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
-)
+	target_compile_definitions(VoiceTyperBench PRIVATE
+		$<$<CONFIG:Debug>:DEBUG>
+		VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
+	)
 
-target_link_libraries(VoiceTyperBench PRIVATE whisper)
+	target_link_libraries(VoiceTyperBench PRIVATE whisper)
+endif()
 
-install(TARGETS ${PROJECT_NAME} VoiceTyperBench RUNTIME DESTINATION bin)
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
+if(VOICETYPER_BUILD_BENCH)
+	install(TARGETS VoiceTyperBench RUNTIME DESTINATION bin)
+endif()

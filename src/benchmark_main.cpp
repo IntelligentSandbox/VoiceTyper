@@ -27,7 +27,6 @@ struct BenchOptions
 	int WarmupCount = 1;
 	int IterationCount = 5;
 	int ThreadCount = 1;
-	int CudaDevice = 0;
 };
 
 static void
@@ -36,7 +35,7 @@ print_usage(const char *ExeName)
 	std::cerr << "Usage: " << ExeName
 		<< " --audio <path> [--model <path>] [--expected-text <text>]"
 		<< " [--mode <record|streaming>] [--vad <on|off>] [--vad-model <path>]"
-		<< " [--warmup <count>] [--iterations <count>] [--threads <count>] [--cuda-device <index>]\n";
+		<< " [--warmup <count>] [--iterations <count>] [--threads <count>]\n";
 }
 
 static bool
@@ -101,11 +100,6 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 		{
 			const char *Value = require_value("--threads");
 			if (!Value || !parse_int_arg(Value, 1, &Options->ThreadCount)) return false;
-		}
-		else if (Arg == "--cuda-device")
-		{
-			const char *Value = require_value("--cuda-device");
-			if (!Value || !parse_int_arg(Value, 0, &Options->CudaDevice)) return false;
 		}
 		else if (Arg == "--mode")
 		{
@@ -409,9 +403,6 @@ main(int ArgCount, char **Args)
 	init_whisper_state(&ModelState);
 
 	int InferenceDeviceIndex = 0;
-#if defined(VOICETYPER_CUDA)
-	InferenceDeviceIndex = Options.CudaDevice + 1;
-#endif
 
 	auto LoadStart = std::chrono::steady_clock::now();
 	bool Loaded = load_whisper_model(&ModelState, Options.ModelPath.c_str(), 0, InferenceDeviceIndex);
