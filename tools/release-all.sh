@@ -12,7 +12,7 @@ REMOTE="${VOICETYPER_RELEASE_REMOTE:-origin}"
 NIX_SSH="${VOICETYPER_NIX_SSH:-rock}"
 NIX_REPO="${VOICETYPER_NIX_REPO:-~/repos/VoiceTyper}"
 SKIP_WINDOWS=0
-SKIP_LINUX=0
+DO_LINUX=0
 DRAFT=1
 PRERELEASE=0
 CHANGELOG_FILE="$DIST_DIR/release-notes-$TAG.md"
@@ -21,16 +21,19 @@ usage() {
 	cat <<EOF
 Usage: tools/release-all.sh [options]
 
-Coordinates Windows (local) and Linux (remote NixOS over ssh) builds, packages
-the Windows cpu/cuda outputs plus the portable Linux outputs (static executable
-+ AppImage), and creates a single GitHub release with every artifact.
+Builds and packages the Windows cpu/cuda outputs locally and creates a GitHub
+release with every artifact. By default only Windows is produced; pass --linux
+to also build + package the portable Linux outputs (static executable +
+AppImage) on the remote NixOS box over ssh and attach them to the same release.
 
 Options:
   --draft            Create the GitHub release as a draft (default).
   --no-draft         Publish the GitHub release immediately.
   --prerelease       Mark the GitHub release as a prerelease.
   --skip-windows     Skip the local Windows build/package step.
-  --skip-linux       Skip the remote Linux build/package step.
+  --linux            Also build + package the portable Linux outputs (static +
+                     AppImage, cpu + cuda) on the remote NixOS box. Off by
+                     default while the focus is on Windows distributables.
   --remote NAME      Git remote to push the release tag to (default: origin).
   --nix-ssh TARGET   ssh target for the NixOS box (env: VOICETYPER_NIX_SSH, default: rock).
   --nix-repo PATH    Repo path on the NixOS box (env: VOICETYPER_NIX_REPO, default: ~/repos/VoiceTyper).
@@ -59,7 +62,7 @@ while [ "$#" -gt 0 ]; do
 		--no-draft) DRAFT=0 ;;
 		--prerelease) PRERELEASE=1 ;;
 		--skip-windows) SKIP_WINDOWS=1 ;;
-		--skip-linux) SKIP_LINUX=1 ;;
+		--linux) DO_LINUX=1 ;;
 		--remote) [ "$#" -ge 2 ] || die "--remote requires a name."; REMOTE="$2"; shift ;;
 		--nix-ssh) [ "$#" -ge 2 ] || die "--nix-ssh requires a target."; NIX_SSH="$2"; shift ;;
 		--nix-repo) [ "$#" -ge 2 ] || die "--nix-repo requires a path."; NIX_REPO="$2"; shift ;;
@@ -72,18 +75,21 @@ done
 [ -n "$VERSION" ] || die "VERSION is empty."
 
 require_command gh
-if [ "$SKIP_LINUX" -eq 0 ]; then
+if [ "$DO_LINUX" -eq 1 ]; then
 	require_command ssh
 	require_command scp
 fi
 
 # The VAD model file is .gitignore'd so it doesn't travel with git checkout on
-# the NixOS box — it needs to be staged explicitly. STT models are no longer
-# shipped in dist artifacts (the in-app downloader fetches them on demand from
+# the NixOS box — it needs to be staged explicitly. Only required when the
+# Linux bundles are being produced. STT models are no longer shipped in dist
+# artifacts (the in-app downloader fetches them on demand from
 # huggingface.co/ggerganov/whisper.cpp).
-for f in vad_models/ggml-silero-v5.1.2.bin; do
-	[ -f "$f" ] || die "Model file '$f' not found (needed by Linux portable bundles)."
-done
+if [ "$DO_LINUX" -eq 1 ]; then
+	for f in vad_models/ggml-silero-v5.1.2.bin; do
+		[ -f "$f" ] || die "Model file '$f' not found (needed by Linux portable bundles)."
+	done
+fi
 
 tag_exists_locally() {
 	git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1
@@ -134,7 +140,7 @@ else
 	echo "Skipping Windows build (--skip-windows)."
 fi
 
-if [ "$SKIP_LINUX" -eq 0 ]; then
+if [ "$DO_LINUX" -eq 1 ]; then
 	echo ""
 	echo "=== Linux build + package (remote $NIX_SSH:$NIX_REPO) ==="
 	START=$SECONDS
@@ -154,7 +160,7 @@ if [ "$SKIP_LINUX" -eq 0 ]; then
 
 	echo "    Linux step took $((SECONDS - START))s"
 else
-	echo "Skipping Linux build (--skip-linux)."
+	echo "Skipping Linux build (off by default; pass --linux to enable)."
 fi
 
 echo ""

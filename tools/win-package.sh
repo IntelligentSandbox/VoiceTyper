@@ -32,13 +32,13 @@ CUDA_ADDON_ZIP="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda-addon.
 CPU_MSI="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cpu.msi"
 CUDA_MSI="$DIST_DIR/VoiceTyper-v${VERSION}-${PACKAGE_PLATFORM}-cuda.msi"
 
-# STT models are no longer shipped in dist artifacts — the in-app downloader
-# fetches them from huggingface.co/ggerganov/whisper.cpp on demand. The VAD
-# model is small (~2 MB) and required for streaming/record silence detection,
-# so it is still bundled.
-remove_stt_models() {
+# No model files are shipped in dist artifacts — Windows distributables are
+# binaries-only. STT models are fetched on demand by the in-app downloader
+# (huggingface.co/ggerganov/whisper.cpp); the VAD model is stripped too and
+# will be fetched the same way once a downloader exists for it.
+remove_model_files() {
 	local build_output="$1"
-	rm -rf "$build_output/stt_models"
+	rm -rf "$build_output/stt_models" "$build_output/vad_models"
 }
 
 copy_build_output() {
@@ -154,9 +154,9 @@ echo ""
 echo "=== Staging package inputs ($PACKAGE_PLATFORM) ==="
 START=$SECONDS
 copy_build_output "$CUDA_BUILD" "$CUDA_STAGE"
-remove_stt_models "$CUDA_STAGE"
+remove_model_files "$CUDA_STAGE"
 copy_build_output "$CPU_BUILD" "$CPU_STAGE"
-remove_stt_models "$CPU_STAGE"
+remove_model_files "$CPU_STAGE"
 echo "    Staging took $((SECONDS - START))s"
 
 echo ""

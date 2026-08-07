@@ -38,10 +38,10 @@ NixOS / Linux (nix flake, defined in flake.nix, driven by tools/nix-build.sh):
     (default /var/cache/voicetyper-ccache, or $CCACHE_DIR; see tools/nix-build.sh).
 
 Releases (run from a Windows host in git bash):
-    tools/release-all.sh            - build + package Windows cpu/cuda and portable Linux (cpu + cuda: static + AppImage)
-                                      outputs and create a GitHub release. Builds Windows locally and sshes into
-                                      the NixOS box (VOICETYPER_NIX_SSH, default 'rock') for the portable Linux
-                                      outputs. Linux packaging: tools/nix-package.sh.
+    tools/release-all.sh            - build + package Windows cpu/cuda outputs locally and create a GitHub release.
+                                      Windows-only by default; pass --linux to also build + package the portable
+                                      Linux (cpu + cuda: static + AppImage) outputs by ssh-ing into the NixOS box
+                                      (VOICETYPER_NIX_SSH, default 'rock'). Linux packaging: tools/nix-package.sh.
     tools/win-release.sh            - Windows-only release flow (tag + windows package + release).
 
 ## Workflow
