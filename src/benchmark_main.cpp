@@ -15,6 +15,12 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 struct BenchOptions
 {
 	std::string ModelPath = "stt_models/ggml-base.en.bin";
@@ -24,6 +30,7 @@ struct BenchOptions
 	std::string Mode = "record";
 	bool EnableVad = false;
 	std::string VadModelPath = "vad_models/ggml-silero-v5.1.2.bin";
+	std::string Device = "cpu";
 	int WarmupCount = 1;
 	int IterationCount = 5;
 	int ThreadCount = 1;
@@ -35,7 +42,8 @@ print_usage(const char *ExeName)
 	std::cerr << "Usage: " << ExeName
 		<< " --audio <path> [--model <path>] [--expected-text <text>]"
 		<< " [--mode <record|streaming>] [--vad <on|off>] [--vad-model <path>]"
-		<< " [--warmup <count>] [--iterations <count>] [--threads <count>]\n";
+		<< " [--device <cpu|gpu>] [--warmup <count>] [--iterations <count>]"
+		<< " [--threads <count>]\n";
 }
 
 static bool
@@ -136,6 +144,18 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 			const char *Value = require_value("--vad-model");
 			if (!Value) return false;
 			Options->VadModelPath = Value;
+		}
+		else if (Arg == "--device")
+		{
+			const char *Value = require_value("--device");
+			if (!Value) return false;
+			std::string DevStr = Value;
+			if (DevStr != "cpu" && DevStr != "gpu")
+			{
+				std::cerr << "--device must be 'cpu' or 'gpu'\n";
+				return false;
+			}
+			Options->Device = DevStr;
 		}
 		else
 		{
@@ -381,6 +401,67 @@ format_ms(double Milliseconds)
 	return Out.str();
 }
 
+static std::string
+get_exe_dir()
+{
+#ifdef _WIN32
+	char ExePath[1024] = {};
+	GetModuleFileNameA(nullptr, ExePath, sizeof(ExePath));
+	std::string S = ExePath;
+	size_t Pos = S.find_last_of("\\/");
+	if (Pos != std::string::npos) S.resize(Pos);
+	return S;
+#else
+	char Buf[4096] = {};
+	ssize_t Len = readlink("/proc/self/exe", Buf, sizeof(Buf) - 1);
+	if (Len <= 0) return ".";
+	Buf[Len] = '\0';
+	std::string S = Buf;
+	size_t Pos = S.find_last_of('/');
+	if (Pos != std::string::npos) S.resize(Pos);
+	return S;
+#endif
+}
+
+static bool
+load_cuda_plugin(std::string *Error)
+{
+	std::string ExeDir = get_exe_dir();
+#ifdef _WIN32
+	std::string PluginPath = ExeDir + "/cuda/ggml-cuda.dll";
+#else
+	std::string PluginPath = ExeDir + "/cuda/libggml-cuda.so";
+#endif
+
+	FILE *F = std::fopen(PluginPath.c_str(), "rb");
+	if (!F)
+	{
+		*Error = "cuda plugin not found: " + PluginPath;
+		return false;
+	}
+	std::fclose(F);
+
+	ggml_backend_reg_t Reg = ggml_backend_load(PluginPath.c_str());
+	if (Reg == nullptr)
+	{
+		*Error = "ggml_backend_load failed: " + PluginPath;
+		return false;
+	}
+
+	size_t DevCount = ggml_backend_dev_count();
+	for (size_t i = 0; i < DevCount; i++)
+	{
+		ggml_backend_dev_t Dev = ggml_backend_dev_get(i);
+		if (Dev && ggml_backend_dev_type(Dev) == GGML_BACKEND_DEVICE_TYPE_GPU)
+		{
+			return true;
+		}
+	}
+
+	*Error = "cuda plugin loaded but no GPU device registered";
+	return false;
+}
+
 int
 main(int ArgCount, char **Args)
 {
@@ -406,7 +487,18 @@ main(int ArgCount, char **Args)
 	// must be registered before whisper can init it.
 	ggml_backend_load_all();
 
+	bool UseGpu = (Options.Device == "gpu");
 	int InferenceDeviceIndex = 0;
+	if (UseGpu)
+	{
+		std::string PluginError;
+		if (!load_cuda_plugin(&PluginError))
+		{
+			std::cerr << "failed to enable GPU device: " << PluginError << "\n";
+			return 1;
+		}
+		InferenceDeviceIndex = 1;
+	}
 
 	auto LoadStart = std::chrono::steady_clock::now();
 	bool Loaded = load_whisper_model(&ModelState, Options.ModelPath.c_str(), 0, InferenceDeviceIndex);
@@ -512,6 +604,7 @@ main(int ArgCount, char **Args)
 
 	std::cout << "{\"mode\":\"" << Options.Mode
 		<< "\",\"vad\":" << (Options.EnableVad ? "true" : "false")
+		<< ",\"device\":\"" << Options.Device << "\""
 		<< ",\"model_load_ms\":" << format_ms(elapsed_ms(LoadStart, LoadEnd))
 		<< ",\"unit_count\":" << Units.size()
 		<< ",\"unit_durations_ms\":[";
