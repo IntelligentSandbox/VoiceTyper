@@ -402,6 +402,10 @@ main(int ArgCount, char **Args)
 	WhisperModelState ModelState = {};
 	init_whisper_state(&ModelState);
 
+	// GGML_BACKEND_DL: the CPU backend ships as a separate ggml-cpu.dll that
+	// must be registered before whisper can init it.
+	ggml_backend_load_all();
+
 	int InferenceDeviceIndex = 0;
 
 	auto LoadStart = std::chrono::steady_clock::now();

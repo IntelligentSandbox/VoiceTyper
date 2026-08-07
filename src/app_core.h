@@ -64,6 +64,17 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	query_whisper_thread_count(AppState);
 	query_hotkey_settings(AppState);
 
+	// GGML_BACKEND_DL builds ship the CPU backend as a separate ggml-cpu.dll
+	// plugin next to the exe. The ggml backend registry starts empty, so the
+	// CPU backend must be explicitly loaded before whisper can initialize it
+	// (whisper.cpp's whisper_backend_init throws if no CPU device is
+	// registered, breaking every model load — CPU or GPU, since whisper
+	// always pulls in a CPU backend). This is fast: just LoadLibrary + CPU
+	// feature detection. The slow CUDA driver init stays on the background
+	// thread in refresh_inference_devices, which loads ggml-cuda.dll from the
+	// cuda/ subfolder that load_all() (scanning the exe dir) does not touch.
+	ggml_backend_load_all();
+
 	refresh_inference_devices(AppState);
 }
 

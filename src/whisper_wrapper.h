@@ -3,6 +3,7 @@
 #include "whisper.h"
 #include "ggml-backend.h"
 #include "diagnostics.h"
+#include <exception>
 #include <string>
 
 struct WhisperModelState
@@ -55,7 +56,19 @@ load_whisper_model(WhisperModelState *State, const char *ModelPath,
 	ContextParams.flash_attn = UseGpu;
 	ContextParams.gpu_device = GpuDevice;
 
-	State->Context = whisper_init_from_file_with_params(ModelPath, ContextParams);
+	// whisper_init_from_file_with_params can throw std::runtime_error (e.g. via
+	// whisper_backend_init when the CPU backend plugin is missing/broken). It
+	// runs on the model-transition worker thread, where an uncaught exception
+	// would call std::terminate — catch it and surface a graceful load failure.
+	try
+	{
+		State->Context = whisper_init_from_file_with_params(ModelPath, ContextParams);
+	}
+	catch (const std::exception &E)
+	{
+		diag_write_log_line(GGML_LOG_LEVEL_ERROR, E.what());
+		State->Context = nullptr;
+	}
 
 	if (State->Context == nullptr) return false;
 
