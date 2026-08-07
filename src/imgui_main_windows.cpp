@@ -54,6 +54,11 @@ static const int               WINDOW_MIN_WIDTH    = 320;
 static const int               WINDOW_MIN_HEIGHT   = 240;
 static const int               RENDER_REFRESH_FALLBACK_HZ = 60;
 
+static bool                    g_InSizeMove              = false;
+static LONGLONG                g_AppUpdateIntervalTicks  = 0;
+static LONGLONG                g_NextAppTick             = 0;
+static AppFrameState           g_FrameState              = {};
+
 // ---------------------------------------------------------------------------
 // Forward Declarations
 // ---------------------------------------------------------------------------
@@ -291,6 +296,33 @@ render_frame()
 	g_SwapChainOccluded = (Hr == DXGI_STATUS_OCCLUDED);
 }
 
+// Runs any due app update ticks, shared by the main loop and the live-resize
+// path so the audio/transcription pipeline keeps ticking while the user drags
+// the window. Returns the timestamp sampled after the last update.
+static LONGLONG
+run_due_app_updates(LONGLONG Now)
+{
+	if (!g_AppState) return Now;
+
+	int AppTicksRun = 0;
+	while (Now >= g_NextAppTick && AppTicksRun < VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS)
+	{
+		AppFrameResult FrameResult = app_update_runtime_frame(
+			g_AppState,
+			&g_FrameState,
+			!g_AppState->Ui.SettingsState.Capture.IsCapturing);
+		show_model_transition_failure(g_AppState, FrameResult.ModelFailure);
+
+		g_NextAppTick += g_AppUpdateIntervalTicks;
+		AppTicksRun++;
+		Now = performance_counter_now();
+	}
+
+	if (Now >= g_NextAppTick) g_NextAppTick = Now + g_AppUpdateIntervalTicks;
+
+	return Now;
+}
+
 // ---------------------------------------------------------------------------
 // Window Procedure
 // ---------------------------------------------------------------------------
@@ -323,6 +355,28 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 	case WM_DISPLAYCHANGE:
 		refresh_render_cadence(Hwnd);
 		g_RenderDueNow = true;
+		return 0;
+
+	case WM_ENTERSIZEMOVE:
+		g_InSizeMove = true;
+		InvalidateRect(Hwnd, nullptr, FALSE);
+		return 0;
+
+	case WM_EXITSIZEMOVE:
+		g_InSizeMove = false;
+		ValidateRect(Hwnd, nullptr);
+		g_RenderDueNow = true;
+		return 0;
+
+	case WM_PAINT:
+		if (g_InSizeMove)
+		{
+			LONGLONG Now = performance_counter_now();
+			run_due_app_updates(Now);
+			if (window_can_render(Hwnd)) render_frame();
+			return 0;
+		}
+		ValidateRect(Hwnd, nullptr);
 		return 0;
 
 	case WM_SYSCOMMAND:
@@ -417,12 +471,10 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	g_ImGuiReady = true;
 
 	refresh_render_cadence(Hwnd);
-	const LONGLONG AppUpdateIntervalTicks = performance_interval_for_hz(VOICETYPER_APP_UPDATE_HZ);
+	g_AppUpdateIntervalTicks = performance_interval_for_hz(VOICETYPER_APP_UPDATE_HZ);
 	LONGLONG Now = performance_counter_now();
-	LONGLONG NextAppTick = Now;
+	g_NextAppTick = Now;
 	LONGLONG NextRenderTick = Now;
-
-	AppFrameState FrameState = {};
 
 	bool Running = true;
 	while (Running)
@@ -443,22 +495,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		if (!Running) break;
 
 		Now = performance_counter_now();
-
-		int AppTicksRun = 0;
-		while (Now >= NextAppTick && AppTicksRun < VOICETYPER_APP_UPDATE_MAX_CATCH_UP_TICKS)
-		{
-			AppFrameResult FrameResult = app_update_runtime_frame(
-				AppState,
-				&FrameState,
-				!AppState->Ui.SettingsState.Capture.IsCapturing);
-			show_model_transition_failure(AppState, FrameResult.ModelFailure);
-
-			NextAppTick += AppUpdateIntervalTicks;
-			AppTicksRun++;
-			Now = performance_counter_now();
-		}
-
-		if (Now >= NextAppTick) NextAppTick = Now + AppUpdateIntervalTicks;
+		Now = run_due_app_updates(Now);
 
 		if (window_can_render(Hwnd) && (g_RenderDueNow || Now >= NextRenderTick))
 		{
@@ -475,7 +512,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		}
 
 		Now = performance_counter_now();
-		LONGLONG NextDeadline = NextAppTick;
+		LONGLONG NextDeadline = g_NextAppTick;
 		if (window_can_render(Hwnd))
 		{
 			if (g_RenderDueNow)
