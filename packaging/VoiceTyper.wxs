@@ -12,7 +12,10 @@
 		<MediaTemplate EmbedCab="yes" />
 
 		<StandardDirectory Id="LocalAppDataFolder">
-			<Directory Id="INSTALLFOLDER" Name="VoiceTyper" />
+			<Directory Id="INSTALLFOLDER" Name="VoiceTyper">
+				<Directory Id="SttModelsFolder" Name="stt_models" />
+				<Directory Id="VadModelsFolder" Name="vad_models" />
+			</Directory>
 		</StandardDirectory>
 
 		<StandardDirectory Id="ProgramMenuFolder">
@@ -22,11 +25,21 @@
 		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
 			<Files Include="$(var.BuildOutput)\**">
 				<Exclude Files="$(var.BuildOutput)\settings.ini" />
+				<Exclude Files="$(var.BuildOutput)\stt_models\**" />
+				<Exclude Files="$(var.BuildOutput)\vad_models\**" />
 			</Files>
 		</ComponentGroup>
 
 		<Component Id="SettingsFile" Directory="INSTALLFOLDER" NeverOverwrite="yes" Permanent="yes" Guid="ADC30D4C-1E7A-473C-A996-34683840F96A">
 			<File Source="$(var.BuildOutput)\settings.ini" />
+		</Component>
+
+		<Component Id="SttModelsDir" Directory="SttModelsFolder" Permanent="yes" Guid="82148DB1-1BE8-4A25-AC22-F2D892D45A6E">
+			<CreateFolder />
+		</Component>
+
+		<Component Id="VadModelsDir" Directory="VadModelsFolder" Permanent="yes" Guid="9D90C12D-3638-41F9-890B-C4EB8ED9A122">
+			<CreateFolder />
 		</Component>
 
 		<Component Id="StartMenuShortcut" Directory="AppStartMenuFolder" Guid="7E8838D4-997D-4D98-B1C8-53AA4E309DE9">
@@ -42,6 +55,8 @@
 		<Feature Id="MainFeature" Title="VoiceTyper" Level="1">
 			<ComponentGroupRef Id="AppFiles" />
 			<ComponentRef Id="SettingsFile" />
+			<ComponentRef Id="SttModelsDir" />
+			<ComponentRef Id="VadModelsDir" />
 			<ComponentRef Id="StartMenuShortcut" />
 		</Feature>
 	</Package>
