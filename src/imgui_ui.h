@@ -807,8 +807,22 @@ render_download_modal(GlobalState *AppState)
 
 	if (!D->IsModalOpen) return;
 
+	float LongestNameW = 0.0f;
+	for (const CatalogModel &M : get_model_catalog())
+	{
+		float W = ImGui::CalcTextSize(M.Name).x;
+		if (W > LongestNameW) LongestNameW = W;
+	}
+	const float ModelColW = LongestNameW + 50.0f;
+	const float SizeColW = 80.0f;
+	const float ActionColW = 130.0f;
+
 	ImVec2 Display = ImGui::GetIO().DisplaySize;
-	ImGui::SetNextWindowSize(ImVec2(Display.x * 0.6f, Display.y * 0.7f), ImGuiCond_FirstUseEver);
+	const ImGuiStyle &Style = ImGui::GetStyle();
+	float ContentW = ModelColW + SizeColW + ActionColW + Style.CellPadding.x * 2.0f * 3.0f;
+	float WinW = ContentW + Style.WindowPadding.x * 2.0f + Style.ScrollbarSize;
+	if (WinW > Display.x * 0.95f) WinW = Display.x * 0.95f;
+	ImGui::SetNextWindowSize(ImVec2(WinW, Display.y * 0.7f), ImGuiCond_Appearing);
 	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 
 	bool Open = true;
@@ -838,9 +852,9 @@ render_download_modal(GlobalState *AppState)
 			if (ImGui::BeginTable("##CatalogTable", 3,
 				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 			{
-				ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-				ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, ModelColW);
+			ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, SizeColW);
+			ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, ActionColW);
 				ImGui::TableHeadersRow();
 
 				for (const CatalogModel &M : get_model_catalog())
