@@ -14,6 +14,11 @@ struct CatalogModel
 
 #define WHISPER_HF_BASE_URL "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 
+#define VAD_HF_BASE_URL        "https://huggingface.co/ggml-org/whisper-vad/resolve/main"
+#define VAD_MODEL_FILENAME     "ggml-silero-v5.1.2.bin"
+#define VAD_MODEL_DISPLAY_NAME "Silero VAD v5.1.2"
+#define VAD_MODEL_SIZE_BYTES   (885ULL * 1024)
+
 inline const std::vector<CatalogModel> &
 get_model_catalog()
 {
@@ -38,6 +43,12 @@ inline std::string
 catalog_model_url(const std::string &Name)
 {
 	return std::string(WHISPER_HF_BASE_URL) + "/ggml-" + Name + ".bin";
+}
+
+inline std::string
+vad_model_url()
+{
+	return std::string(VAD_HF_BASE_URL) + "/" + VAD_MODEL_FILENAME;
 }
 
 inline std::string

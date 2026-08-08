@@ -1,18 +1,31 @@
 #pragma once
 
 #include "host_services.h"
+#include "model_catalog.h"
 #include "state.h"
 
 #include <cstdio>
 #include <string>
 #include <vector>
 
-#define VAD_MODEL_RELATIVE "vad_models/ggml-silero-v5.1.2.bin"
+#define VAD_MODEL_RELATIVE "vad_models/" VAD_MODEL_FILENAME
 
 inline void
 query_vad_model_path(GlobalState *AppState)
 {
 	AppState->VadModelPath = platform_join_path(platform_get_exe_dir(), VAD_MODEL_RELATIVE);
+}
+
+inline bool
+vad_model_installed(GlobalState *AppState)
+{
+	std::string Dir = platform_join_path(platform_get_exe_dir(), "vad_models");
+	std::vector<PlatformFileInfo> Files = platform_list_files(Dir);
+	for (const PlatformFileInfo &File : Files)
+	{
+		if (File.Name == VAD_MODEL_FILENAME) return true;
+	}
+	return false;
 }
 
 inline void

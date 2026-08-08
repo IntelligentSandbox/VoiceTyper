@@ -8,6 +8,7 @@
 #include "control.h"
 #include "diagnostics.h"
 #include "model_catalog.h"
+#include "model_assets.h"
 #include "model_downloader.h"
 
 #include <cstdio>
@@ -794,7 +795,7 @@ render_download_modal(GlobalState *AppState)
 
 		if (Succ)
 		{
-			query_available_stt_models(AppState);
+			if (D->CurrentModelName != VAD_MODEL_DISPLAY_NAME) query_available_stt_models(AppState);
 			std::string Msg = std::string("Downloaded ") + D->CurrentModelName;
 			show_success_toast(AppState, Msg.c_str());
 		}
@@ -813,6 +814,10 @@ render_download_modal(GlobalState *AppState)
 		float W = ImGui::CalcTextSize(M.Name).x;
 		if (W > LongestNameW) LongestNameW = W;
 	}
+	{
+		float W = ImGui::CalcTextSize(VAD_MODEL_DISPLAY_NAME).x;
+		if (W > LongestNameW) LongestNameW = W;
+	}
 	const float ModelColW = LongestNameW + 50.0f;
 	const float SizeColW = 80.0f;
 	const float ActionColW = 130.0f;
@@ -826,7 +831,7 @@ render_download_modal(GlobalState *AppState)
 	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 
 	bool Open = true;
-	if (ImGui::Begin("Download STT Models", &Open, ImGuiWindowFlags_NoCollapse))
+	if (ImGui::Begin("Download Models", &Open, ImGuiWindowFlags_NoCollapse))
 	{
 		bool Running = D->IsRunning.load();
 		if (Running)
@@ -888,6 +893,43 @@ render_download_modal(GlobalState *AppState)
 				}
 				ImGui::EndTable();
 			}
+
+			ImGui::Spacing();
+			ImGui::TextDisabled("VAD Model (Voice Activity Detection) - source: huggingface.co/ggml-org/whisper-vad");
+			ImGui::Spacing();
+
+			if (ImGui::BeginTable("##VadTable", 3,
+				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, ModelColW);
+				ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, SizeColW);
+				ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, ActionColW);
+				ImGui::TableNextRow();
+
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(VAD_MODEL_DISPLAY_NAME);
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextDisabled("%s", format_bytes(VAD_MODEL_SIZE_BYTES).c_str());
+				ImGui::TableSetColumnIndex(2);
+
+				bool VadInstalled = vad_model_installed(AppState);
+				std::string VadLabel = VadInstalled ? "Re-download##vad" : "Download##vad";
+				if (ImGui::Button(VadLabel.c_str(), ImVec2(-1.0f, 0.0f)))
+				{
+					D->PendingModelName = VAD_MODEL_DISPLAY_NAME;
+					D->PendingUrl = vad_model_url();
+					std::string VadDir = platform_join_path(platform_get_exe_dir(), "vad_models");
+					D->PendingDestPath = platform_join_path(VadDir, VAD_MODEL_FILENAME);
+					D->PendingSize = VAD_MODEL_SIZE_BYTES;
+					if (VadInstalled) D->WantsOverwriteConfirm = true;
+					else
+					{
+						platform_ensure_directory(VadDir);
+						start_model_download(AppState, VAD_MODEL_DISPLAY_NAME, D->PendingUrl, D->PendingDestPath, VAD_MODEL_SIZE_BYTES);
+					}
+				}
+				ImGui::EndTable();
+			}
 		}
 
 		ImGui::Separator();
@@ -914,12 +956,13 @@ render_download_modal(GlobalState *AppState)
 
 			if (ImGui::Button("Overwrite", ImVec2(BtnW, 0)))
 			{
-				platform_ensure_directory(platform_join_path(platform_get_exe_dir(), "stt_models"));
 				std::string Name = D->PendingModelName;
 				std::string Url = D->PendingUrl;
 				std::string Dest = D->PendingDestPath;
 				int64_t Size = D->PendingSize;
 				ImGui::CloseCurrentPopup();
+				size_t Slash = Dest.find_last_of("\\/");
+				if (Slash != std::string::npos) platform_ensure_directory(Dest.substr(0, Slash));
 				start_model_download(AppState, Name, Url, Dest, Size);
 			}
 			ImGui::SameLine();
