@@ -164,14 +164,17 @@ load_window_size(int *OutWidth, int *OutHeight)
 static void
 save_window_size(HWND Hwnd)
 {
-	RECT WindowRect = {};
-	if (!GetWindowRect(Hwnd, &WindowRect)) return;
+	WINDOWPLACEMENT Placement = {};
+	Placement.length = sizeof(WINDOWPLACEMENT);
+	if (!GetWindowPlacement(Hwnd, &Placement)) return;
 
-	int Width = WindowRect.right - WindowRect.left;
-	int Height = WindowRect.bottom - WindowRect.top;
+	RECT Rect = Placement.rcNormalPosition;
+	int Width = Rect.right - Rect.left;
+	int Height = Rect.bottom - Rect.top;
 	if (Width < WINDOW_MIN_WIDTH || Height < WINDOW_MIN_HEIGHT) return;
 
 	save_window_size_setting(Width, Height);
+	save_bool_setting("window_maximized", Placement.showCmd == SW_SHOWMAXIMIZED);
 }
 
 static LONGLONG
@@ -337,7 +340,6 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 		refresh_render_cadence(Hwnd);
 		g_RenderDueNow = true;
 		if (WParam == SIZE_MINIMIZED) return 0;
-		if (WParam == SIZE_RESTORED) save_window_size(Hwnd);
 		if (g_SwapChain)
 		{
 			cleanup_render_target();
@@ -384,6 +386,7 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 		break;
 
 	case WM_DESTROY:
+		save_window_size(Hwnd);
 		PostQuitMessage(0);
 		return 0;
 	}
@@ -416,7 +419,10 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	int WindowWidth = WINDOW_DEFAULT_WIDTH;
 	int WindowHeight = WINDOW_DEFAULT_HEIGHT;
-	load_window_size(&WindowWidth, &WindowHeight);
+	bool HasSavedWindowSize = load_window_size(&WindowWidth, &WindowHeight);
+
+	bool Maximized = true;
+	if (HasSavedWindowSize) load_bool_setting("window_maximized", &Maximized);
 
 	HWND Hwnd = CreateWindowW(
 		Wc.lpszClassName, L"VoiceTyper", WS_OVERLAPPEDWINDOW,
@@ -438,7 +444,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		return 1;
 	}
 
-	ShowWindow(Hwnd, SW_SHOWMAXIMIZED);
+	ShowWindow(Hwnd, Maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
 	UpdateWindow(Hwnd);
 
 	GlobalState AppStateStorage = {};
