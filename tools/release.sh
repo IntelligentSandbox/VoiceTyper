@@ -582,6 +582,42 @@ collect_assets() {
 	[ "${#RELEASE_ASSETS[@]}" -gt 0 ] || die "No package artifacts found in $DIST_DIR."
 }
 
+# Sync the remote NixOS tree to $commit and run the portable Linux build +
+# package there. This is the part of the Linux step that can overlap the Windows
+# build: it stays on the remote box and does NOT touch the local $DIST_DIR. The
+# artifact stream-back is done separately, after windows_package (which clears
+# $DIST_DIR), to avoid clobbering it.
+linux_remote_build() {
+	local commit="$1"
+	local ccache_arg=""
+	[ "$USE_CCACHE" = "1" ] && ccache_arg="--ccache"
+	echo "Syncing remote tree to $commit..."
+	ssh "$NIX_SSH" "cd $NIX_REPO && git fetch --all --tags && git checkout '$commit'"
+	echo "Building + packaging on the NixOS box..."
+	ssh "$NIX_SSH" "cd $NIX_REPO && bash tools/release.sh --internal-linux-package $ccache_arg"
+}
+
+# Populated when a background remote Linux build is in flight; cleared once it
+# has been joined. cleanup_on_exit kills it so a failure during the Windows step
+# doesn't orphan a remote nix build.
+LINUX_BG_PID=""
+
+# RELEASE_SUCCESS is flipped to 1 only at the very end of a clean run so the
+# EXIT trap knows to skip the (network-hitting) tag-rollback check on success.
+RELEASE_SUCCESS=0
+
+cleanup_on_exit() {
+	if [ -n "$LINUX_BG_PID" ] && kill -0 "$LINUX_BG_PID" 2>/dev/null; then
+		echo "Cleaning up background Linux build (pid $LINUX_BG_PID) after early exit." >&2
+		kill "$LINUX_BG_PID" 2>/dev/null
+		wait "$LINUX_BG_PID" 2>/dev/null
+	fi
+	if [ "$RELEASE_SUCCESS" = "0" ] && [ "$DO_TAG" = "1" ] && tag_exists_locally && ! tag_exists_remote; then
+		echo "Cleaning up unpushed local tag $TAG due to failure." >&2
+		git tag -d "$TAG" >/dev/null
+	fi
+}
+
 # ---------------------------------------------------------------------------
 # Internal dispatch entry points. The Windows .bat wrappers re-invoke this
 # script to run a single modular function below. These must sit after every
@@ -609,6 +645,12 @@ if [ "$INTERNAL_LINUX_BUILD" = "1" ]; then
 	linux_build
 	exit 0
 fi
+
+# From here on we are in the main orchestration flow. Install the EXIT trap that
+# rolls back an unpushed tag and/or kills an in-flight background Linux build on
+# early exit. (Set after the internal dispatch blocks above so those sub-shells,
+# which exit 0, don't trigger it.)
+trap cleanup_on_exit EXIT
 
 # ---------------------------------------------------------------------------
 # Command requirements
@@ -653,13 +695,6 @@ fi
 if [ "$DO_TAG" = "1" ]; then
 	echo "=== Cutting local tag $TAG at HEAD ==="
 	git tag -a "$TAG" -m "VoiceTyper $TAG"
-	cleanup_tag() {
-		if tag_exists_locally && ! tag_exists_remote; then
-			echo "Cleaning up unpushed local tag $TAG due to failure." >&2
-			git tag -d "$TAG" >/dev/null
-		fi
-	}
-	trap cleanup_tag EXIT
 fi
 
 # ---------------------------------------------------------------------------
@@ -667,32 +702,39 @@ fi
 # ---------------------------------------------------------------------------
 
 TOTAL_START=$SECONDS
+
+# If the remote Linux build is requested, kick it off NOW (after the tag is cut)
+# so the long remote nix build overlaps the Windows build+package. Only the sync
+# + remote build run in the background - they stay on the NixOS box and don't
+# touch the local $DIST_DIR. The artifact stream-back is deferred until after
+# windows_package (which clears $DIST_DIR) so it can't be clobbered.
+if [ "$DO_LINUX" = "1" ]; then
+	echo "=== Starting remote Linux build (background, overlaps Windows) ==="
+	linux_remote_build "$(git rev-parse HEAD)" &
+	LINUX_BG_PID=$!
+fi
+
 windows_build
 echo ""
 windows_package
 
 # ---------------------------------------------------------------------------
-# Step 3: optional build + package Linux (remote)
+# Step 3: join the background Linux build (if any) and stream artifacts back
 # ---------------------------------------------------------------------------
 
 if [ "$DO_LINUX" = "1" ]; then
 	echo ""
-	echo "=== Linux build + package (remote $NIX_SSH:$NIX_REPO) ==="
-	start=$SECONDS
-	commit="$(git rev-parse HEAD)"
-
-	echo "Syncing remote tree to $commit..."
-	ssh "$NIX_SSH" "cd $NIX_REPO && git fetch --all --tags && git checkout '$commit'"
-
-	echo "Building + packaging on the NixOS box..."
-	ccache_arg=""
-	[ "$USE_CCACHE" = "1" ] && ccache_arg="--ccache"
-	ssh "$NIX_SSH" "cd $NIX_REPO && bash tools/release.sh --internal-linux-package $ccache_arg"
-
-	echo "Streaming Linux artifacts back into local $DIST_DIR/..."
-	ssh "$NIX_SSH" "cd $NIX_REPO && tar -cf - -C $DIST_DIR ." | tar -xf - -C "$DIST_DIR"
-
-	echo "    Linux step took $((SECONDS - start))s"
+	echo "=== Joining remote Linux build ==="
+	linux_start=$SECONDS
+	if wait "$LINUX_BG_PID"; then
+		LINUX_BG_PID=""
+		echo "Streaming Linux artifacts back into local $DIST_DIR/..."
+		ssh "$NIX_SSH" "cd $NIX_REPO && tar -cf - -C $DIST_DIR ." | tar -xf - -C "$DIST_DIR"
+		echo "    Linux join + stream took $((SECONDS - linux_start))s"
+	else
+		LINUX_BG_PID=""
+		die "Remote Linux build failed."
+	fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -723,7 +765,6 @@ if [ "$DO_RELEASE" = "1" ]; then
 	if [ "$DO_TAG" = "1" ]; then
 		echo "Pushing tag to $REMOTE..."
 		git push "$REMOTE" "$TAG"
-		trap - EXIT
 	fi
 
 	echo "Creating draft GitHub release..."
@@ -737,10 +778,10 @@ if [ "$DO_RELEASE" = "1" ]; then
 elif [ "$DO_TAG" = "1" ]; then
 	echo "Pushing tag to $REMOTE..."
 	git push "$REMOTE" "$TAG"
-	trap - EXIT
 	echo "=== Tag $TAG pushed ==="
 fi
 
+RELEASE_SUCCESS=1
 echo ""
 echo "=== Done in $((SECONDS - TOTAL_START))s ==="
 echo "Created:"
