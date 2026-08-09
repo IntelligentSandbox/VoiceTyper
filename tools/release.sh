@@ -12,7 +12,7 @@
 #   tools/release.sh --tag --release  cut tag + build + package + DRAFT release
 #
 # Add --linux to any of the above to also build + package the portable Linux
-# outputs (static + AppImage, cpu + cuda) on the remote NixOS box and attach
+# outputs (flat tar.gz bundles, cpu + cuda) on the remote NixOS box and attach
 # them to the same dist/ (and release).
 #
 # Only DRAFT releases are ever created automatically - publishing is a manual
@@ -30,7 +30,6 @@ REMOTE="${VOICETYPER_RELEASE_REMOTE:-origin}"
 NIX_SSH="${VOICETYPER_NIX_SSH:-rock}"
 NIX_REPO="${VOICETYPER_NIX_REPO:-~/repos/VoiceTyper}"
 CHANGELOG_FILE="$DIST_DIR/release-notes-$TAG.md"
-VAD_MODEL="vad_models/ggml-silero-v5.1.2.bin"
 LINUX_PLATFORM="x86_64-linux"
 
 DO_TAG=0
@@ -63,7 +62,7 @@ Operations:
                     only after the build + package succeeds.
 
 Options:
-  --linux             Also build + package portable Linux (static + AppImage,
+  --linux             Also build + package portable Linux (flat tar.gz bundles,
                       cpu + cuda) on the remote NixOS box over ssh.
   --ccache            Enable ccache for the CUDA nix builds (Linux). Auto-enabled
                       when \$CCACHE_DIR (default /var/cache/voicetyper-ccache)
@@ -314,104 +313,32 @@ build_nix() {
 	nix build ".#$package" --out-link "$out_link" "${ccache_args[@]}"
 }
 
-find_appimage() {
-	local out_link="$1"
-	local pattern="$2"
-	local src
-
-	src="$(find -L "$out_link" -name "$pattern" -type f | head -n 1)"
-	[ -n "$src" ] || die "no artifact matching '$pattern' under $out_link."
-	echo "$src"
-}
-
-package_static() {
+# Package a portable Linux bundle (the nix `portable` / `cuda-portable` output)
+# into a versioned tar.gz. The nix output is already the flat, Windows-style
+# directory (launcher + VoiceTyper.elf + .so closure + ld-linux [+ cuda/]), so
+# this just copies it into a named top-level dir and tars it up.
+package_portable() {
 	local result_link="$1"
 	local variant="$2"
-	local name="VoiceTyper-v${VERSION}-${LINUX_PLATFORM}-${variant}-static.tar.gz"
+	local name="VoiceTyper-v${VERSION}-${LINUX_PLATFORM}-${variant}.tar.gz"
 	local top="${name%.tar.gz}"
-	local stage="build/stage_${LINUX_PLATFORM}_${variant}_static"
+	local stage="build/stage_${LINUX_PLATFORM}_${variant}"
 	local root="$stage/$top"
+
+	[ -f "$result_link/VoiceTyper" ] || die "portable bundle '$result_link' missing its VoiceTyper launcher."
 
 	if [ -d "$stage" ]; then chmod -R u+w "$stage"; fi
 	rm -rf "$stage"
-	mkdir -p "$root/vad_models"
+	mkdir -p "$root"
 
-	if [ "$variant" = "cuda" ]; then
-		cp -r "$result_link/bin" "$root/bin"
-		cp -r "$result_link/libexec" "$root/libexec"
-		cp -r "$result_link/lib" "$root/lib"
-		chmod -R u+w "$root"
-	else
-		cp "$result_link/bin/VoiceTyper" "$root/VoiceTyper"
-		chmod +w "$root/VoiceTyper"
-	fi
-
-	cp "$VAD_MODEL" "$root/vad_models/"
+	cp -rL "$result_link/." "$root/"
+	chmod -R u+w "$root"
 
 	tar -C "$stage" -czf "$DIST_DIR/$name" "$top"
 	echo "    packaged $name"
 }
 
-bundle_appimage_vad() {
-	local input="$1"
-	local output_name="$2"
-	local output="$DIST_DIR/$output_name"
-	local work="build/appimage_repack"
-
-	local e_shoff e_shentsize e_shnum elf_size
-	e_shoff=$(od -A n -t u8 --endian=little -j 40 -N 8 "$input" | tr -d ' ')
-	e_shentsize=$(od -A n -t u2 --endian=little -j 58 -N 2 "$input" | tr -d ' ')
-	e_shnum=$(od -A n -t u2 --endian=little -j 60 -N 2 "$input" | tr -d ' ')
-	elf_size=$((e_shoff + e_shentsize * e_shnum))
-
-	rm -rf "$work"
-	mkdir -p "$work"
-
-	head -c "$elf_size" "$input" > "$work/runtime"
-	chmod +x "$work/runtime"
-	tail -c "+$((elf_size + 1))" "$input" > "$work/payload.squashfs"
-
-	if command -v unsquashfs >/dev/null 2>&1; then
-		unsquashfs -no-progress -d "$work/squashfs-root" "$work/payload.squashfs" > /dev/null
-	else
-		local store_path
-		store_path=$(nix build "nixpkgs#squashfsTools" --no-link --print-out-paths 2>/dev/null) || \
-			store_path=$(nix-build '<nixpkgs>' -A squashfsTools --no-out-link 2>/dev/null)
-		[ -n "$store_path" ] || die "could not find unsquashfs via PATH or nix."
-		"$store_path/bin/unsquashfs" -no-progress -d "$work/squashfs-root" "$work/payload.squashfs" > /dev/null
-	fi
-
-	local sq="$work/squashfs-root"
-	mkdir -p "$sq/usr/share/voicetyper/vad_models"
-	cp "$VAD_MODEL" "$sq/usr/share/voicetyper/vad_models/"
-
-	printf '%s\n' \
-		'#!/bin/bash' \
-		'dir="$(dirname "$(readlink -f "$0")")"' \
-		'export VOICETYPER_DATA_DIR="$dir/usr/share/voicetyper"' \
-		'exec "$dir/usr/bin/VoiceTyper" "$@"' \
-		> "$sq/AppRun"
-	chmod +x "$sq/AppRun"
-
-	if command -v mksquashfs >/dev/null 2>&1; then
-		mksquashfs "$sq" "$work/new-payload.squashfs" -comp xz -noappend -root-owned -no-progress > /dev/null
-	else
-		local store_path
-		store_path=$(nix build "nixpkgs#squashfsTools" --no-link --print-out-paths 2>/dev/null) || \
-			store_path=$(nix-build '<nixpkgs>' -A squashfsTools --no-out-link 2>/dev/null)
-		[ -n "$store_path" ] || die "could not find mksquashfs via PATH or nix."
-		"$store_path/bin/mksquashfs" "$sq" "$work/new-payload.squashfs" -comp xz -noappend -root-owned -no-progress > /dev/null
-	fi
-	cat "$work/runtime" "$work/new-payload.squashfs" > "$output"
-	chmod +w "$output"
-
-	rm -rf "$work"
-	echo "    packaged $output_name"
-}
-
 linux_package() {
-	[ -f "$VAD_MODEL" ] || die "VAD model file '$VAD_MODEL' not found."
-
 	local want_ccache=0
 	[ "$USE_CCACHE" = "1" ] && want_ccache=1
 	[ -d "${CCACHE_DIR:-/var/cache/voicetyper-ccache}" ] && want_ccache=1
@@ -421,35 +348,17 @@ linux_package() {
 
 	echo "=== Building portable Linux packages ($LINUX_PLATFORM) for v$VERSION ==="
 
-	echo "--- appimage (cpu) ---"
+	echo "--- portable (cpu) ---"
 	local start=$SECONDS
-	build_nix appimage result-appimage 0
+	build_nix portable result-portable 0
 	echo "    build took $((SECONDS - start))s"
-	local cpu_appimage
-	cpu_appimage=$(find_appimage result-appimage "VoiceTyper-*-x86_64.AppImage")
-	cp "$cpu_appimage" "$DIST_DIR/VoiceTyper-v${VERSION}-${LINUX_PLATFORM}-cpu-appimage.AppImage"
-	bundle_appimage_vad "$cpu_appimage" "VoiceTyper-v${VERSION}-${LINUX_PLATFORM}-cpu-appimage.AppImage"
+	package_portable result-portable cpu
 
-	echo "--- static (cpu) ---"
+	echo "--- portable (cuda) ---"
 	start=$SECONDS
-	build_nix static result-static 0
+	build_nix cuda-portable result-cuda-portable "$want_ccache"
 	echo "    build took $((SECONDS - start))s"
-	package_static result-static cpu
-
-	echo "--- appimage (cuda) ---"
-	start=$SECONDS
-	build_nix cuda-appimage result-cuda-appimage "$want_ccache"
-	echo "    build took $((SECONDS - start))s"
-	local cuda_appimage
-	cuda_appimage=$(find_appimage result-cuda-appimage "VoiceTyper-*-x86_64-cuda.AppImage")
-	cp "$cuda_appimage" "$DIST_DIR/VoiceTyper-v${VERSION}-${LINUX_PLATFORM}-cuda-appimage.AppImage"
-	bundle_appimage_vad "$cuda_appimage" "VoiceTyper-v${VERSION}-${LINUX_PLATFORM}-cuda-appimage.AppImage"
-
-	echo "--- static (cuda) ---"
-	start=$SECONDS
-	build_nix cuda-static result-cuda-static "$want_ccache"
-	echo "    build took $((SECONDS - start))s"
-	package_static result-cuda-static cuda
+	package_portable result-cuda-portable cuda
 
 	echo "=== Linux packaging done ==="
 	echo "Created:"
@@ -552,7 +461,6 @@ fi
 if [ "$DO_LINUX" = "1" ]; then
 	require_command ssh
 	require_command scp
-	[ -f "$VAD_MODEL" ] || die "Model file '$VAD_MODEL' not found (needed by the Linux portable bundles)."
 fi
 
 # ---------------------------------------------------------------------------
@@ -610,9 +518,6 @@ if [ "$DO_LINUX" = "1" ]; then
 
 	echo "Syncing remote tree to $commit..."
 	ssh "$NIX_SSH" "cd $NIX_REPO && git fetch --all --tags && git checkout '$commit'"
-
-	echo "Staging VAD model file to the NixOS box..."
-	tar -cf - "$VAD_MODEL" | ssh "$NIX_SSH" "cd $NIX_REPO && tar -xf -"
 
 	echo "Building + packaging on the NixOS box..."
 	ccache_arg=""

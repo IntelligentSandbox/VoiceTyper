@@ -5,8 +5,8 @@ slashes for paths (`ls`, `cp`, `mv`) and reference paths relatively, e.g. `./src
 Detect the host platform at the start of each session by running `uname -s`, since the
 same project is built on both Windows and NixOS/Linux and the tooling differs:
 - `Linux`            -> native Linux (NixOS). Native paths like `/home/<user>/VoiceTyper`.
-                       The nix flake packages (.#default, .#cuda, .#static, .#cuda-static,
-                       .#appimage, .#cuda-appimage) are invoked directly via `nix build`;
+                       The nix flake packages (.#default, .#cuda, .#portable, .#cuda-portable)
+                       are invoked directly via `nix build`;
                        `tools/release.sh --linux` orchestrates them remotely for releases.
 - `MINGW*` / `MSYS*` -> Windows under git bash. Paths like `/c/dir1/dir2`.
                        Use `tools/release.sh` for the Visual Studio build + package flow.
@@ -42,7 +42,15 @@ For a quick dev build without packaging, invoke cmake directly, e.g.:
     cmake --build build/cpu --config Release
 
 On NixOS the individual flake packages can still be built directly for dev:
-    nix build .#default | .#cuda | .#static | .#cuda-static | .#appimage | .#cuda-appimage
+    nix build .#default | .#cuda | .#portable | .#cuda-portable
+
+The portable packages produce flat, Windows-style distributable directories
+(dynamically linked ELFs + the full .so closure + a bundled ld-linux, with the
+CUDA variant adding a `cuda/` subdir holding `libggml-cuda.so` + cublas/cudart).
+`tools/release.sh --linux` tars them into `VoiceTyper-v<VERSION>-x86_64-linux-{cpu,cuda}.tar.gz`.
+The top-level `VoiceTyper` is a `/bin/sh` launcher that execs the bundled
+ld-linux on `VoiceTyper.elf`, so the bundle runs on most distros including
+NixOS (it bypasses the kernel's PT_INTERP lookup, which fails there).
 
 ## Workflow
 1. Read `.dev/tasks.md` at the start of every session. The user may give you an explicit request, which should take priority over the tasklist. However, if the tasklist contains items that may conflict with the one-off request, notify the user and ask what to do.
