@@ -2,7 +2,17 @@
 
 #include "whisper.h"
 
+#include <cstdio>
+#include <fstream>
 #include <string>
+
+inline bool
+vad_model_file_available(const char *VadModelPath)
+{
+	if (VadModelPath == nullptr || VadModelPath[0] == '\0') return false;
+	std::ifstream F(VadModelPath, std::ios::binary);
+	return F.good();
+}
 
 inline whisper_full_params
 make_transcription_whisper_params(int ThreadCount, bool EnableVad, const char *VadModelPath)
@@ -16,6 +26,14 @@ make_transcription_whisper_params(int ThreadCount, bool EnableVad, const char *V
 	Params.print_special    = false;
 	Params.print_timestamps = false;
 	Params.n_threads        = ThreadCount;
+
+	if (EnableVad && !vad_model_file_available(VadModelPath))
+	{
+		printf("[transcription] VAD model not found at '%s'; falling back to non-VAD inference\n",
+			VadModelPath ? VadModelPath : "(null)");
+		EnableVad = false;
+	}
+
 	Params.vad              = EnableVad;
 
 	if (EnableVad)
