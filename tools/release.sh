@@ -65,9 +65,10 @@ Operations:
 Options:
   --linux             Also build + package portable Linux (flat tar.gz bundles,
                       cpu + cuda) on the remote NixOS box over ssh.
-  --ccache            Enable ccache for the CUDA nix builds (Linux). Auto-enabled
-                      when \$CCACHE_DIR (default /var/cache/voicetyper-ccache)
-                      exists on the NixOS box.
+  --ccache            Enable ccache for the nix builds (Linux, cpu + cuda).
+                      Auto-enabled when \$CCACHE_DIR (default
+                      /var/cache/voicetyper-ccache) exists on the NixOS box.
+                      The cpu build warms the cache the cuda build then hits.
   --remote NAME       Git remote to push the tag to (env: VOICETYPER_RELEASE_REMOTE, default: origin).
   --nix-ssh TARGET    ssh target for the NixOS box (env: VOICETYPER_NIX_SSH, default: rock).
   --nix-repo PATH     Repo path on the NixOS box (env: VOICETYPER_NIX_REPO, default: ~/repos/VoiceTyper).
@@ -125,17 +126,49 @@ sync_asset_dir() {
 	cp -ru "$source_dir/." "$output_dir/"
 }
 
-windows_build() {
+# Pick the cmake generator for the Windows build. Prefer Ninja (faster configure
+# and better parallel scheduling, especially for incremental rebuilds) when the
+# MSVC toolchain is on PATH (i.e. run from a VS "x64 Native Tools" shell or with
+# vcvars loaded). Fall back to the Visual Studio generator, which locates MSVC
+# via the registry and does not need cl.exe on PATH. Override either way with
+# $VOICETYPER_CMAKE_GENERATOR.
+windows_cmake_generator() {
+	if [ -n "${VOICETYPER_CMAKE_GENERATOR:-}" ]; then
+		echo "$VOICETYPER_CMAKE_GENERATOR"
+		return
+	fi
+	if command -v cl >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1; then
+		echo "Ninja"
+	else
+		echo "Visual Studio 17 2022"
+	fi
+}
+
+# Generator-specific configure flags. The VS generator is multi-config and takes
+# -A x64; Ninja is single-config and takes -DCMAKE_BUILD_TYPE=Release instead.
+# (Ninja rejects -A, and -A is pointless for it.)
+windows_cmake_configure_flags() {
+	local generator="$1"
+	case "$generator" in
+		Ninja) echo "-DCMAKE_BUILD_TYPE=Release" ;;
+		*) echo "-A x64" ;;
+	esac
+}
+
+# CPU build: configure + build the CPU exe and stage runtime assets into the
+# Release_cpu output dir. Runs as a background job in parallel with the CUDA
+# plugin build.
+windows_build_cpu() {
 	local build_type="Release"
 	local build_jobs="${VOICETYPER_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)}"
-	local cuda_path="${VOICETYPER_CUDA_PATH:-C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.2}"
-
+	local generator="$1"
 	local cpu_build_dir="build/cpu"
 	local cpu_output_dir="build/${build_type}_cpu"
 
 	echo "=== Building Release (CPU) ==="
 	local start=$SECONDS
-	cmake -S . -B "$cpu_build_dir" -G "Visual Studio 17 2022" -A x64 \
+	cmake -S . -B "$cpu_build_dir" -G "$generator" \
+		$(windows_cmake_configure_flags "$generator") \
 		-DVOICETYPER_BUILD_CUDA_PLUGIN=OFF
 	cmake --build "$cpu_build_dir" --config "$build_type" --parallel "$build_jobs"
 	sync_asset_dir stt_models "$cpu_output_dir/stt_models"
@@ -145,17 +178,40 @@ windows_build() {
 	rm -rf "$cpu_output_dir/media" "$cpu_output_dir/data"
 	rm -f "$cpu_output_dir/VoiceTyperBench.exe" "$cpu_output_dir/voicetyper-icon.ico" "$cpu_output_dir/voicetyper-icon.png"
 	echo "    CPU build took $((SECONDS - start))s"
+}
+
+# CUDA plugin build: configure + build ONLY the ggml-cuda target. Does not touch
+# the Release_cpu / Release_cuda output dirs. Runs as a background job in
+# parallel with the CPU build - the nvcc kernel compile is the long pole, so
+# overlapping it with the CPU build's MSVC compiles keeps all cores busy without
+# oversubscribing (nvcc leaves headroom that MSVC /MP fills).
+windows_build_cuda_plugin() {
+	local build_type="Release"
+	local build_jobs="${VOICETYPER_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)}"
+	local cuda_path="${VOICETYPER_CUDA_PATH:-C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.2}"
+	local generator="$1"
+	local plugin_build_dir="build/cuda-plugin"
 
 	echo "=== Building Release (CUDA plugin) ==="
-	start=$SECONDS
-	local plugin_build_dir="build/cuda-plugin"
-	local plugin_output_dir="build/${build_type}_cuda-plugin"
-	local cuda_output_dir="build/${build_type}_cuda"
-
-	cmake -S . -B "$plugin_build_dir" -G "Visual Studio 17 2022" -A x64 \
+	local start=$SECONDS
+	cmake -S . -B "$plugin_build_dir" -G "$generator" \
+		$(windows_cmake_configure_flags "$generator") \
 		-DVOICETYPER_BUILD_CUDA_PLUGIN=ON \
 		-DCUDAToolkit_ROOT="$cuda_path"
 	cmake --build "$plugin_build_dir" --config "$build_type" --target ggml-cuda --parallel "$build_jobs"
+	echo "    CUDA plugin build took $((SECONDS - start))s"
+}
+
+# Assemble the CUDA output dir from the CPU output + the freshly built plugin.
+# Runs AFTER both parallel builds finish (it needs the CPU output dir and the
+# plugin .dll to both exist).
+windows_assemble_cuda() {
+	local build_type="Release"
+	local cuda_path="${VOICETYPER_CUDA_PATH:-C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.2}"
+	local plugin_build_dir="build/cuda-plugin"
+	local plugin_output_dir="build/${build_type}_cuda-plugin"
+	local cuda_output_dir="build/${build_type}_cuda"
+	local cpu_output_dir="build/${build_type}_cpu"
 
 	rm -rf "$cuda_output_dir"
 	cp -a "$cpu_output_dir" "$cuda_output_dir"
@@ -180,7 +236,21 @@ windows_build() {
 	cp -u "$cuda_dll_dir"/cublas64_*.dll "$cuda_output_dir/cuda/"
 	cp -u "$cuda_dll_dir"/cublasLt64_*.dll "$cuda_output_dir/cuda/"
 	cp -u "$cuda_dll_dir"/cudart64_*.dll "$cuda_output_dir/cuda/"
-	echo "    CUDA plugin build took $((SECONDS - start))s"
+}
+
+windows_build() {
+	local generator
+	generator="$(windows_cmake_generator)"
+	echo "=== Windows build (generator: $generator) ==="
+
+	local start=$SECONDS
+	JOB_PIDS=()
+	JOB_NAMES=()
+	run_job "CPU build" windows_build_cpu "$generator"
+	run_job "CUDA plugin build" windows_build_cuda_plugin "$generator"
+	wait_for_jobs
+	windows_assemble_cuda
+	echo "    Windows builds took $((SECONDS - start))s"
 }
 
 copy_build_output() {
@@ -413,6 +483,22 @@ package_portable() {
 	echo "    packaged $name"
 }
 
+# Build + package one portable variant. Runs as a background job so the cpu and
+# cuda variants build in parallel (they are independent nix derivations). ccache
+# is shared: enabling it for the cpu build warms the cache that the cuda build's
+# CPU objects then hit, so CPU objects compile once instead of twice.
+build_and_package_portable() {
+	local package="$1"
+	local out_link="$2"
+	local variant="$3"
+	local use_ccache="$4"
+
+	local start=$SECONDS
+	build_nix "$package" "$out_link" "$use_ccache"
+	package_portable "$out_link" "$variant"
+	echo "    $variant took $((SECONDS - start))s"
+}
+
 linux_package() {
 	local want_ccache=0
 	[ "$USE_CCACHE" = "1" ] && want_ccache=1
@@ -422,18 +508,14 @@ linux_package() {
 	mkdir -p "$DIST_DIR"
 
 	echo "=== Building portable Linux packages ($LINUX_PLATFORM) for v$VERSION ==="
-
-	echo "--- portable (cpu) ---"
+	echo "    (cpu + cuda build in parallel; both share ccache when enabled)"
 	local start=$SECONDS
-	build_nix portable result-portable 0
-	echo "    build took $((SECONDS - start))s"
-	package_portable result-portable cpu
-
-	echo "--- portable (cuda) ---"
-	start=$SECONDS
-	build_nix cuda-portable result-cuda-portable "$want_ccache"
-	echo "    build took $((SECONDS - start))s"
-	package_portable result-cuda-portable cuda
+	JOB_PIDS=()
+	JOB_NAMES=()
+	run_job "portable (cpu)" build_and_package_portable portable result-portable cpu "$want_ccache"
+	run_job "portable (cuda)" build_and_package_portable cuda-portable result-cuda-portable cuda "$want_ccache"
+	wait_for_jobs
+	echo "    Linux builds took $((SECONDS - start))s"
 
 	echo "=== Linux packaging done ==="
 	echo "Created:"
