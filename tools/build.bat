@@ -25,6 +25,9 @@ echo Error: release script was not found at "%TARGET_SCRIPT%".
 exit /b 1
 
 :run_script
+rem Load the MSVC x64 environment (puts cl.exe on PATH) so release.sh can pick
+rem the Ninja generator instead of falling back to the Visual Studio generator.
+if exist "%SCRIPT_DIR%\shell.bat" call "%SCRIPT_DIR%\shell.bat" >nul
 cd /d "%SCRIPT_DIR%\.."
 "%GIT_BASH%" "%TARGET_SCRIPT%" --internal-windows-build %*
 exit /b %ERRORLEVEL%
