@@ -13,6 +13,7 @@ LLM Coding Agent Harnesses Used:
 
 LLMs Used:
 - [GLM 5.2](https://z.ai/blog/glm-5.2)
+- [Kimi K3](https://www.kimi.com/ai-models/kimi-k3)
 - [OpenCode Zen Big Pickle](https://grokipedia.com/page/Big_Pickle_model)
 - [Claude Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)
 - [Claude Sonnet 4.6](https://www.anthropic.com/news/claude-sonnet-4-6)
