@@ -213,15 +213,6 @@ build_msi() {
 		packaging/VoiceTyper.wxs
 }
 
-zip_cuda_addon() {
-	local source_build="$1"
-	local output_zip="$2"
-	local absolute_output_zip
-
-	absolute_output_zip="$(pwd)/$output_zip"
-	(cd "$source_build" && 7z a -tzip "$absolute_output_zip" cuda/ > /dev/null)
-}
-
 JOB_PIDS=()
 JOB_NAMES=()
 
@@ -260,7 +251,6 @@ windows_package() {
 	local cuda_stage="$stage_dir/cuda"
 	local cpu_zip="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cpu.zip"
 	local cuda_zip="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cuda.zip"
-	local cuda_addon_zip="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cuda-addon.zip"
 	local cpu_msi="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cpu.msi"
 	local cuda_msi="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cuda.msi"
 
@@ -284,7 +274,6 @@ windows_package() {
 	JOB_NAMES=()
 	run_job "CUDA zip" zip_dir "$cuda_stage" "$cuda_zip"
 	run_job "CUDA MSI" build_msi "$cuda_stage" "$cuda_msi"
-	run_job "CUDA add-on zip" zip_cuda_addon "$cuda_build" "$cuda_addon_zip"
 	run_job "CPU zip" zip_dir "$cpu_stage" "$cpu_zip"
 	run_job "CPU MSI" build_msi "$cpu_stage" "$cpu_msi"
 	wait_for_jobs
