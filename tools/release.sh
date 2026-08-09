@@ -39,6 +39,7 @@ USE_CCACHE=0
 NOTES_FILE=""
 INTERNAL_WINDOWS_BUILD=0
 INTERNAL_LINUX_PACKAGE=0
+INTERNAL_LINUX_BUILD=0
 
 usage() {
 	cat <<EOF
@@ -99,6 +100,7 @@ while [ "$#" -gt 0 ]; do
 		--notes-file) [ "$#" -ge 2 ] || die "--notes-file requires a path."; NOTES_FILE="$2"; shift ;;
 		--internal-windows-build) INTERNAL_WINDOWS_BUILD=1 ;;
 		--internal-linux-package) INTERNAL_LINUX_PACKAGE=1 ;;
+		--internal-linux-build) INTERNAL_LINUX_BUILD=1 ;;
 		-h|--help) usage; exit 0 ;;
 		*) die "Unknown option '$1'. Try --help." ;;
 	esac
@@ -281,6 +283,90 @@ windows_package() {
 }
 
 # ---------------------------------------------------------------------------
+# Local Linux dev build. Run inside the nix devShell (tools/build.sh re-invokes
+# this script with --internal-linux-build). Mirrors windows_build() but uses a
+# plain cmake generate + build (Ninja when available, else Unix Makefiles) so
+# the dev loop avoids the full nix derivation. CPU is always built; the CUDA
+# plugin is added on top when a CUDA toolkit is detected (the default nix
+# devShell ships none, so it is skipped there with a notice).
+# ---------------------------------------------------------------------------
+
+linux_build() {
+	local build_type="Release"
+	local build_jobs="${VOICETYPER_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)}"
+	local generator
+	if command -v ninja >/dev/null 2>&1; then
+		generator="Ninja"
+	else
+		generator="Unix Makefiles"
+	fi
+
+	local cpu_build_dir="build/cpu"
+	local cpu_output_dir="build/${build_type}_cpu"
+
+	echo "=== Building Release (CPU) ==="
+	local start=$SECONDS
+	cmake -S . -B "$cpu_build_dir" -G "$generator" \
+		-DCMAKE_BUILD_TYPE="$build_type" \
+		-DVOICETYPER_BUILD_CUDA_PLUGIN=OFF \
+		-DVOICETYPER_APP_IPO=OFF
+	cmake --build "$cpu_build_dir" --parallel "$build_jobs"
+	[ -d stt_models ] && sync_asset_dir stt_models "$cpu_output_dir/stt_models"
+	[ -d vad_models ] && sync_asset_dir vad_models "$cpu_output_dir/vad_models"
+	touch "$cpu_output_dir/settings.ini"
+	echo "    CPU build took $((SECONDS - start))s"
+
+	# The CUDA plugin is only built when a CUDA toolkit is available. The
+	# default nix devShell ships no CUDA, so this is skipped there; on a CUDA
+	# box the full CPU + CUDA pair is produced, mirroring tools/build.bat.
+	local cuda_toolkit=""
+	if command -v nvcc >/dev/null 2>&1; then
+		cuda_toolkit="$(cd "$(dirname "$(command -v nvcc)")/.." && pwd)"
+	elif [ -n "${CUDA_PATH:-}" ] && [ -x "${CUDA_PATH}/bin/nvcc" ]; then
+		cuda_toolkit="$CUDA_PATH"
+	fi
+	if [ -z "$cuda_toolkit" ]; then
+		echo "=== Skipping CUDA plugin build (no CUDA toolkit found) ==="
+		return 0
+	fi
+
+	echo "=== Building Release (CUDA plugin) ==="
+	start=$SECONDS
+	local plugin_build_dir="build/cuda-plugin"
+	local plugin_output_dir="build/${build_type}_cuda-plugin"
+	local cuda_output_dir="build/${build_type}_cuda"
+
+	cmake -S . -B "$plugin_build_dir" -G "$generator" \
+		-DCMAKE_BUILD_TYPE="$build_type" \
+		-DVOICETYPER_BUILD_CUDA_PLUGIN=ON \
+		-DCUDAToolkit_ROOT="$cuda_toolkit"
+	cmake --build "$plugin_build_dir" --target ggml-cuda --parallel "$build_jobs"
+
+	rm -rf "$cuda_output_dir"
+	cp -a "$cpu_output_dir" "$cuda_output_dir"
+	mkdir -p "$cuda_output_dir/cuda"
+
+	local ggml_cuda_so="" candidate
+	for candidate in \
+		"$plugin_output_dir/libggml-cuda.so" \
+		"$plugin_build_dir/libggml-cuda.so"; do
+		if [ -f "$candidate" ]; then
+			ggml_cuda_so="$candidate"
+			break
+		fi
+	done
+	[ -n "$ggml_cuda_so" ] || die "libggml-cuda.so not found in cuda-plugin build output."
+	cp -u "$ggml_cuda_so" "$cuda_output_dir/cuda/"
+
+	local cuda_lib_dir="$cuda_toolkit/lib64"
+	[ -d "$cuda_lib_dir" ] || cuda_lib_dir="$cuda_toolkit/lib"
+	cp -u "$cuda_lib_dir"/libcudart.so.* "$cuda_output_dir/cuda/" 2>/dev/null || true
+	cp -u "$cuda_lib_dir"/libcublas.so.* "$cuda_output_dir/cuda/" 2>/dev/null || true
+	cp -u "$cuda_lib_dir"/libcublasLt.so.* "$cuda_output_dir/cuda/" 2>/dev/null || true
+	echo "    CUDA plugin build took $((SECONDS - start))s"
+}
+
+# ---------------------------------------------------------------------------
 # Portable Linux packaging (runs on the remote NixOS box)
 # ---------------------------------------------------------------------------
 
@@ -431,6 +517,14 @@ fi
 if [ "$INTERNAL_LINUX_PACKAGE" = "1" ]; then
 	require_command nix
 	linux_package
+	exit 0
+fi
+
+# Local Linux dev build runs IN the nix devShell (tools/build.sh re-invokes
+# this script with --internal-linux-build) to run linux_build() only.
+if [ "$INTERNAL_LINUX_BUILD" = "1" ]; then
+	require_command cmake
+	linux_build
 	exit 0
 fi
 
