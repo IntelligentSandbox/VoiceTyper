@@ -187,15 +187,7 @@ render_settings_panel(GlobalState *AppState)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
 
-	if (AppState->InferenceDevicesLoaded.load(std::memory_order_acquire) &&
-		AppState->InferenceDevices.size() > 1)
-	{
-		ImGui::TextDisabled("v%s CUDA", VOICETYPER_VERSION_FULL);
-	}
-	else
-	{
-		ImGui::TextDisabled("v%s CPU", VOICETYPER_VERSION_FULL);
-	}
+	ImGui::TextDisabled("v%s", VOICETYPER_VERSION_FULL);
 
 	if (ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
 		&AppState->PlayRecordSound))
