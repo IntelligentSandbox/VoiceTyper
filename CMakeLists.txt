@@ -162,36 +162,34 @@ set(VOICETYPER_RELEASE_OUTPUT_DIR "${VOICETYPER_OUTPUT_BASE_DIR}/Release${VARIAN
 set(VOICETYPER_DEBUG_OUTPUT_DIR "${VOICETYPER_OUTPUT_BASE_DIR}/Debug${VARIANT_SUFFIX}")
 set(VOICETYPER_BENCH_OUTPUT_DIR "${VOICETYPER_OUTPUT_BASE_DIR}/Bench${VARIANT_SUFFIX}")
 
-function(apply_voicetyper_target_options TARGET_NAME)
+function(apply_voicetyper_output_dirs TARGET_NAME)
+	set(options SHARED_LIB APP_IPO)
+	set(one_value_args RELEASE_DIR DEBUG_DIR)
+	cmake_parse_arguments(ARG "${options}" "${one_value_args}" "" ${ARGN})
+
 	set_target_properties(${TARGET_NAME} PROPERTIES
-		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VOICETYPER_RELEASE_OUTPUT_DIR}"
-		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VOICETYPER_DEBUG_OUTPUT_DIR}"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${ARG_RELEASE_DIR}"
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${ARG_DEBUG_DIR}"
 	)
 
-	if(VOICETYPER_APP_IPO)
+	if(ARG_SHARED_LIB)
+		set_target_properties(${TARGET_NAME} PROPERTIES
+			LIBRARY_OUTPUT_DIRECTORY_RELEASE "${ARG_RELEASE_DIR}"
+			LIBRARY_OUTPUT_DIRECTORY_DEBUG "${ARG_DEBUG_DIR}"
+		)
+	endif()
+
+	if(ARG_APP_IPO AND VOICETYPER_APP_IPO)
 		set_target_properties(${TARGET_NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 	endif()
 endfunction()
 
-function(apply_voicetyper_bench_target_options TARGET_NAME)
-	set_target_properties(${TARGET_NAME} PROPERTIES
-		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VOICETYPER_BENCH_OUTPUT_DIR}"
-		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VOICETYPER_DEBUG_OUTPUT_DIR}"
-	)
-endfunction()
-
-function(apply_voicetyper_shared_lib_output_dirs TARGET_NAME)
-	set_target_properties(${TARGET_NAME} PROPERTIES
-		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VOICETYPER_RELEASE_OUTPUT_DIR}"
-		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VOICETYPER_DEBUG_OUTPUT_DIR}"
-		LIBRARY_OUTPUT_DIRECTORY_RELEASE "${VOICETYPER_RELEASE_OUTPUT_DIR}"
-		LIBRARY_OUTPUT_DIRECTORY_DEBUG "${VOICETYPER_DEBUG_OUTPUT_DIR}"
-	)
-endfunction()
-
 foreach(_voicetyper_shared_lib whisper ggml ggml-base ggml-cpu ggml-cuda)
 	if(TARGET ${_voicetyper_shared_lib})
-		apply_voicetyper_shared_lib_output_dirs(${_voicetyper_shared_lib})
+		apply_voicetyper_output_dirs(${_voicetyper_shared_lib}
+			RELEASE_DIR "${VOICETYPER_RELEASE_OUTPUT_DIR}"
+			DEBUG_DIR "${VOICETYPER_DEBUG_OUTPUT_DIR}"
+			SHARED_LIB)
 	endif()
 endforeach()
 
@@ -200,7 +198,10 @@ if(WIN32)
 else()
 	add_executable(${PROJECT_NAME} ${SOURCES} ${APP_ICON_RESOURCE})
 endif()
-apply_voicetyper_target_options(${PROJECT_NAME})
+apply_voicetyper_output_dirs(${PROJECT_NAME}
+	RELEASE_DIR "${VOICETYPER_RELEASE_OUTPUT_DIR}"
+	DEBUG_DIR "${VOICETYPER_DEBUG_OUTPUT_DIR}"
+	APP_IPO)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/src/external/whisper.cpp/include
@@ -234,7 +235,9 @@ endif()
 
 if(VOICETYPER_BUILD_BENCH)
 	add_executable(VoiceTyperBench src/benchmark_main.cpp)
-	apply_voicetyper_bench_target_options(VoiceTyperBench)
+	apply_voicetyper_output_dirs(VoiceTyperBench
+		RELEASE_DIR "${VOICETYPER_BENCH_OUTPUT_DIR}"
+		DEBUG_DIR "${VOICETYPER_DEBUG_OUTPUT_DIR}")
 
 	target_include_directories(VoiceTyperBench PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/src
