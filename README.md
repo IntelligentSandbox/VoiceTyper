@@ -8,24 +8,26 @@ app that doesn't have a voice input feature.
 LLMs are used to write code in this project with human review done at our discretion.
 
 LLM Coding Agent Harnesses Used:
-- [OpenCode](https://github.com/anomalyco/opencode)
-- [Claude Code](https://code.claude.com/docs/en/overview)
+[OpenCode](https://github.com/anomalyco/opencode),
+[Claude Code](https://code.claude.com/docs/en/overview)
 
 LLMs Used:
-- [GLM 5.2](https://z.ai/blog/glm-5.2)
-- [Kimi K3](https://www.kimi.com/ai-models/kimi-k3)
-- [OpenCode Zen Big Pickle](https://grokipedia.com/page/Big_Pickle_model)
-- [Claude Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)
-- [Claude Sonnet 4.6](https://www.anthropic.com/news/claude-sonnet-4-6)
-- [OpenAI GPT-5.5](https://platform.openai.com/docs/models/gpt-5.5)
+[GLM 5.2](https://z.ai/blog/glm-5.2),
+[Kimi K3](https://www.kimi.com/ai-models/kimi-k3),
+[OpenCode Zen Big Pickle](https://grokipedia.com/page/Big_Pickle_model),
+[Claude Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6),
+[Claude Sonnet 4.6](https://www.anthropic.com/news/claude-sonnet-4-6),
+[OpenAI GPT-5.5](https://platform.openai.com/docs/models/gpt-5.5)
 
 ## Dependencies
 Sources copied directly into the repo:
+
 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 - This project would not be feasible without this external external dependency.
 - Anytime we update our snapshot of whisper.cpp we will make a copy of their sourcetree into this repo.
 - Notably, whisper.cpp also depends on [ggml](https://github.com/ggml-org/ggml)
     - ggml version of the whisper and vad models are used
+
 [Dear ImGui](https://github.com/ocornut/imgui)
 - Our UI lib of choice.
 - Originally used [Qt](https://www.qt.io/development/qt-framework) for the ui, but wanted something simpler that we could just embed into the project source.
