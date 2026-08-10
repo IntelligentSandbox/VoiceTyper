@@ -39,12 +39,16 @@ winhttp_download_thread(GlobalState *AppState, std::string Url, std::string Dest
 	Comp.lpszUrlPath = PathBuf;
 	Comp.dwUrlPathLength = sizeof(PathBuf) / sizeof(wchar_t);
 
+    // TODO(warren): These are so ugly, what is this, an anonymous fn?
 	auto Fail = [&]()
 	{
 		AppState->Ui.Download.Failed.store(true);
 		AppState->Ui.Download.IsRunning.store(false);
 	};
 
+    // TODO(warren): Bad bad style, we should never have { } for one line if statements, should just be clean `if (condition) statement;`
+    // Seems like even if this is mentioned in AGENTS.md, LLMs will still inevitably forget when given a lot of stuff in context.
+    // Plenty of places in this file where the if statement is not written in the right style.
 	if (!WinHttpCrackUrl(WideUrl.c_str(), (DWORD)WideUrl.size(), 0, &Comp)) { Fail(); return; }
 
 	HINTERNET Session = WinHttpOpen(L"VoiceTyper",
