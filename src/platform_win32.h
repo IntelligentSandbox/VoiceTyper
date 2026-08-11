@@ -382,6 +382,13 @@ platform_ensure_directory(const std::string &Path)
 	return Error == ERROR_ALREADY_EXISTS;
 }
 
+inline bool
+platform_remove_directory(const std::string &Path)
+{
+	if (Path.empty()) return false;
+	return RemoveDirectoryA(Path.c_str()) != 0;
+}
+
 inline std::vector<PlatformFileInfo>
 platform_list_files(const std::string &Dir)
 {

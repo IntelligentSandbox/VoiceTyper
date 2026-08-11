@@ -30,17 +30,28 @@ migrate_legacy_data_dir_settings()
 	if (!OldFile) return;
 	fclose(OldFile);
 
+	bool NewHasContent = false;
 	FILE *NewFile = fopen(NewPath.c_str(), "r");
 	if (NewFile)
 	{
 		fseek(NewFile, 0, SEEK_END);
-		long Size = ftell(NewFile);
+		NewHasContent = (ftell(NewFile) > 0);
 		fclose(NewFile);
-		if (Size > 0) return;
 	}
 
-	remove(NewPath.c_str());
-	rename(OldPath.c_str(), NewPath.c_str());
+	if (!NewHasContent)
+	{
+		remove(NewPath.c_str());
+		rename(OldPath.c_str(), NewPath.c_str());
+	}
+
+	// Always discard the legacy file so there is a single settings.ini at the
+	// exe root. After a successful rename this is a harmless no-op; if the new
+	// file already had content the legacy copy is a stale duplicate.
+	remove(OldPath.c_str());
+
+	std::string DataDir = platform_join_path(platform_get_exe_dir(), "data");
+	platform_remove_directory(DataDir);
 }
 
 inline std::map<std::string, std::string>
