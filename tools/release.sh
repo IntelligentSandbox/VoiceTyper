@@ -126,6 +126,18 @@ sync_asset_dir() {
 	cp -ru "$source_dir/." "$output_dir/"
 }
 
+# Strip files that only exist because the app was run from this build output
+# dir during development, so they never ship inside a distributable. debug.log
+# and voicetyper-crash-* are runtime output; settings.ini is reset to empty so
+# no dev contents leak (the app rewrites it on the user's first settings change,
+# and the MSI ships it as a Permanent/NeverOverwrite component).
+strip_runtime_artifacts() {
+	local dir="$1"
+	rm -f "$dir/debug.log"
+	rm -f "$dir"/voicetyper-crash-*
+	: > "$dir/settings.ini"
+}
+
 # Pick the cmake generator for the Windows build. Prefer Ninja (faster configure
 # and better parallel scheduling, especially for incremental rebuilds) when the
 # MSVC toolchain is on PATH (i.e. run from a VS "x64 Native Tools" shell or with
@@ -174,9 +186,9 @@ windows_build_cpu() {
 	sync_asset_dir stt_models "$cpu_output_dir/stt_models"
 	sync_asset_dir vad_models "$cpu_output_dir/vad_models"
 	cp -u media/voicetyper-icon.ico "$cpu_output_dir/app.ico"
-	touch "$cpu_output_dir/settings.ini"
 	rm -rf "$cpu_output_dir/media" "$cpu_output_dir/data"
 	rm -f "$cpu_output_dir/VoiceTyperBench.exe" "$cpu_output_dir/voicetyper-icon.ico" "$cpu_output_dir/voicetyper-icon.png"
+	strip_runtime_artifacts "$cpu_output_dir"
 	echo "    CPU build took $((SECONDS - start))s"
 }
 
@@ -272,7 +284,10 @@ zip_dir() {
 	local absolute_output_zip
 
 	absolute_output_zip="$(pwd)/$output_zip"
-	(cd "$source_dir" && 7z a -tzip "$absolute_output_zip" -r . > /dev/null)
+	# settings.ini ships empty as the MSI's Permanent/NeverOverwrite component;
+	# the portable zip excludes it so a fresh extract has no local config (the
+	# app writes it on the user's first settings change).
+	(cd "$source_dir" && 7z a -tzip "$absolute_output_zip" -r . -x!settings.ini > /dev/null)
 }
 
 build_msi() {
@@ -383,7 +398,7 @@ linux_build() {
 	cmake --build "$cpu_build_dir" --parallel "$build_jobs"
 	[ -d stt_models ] && sync_asset_dir stt_models "$cpu_output_dir/stt_models"
 	[ -d vad_models ] && sync_asset_dir vad_models "$cpu_output_dir/vad_models"
-	touch "$cpu_output_dir/settings.ini"
+	strip_runtime_artifacts "$cpu_output_dir"
 	echo "    CPU build took $((SECONDS - start))s"
 
 	# The CUDA plugin is only built when a CUDA toolkit is available. The
@@ -478,6 +493,11 @@ package_portable() {
 
 	cp -rL "$result_link/." "$root/"
 	chmod -R u+w "$root"
+
+	# The nix output is a clean build, but strip any runtime/local files just in
+	# case so the portable tarball stays pristine (no debug.log, no crash dumps,
+	# no settings.ini - the app creates that on the user's first settings change).
+	rm -f "$root/debug.log" "$root"/voicetyper-crash-* "$root/settings.ini"
 
 	tar -C "$stage" -czf "$DIST_DIR/$name" "$top"
 	echo "    packaged $name"
