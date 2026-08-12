@@ -225,6 +225,9 @@ platform_remove_directory(const std::string &Path)
 	if (Path.empty()) return false;
 	return rmdir(Path.c_str()) == 0;
 }
+
+inline std::vector<PlatformFileInfo>
+platform_list_files(const std::string &Dir)
 {
 	std::vector<PlatformFileInfo> Files;
 	DIR *Directory = opendir(Dir.c_str());
