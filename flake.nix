@@ -38,13 +38,13 @@
             pipewire
             pulseaudio
             wayland
-            libX11
-            libXcursor
-            libXext
-            libXfixes
-            libXi
-            libXinerama
-            libXrandr
+            libx11
+            libxcursor
+            libxext
+            libxfixes
+            libxi
+            libxinerama
+            libxrandr
           ];
 
           # X11/ALSA client libs that the portable bundles ship next to the
@@ -53,15 +53,15 @@
           # don't show up in ldd's closure of libSDL2 and must be copied
           # explicitly.
           xorgLibs = with pkgs; [
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXext
-            xorg.libXfixes
-            xorg.libXi
-            xorg.libXinerama
-            xorg.libXrandr
-            xorg.libXScrnSaver
-            xorg.libxcb
+            libx11
+            libxcursor
+            libxext
+            libxfixes
+            libxi
+            libxinerama
+            libxrandr
+            libxscrnsaver
+            libxcb
             alsa-lib
           ];
 
@@ -86,15 +86,15 @@
             let
               spkgs = if static then pkgs.pkgsStatic else pkgs;
               xorgLibs = with spkgs; [
-                xorg.libX11
-                xorg.libXcursor
-                xorg.libXext
-                xorg.libXfixes
-                xorg.libXi
-                xorg.libXinerama
-                xorg.libXrandr
-                xorg.libXScrnSaver
-                xorg.libxcb
+                libx11
+                libxcursor
+                libxext
+                libxfixes
+                libxi
+                libxinerama
+                libxrandr
+                libxscrnsaver
+                libxcb
                 alsa-lib
               ];
             in
@@ -308,13 +308,13 @@
               buildInputs = with pkgs; [
                 SDL2
                 libGL
-                libX11
-                libXcursor
-                libXext
-                libXfixes
-                libXi
-                libXinerama
-                libXrandr
+                libx11
+                libxcursor
+                libxext
+                libxfixes
+                libxi
+                libxinerama
+                libxrandr
               ];
 
               cmakeBuildType = "Release";
@@ -376,13 +376,13 @@
                 buildInputs = with unfreePkgs; [
                   SDL2
                   libGL
-                  libX11
-                  libXcursor
-                  libXext
-                  libXfixes
-                  libXi
-                  libXinerama
-                  libXrandr
+                  libx11
+                  libxcursor
+                  libxext
+                  libxfixes
+                  libxi
+                  libxinerama
+                  libxrandr
                   cudaPackages.cuda_cudart
                   cudaPackages.libcublas
                 ];
@@ -787,13 +787,13 @@
               gcc
               gdb
               libGL
-              libX11
-              libXcursor
-              libXext
-              libXfixes
-              libXi
-              libXinerama
-              libXrandr
+              libx11
+              libxcursor
+              libxext
+              libxfixes
+              libxi
+              libxinerama
+              libxrandr
               ninja
               nixfmt
               pkg-config
