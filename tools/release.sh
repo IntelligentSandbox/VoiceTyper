@@ -467,8 +467,7 @@ build_nix() {
 		[ -d "$dir" ] || die "ccache dir $dir does not exist."
 		export VOICETYPER_CCACHE=1
 		export CCACHE_DIR="$dir"
-		# =rw: the sandbox mounts read-only by default; ccache needs to write.
-		ccache_args=(--impure --option extra-sandbox-paths "$dir=rw")
+		ccache_args=(--impure --option extra-sandbox-paths "$dir")
 		echo "[linux] ccache on -> $dir"
 	fi
 	echo "[linux] building .#$package"
