@@ -277,16 +277,25 @@
 
           # Env vars merged into each derivation via `// ccacheEnv`. They are
           # only set when ccache is on, so non-ccache builds are unchanged.
+          # CCACHE_UMASK=000 so cache subdirs are world-writable — the cpu and
+          # cuda portable derivations run in parallel as DIFFERENT nixbld users
+          # sharing one CCACHE_DIR, so the default 0022 umask (mode 0755 dirs)
+          # would let whichever nixbld creates a subdir lock out the other.
           ccacheEnv = pkgs.lib.optionalAttrs enableCcache {
             CCACHE_DIR = ccacheDir;
             CCACHE_NOHASHDIR = "true";
             CCACHE_COMPILERCHECK = "content";
+            CCACHE_UMASK = "000";
           };
 
           # preConfigure fragment. Composed with `+` when a derivation already
           # has a preConfigure (e.g. cuda-static's LDFLAGS export).
+          # CCACHE_TEMPDIR is pointed at $TMPDIR (unique per nix build) instead
+          # of the default $CCACHE_DIR/tmp — the latter is created mode 0700 by
+          # whichever nixbld user gets there first, denying the parallel build.
           ccachePreConfigure = pkgs.lib.optionalString enableCcache ''
             export CCACHE_BASEDIR="$PWD"
+            export CCACHE_TEMPDIR="$TMPDIR/ccache-tmp"
           '';
         in
         {

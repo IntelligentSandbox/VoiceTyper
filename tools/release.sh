@@ -276,6 +276,7 @@ copy_build_output() {
 
 remove_model_files() {
 	rm -rf "$1/stt_models" "$1/vad_models"
+	mkdir -p "$1/stt_models" "$1/vad_models"
 }
 
 zip_dir() {
@@ -466,7 +467,8 @@ build_nix() {
 		[ -d "$dir" ] || die "ccache dir $dir does not exist."
 		export VOICETYPER_CCACHE=1
 		export CCACHE_DIR="$dir"
-		ccache_args=(--impure --option extra-sandbox-paths "$dir")
+		# =rw: the sandbox mounts read-only by default; ccache needs to write.
+		ccache_args=(--impure --option extra-sandbox-paths "$dir=rw")
 		echo "[linux] ccache on -> $dir"
 	fi
 	echo "[linux] building .#$package"
@@ -523,6 +525,13 @@ linux_package() {
 	local want_ccache=0
 	[ "$USE_CCACHE" = "1" ] && want_ccache=1
 	[ -d "${CCACHE_DIR:-/var/cache/voicetyper-ccache}" ] && want_ccache=1
+
+	# Fix permissions on existing cache subdirs from pre-CCACHE_UMASK builds so
+	# parallel nixbld users can share the cache. CCACHE_UMASK=000 handles new
+	# dirs, but old ones (mode 0755 owned by a single nixbld) would still block.
+	if [ "$want_ccache" = "1" ]; then
+		chmod -R a+rwX "${CCACHE_DIR:-/var/cache/voicetyper-ccache}" 2>/dev/null || true
+	fi
 
 	rm -rf "$DIST_DIR"
 	mkdir -p "$DIST_DIR"
