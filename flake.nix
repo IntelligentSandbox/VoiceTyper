@@ -774,6 +774,76 @@
               // ccacheEnv
             );
         }
+        # The mingw-w64 cross target is only defined from an x86_64-linux
+        # host (the only dev box that uses it).
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          # Windows CPU cross-compile (mingw-w64). Dev-only target for
+          # iterating on the real Windows code path (imgui_impl_win32 +
+          # imgui_impl_dx11, WASAPI capture, winhttp model downloader,
+          # dbghelp crash dumps) from a Linux host - run the output under
+          # wine64 or copy it to a Windows box. NOT a distributable: the
+          # release Windows builds remain MSVC-only (tools/release.sh).
+          # No buildInputs - the Windows code path links only system import
+          # libs (d3d11/dxgi/dwmapi/...) that ship inside the mingw-w64
+          # toolchain itself.
+          windows-cpu =
+            let
+              mingwPkgs = import nixpkgs {
+                inherit system;
+                crossSystem = nixpkgs.lib.systems.examples.mingwW64;
+                config.allowUnsupportedSystem = true;
+              };
+            in
+            mingwPkgs.stdenv.mkDerivation (
+              {
+                pname = "voicetyper-windows-cpu";
+                version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
+                src = ./.;
+
+                nativeBuildInputs =
+                  with mingwPkgs.buildPackages;
+                  [
+                    cmake
+                  ]
+                  ++ pkgs.lib.optional enableCcache ccache;
+
+                cmakeBuildType = "Release";
+                cmakeFlags = [
+                  "-DVOICETYPER_BUILD_CUDA_PLUGIN=OFF"
+                  "-DVOICETYPER_APP_IPO=OFF"
+                ]
+                ++ ccacheCmakeFlags { };
+
+                preConfigure = ccachePreConfigure;
+
+                buildPhase = ''
+                  runHook preBuild
+                  cmake --build . --config Release --parallel $NIX_BUILD_CORES
+                  runHook postBuild
+                '';
+
+                  # The target output overrides put VoiceTyper.exe and the
+                  # whisper/ggml DLLs (incl. the dlopened ggml-cpu.dll
+                  # backend) into <build-dir>/Release_cpu/ - the same flat
+                  # layout as the Windows release build, runnable directly
+                  # under wine64. The mingw runtime DLLs the exe links
+                  # (libstdc++-6, libgcc_s_seh-1 from the cross gcc,
+                  # libmcfgthread-2 from its threading model) are bundled
+                  # too so $out is self-contained on a Windows box.
+                  installPhase = ''
+                    runHook preInstall
+                    mkdir -p $out
+                    cp -f Release_cpu/VoiceTyper.exe $out/
+                    cp -f Release_cpu/*.dll $out/
+                    cp -f ${mingwPkgs.stdenv.cc.cc.lib}/x86_64-w64-mingw32/lib/libstdc++-6.dll $out/
+                    cp -f ${mingwPkgs.stdenv.cc.cc.lib}/x86_64-w64-mingw32/lib/libgcc_s_seh-1.dll $out/
+                    cp -f ${mingwPkgs.windows.mcfgthreads}/bin/libmcfgthread-2.dll $out/
+                    runHook postInstall
+                  '';
+              }
+              // ccacheEnv
+            );
+        }
       );
 
       apps = forAllSystems (system: {
