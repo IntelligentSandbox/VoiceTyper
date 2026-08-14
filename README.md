@@ -9,6 +9,7 @@ LLMs are used to write code in this project with human review done at our discre
 
 LLM Coding Agent Harnesses Used:
 [OpenCode](https://github.com/anomalyco/opencode),
+[Codex](https://github.com/openai/codex)
 [Claude Code](https://code.claude.com/docs/en/overview)
 
 LLMs Used:
