@@ -45,7 +45,7 @@ load_whisper_model(WhisperModelState *State, const char *ModelPath,
 		if (GpuDev == nullptr)
 		{
 			diag_write_log_line(GGML_LOG_LEVEL_WARN,
-				"GPU inference requested but no GPU backend is registered (cuda/ plugin absent or unloadable); falling back to CPU.\n");
+				"GPU inference requested but no GPU backend is registered (ggml-cuda plugin absent or unloadable); falling back to CPU.\n");
 			UseGpu = false;
 			GpuDevice = 0;
 		}

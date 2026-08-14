@@ -124,12 +124,6 @@ fi
 # Copy DLLs next to bench exe so Windows can resolve them.
 cp -u "$OUTPUT_DIR"/*.dll "$BENCH_DIR"/ 2>/dev/null || true
 
-# For CUDA, also copy the cuda/ plugin folder.
-if [ "$USE_CUDA" -eq 1 ]; then
-	mkdir -p "$BENCH_DIR/cuda"
-	cp -ru "$OUTPUT_DIR/cuda"/*.dll "$BENCH_DIR/cuda"/ 2>/dev/null || true
-fi
-
 echo ""
 echo "--- Running benchmarks ---"
 

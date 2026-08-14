@@ -229,7 +229,6 @@ windows_assemble_cuda() {
 
 	rm -rf "$cuda_output_dir"
 	cp -a "$cpu_output_dir" "$cuda_output_dir"
-	mkdir -p "$cuda_output_dir/cuda"
 
 	local ggml_cuda_dll=""
 	local candidate
@@ -243,13 +242,13 @@ windows_assemble_cuda() {
 		fi
 	done
 	[ -n "$ggml_cuda_dll" ] || die "ggml-cuda.dll not found in cuda-plugin build output."
-	cp -u "$ggml_cuda_dll" "$cuda_output_dir/cuda/"
+	cp -u "$ggml_cuda_dll" "$cuda_output_dir/"
 
 	local cuda_dll_dir="$cuda_path/bin"
 	if [ -d "$cuda_path/bin/x64" ]; then cuda_dll_dir="$cuda_path/bin/x64"; fi
-	cp -u "$cuda_dll_dir"/cublas64_*.dll "$cuda_output_dir/cuda/"
-	cp -u "$cuda_dll_dir"/cublasLt64_*.dll "$cuda_output_dir/cuda/"
-	cp -u "$cuda_dll_dir"/cudart64_*.dll "$cuda_output_dir/cuda/"
+	cp -u "$cuda_dll_dir"/cublas64_*.dll "$cuda_output_dir/"
+	cp -u "$cuda_dll_dir"/cublasLt64_*.dll "$cuda_output_dir/"
+	cp -u "$cuda_dll_dir"/cudart64_*.dll "$cuda_output_dir/"
 }
 
 windows_build() {

@@ -491,12 +491,28 @@ get_exe_dir()
 #endif
 }
 
+static void
+load_cpu_backend()
+{
+#ifdef _WIN32
+	std::string PluginPath = get_exe_dir() + "/ggml-cpu.dll";
+#else
+	std::string PluginPath = get_exe_dir() + "/libggml-cpu.so";
+#endif
+
+	FILE *F = std::fopen(PluginPath.c_str(), "rb");
+	if (!F) return;
+	std::fclose(F);
+
+	ggml_backend_load(PluginPath.c_str());
+}
+
 static bool
 load_cuda_plugin(std::string *Error)
 {
 	std::string ExeDir = get_exe_dir();
 #ifdef _WIN32
-	std::string PluginPath = ExeDir + "/cuda/ggml-cuda.dll";
+	std::string PluginPath = ExeDir + "/ggml-cuda.dll";
 #else
 	std::string PluginPath = ExeDir + "/cuda/libggml-cuda.so";
 #endif
@@ -554,8 +570,10 @@ main(int ArgCount, char **Args)
 	setup_bench_logging(Options);
 
 	// GGML_BACKEND_DL: the CPU backend ships as a separate ggml-cpu.dll that
-	// must be registered before whisper can init it.
-	ggml_backend_load_all();
+	// must be registered before whisper can init it. Load it by exact path
+	// (not ggml_backend_load_all) so a ggml-cuda.dll next to the exe is not
+	// eagerly loaded here; the CUDA plugin is loaded on demand below.
+	load_cpu_backend();
 
 	bool UseGpu = (Options.Device == "gpu");
 	int InferenceDeviceIndex = 0;

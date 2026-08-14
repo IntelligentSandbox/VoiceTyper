@@ -72,8 +72,9 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	// always pulls in a CPU backend). This is fast: just LoadLibrary + CPU
 	// feature detection. The slow CUDA driver init stays on the background
 	// thread in refresh_inference_devices, which loads ggml-cuda.dll from the
-	// cuda/ subfolder that load_all() (scanning the exe dir) does not touch.
-	ggml_backend_load_all();
+	// exe dir; load_cpu_backend() deliberately loads only ggml-cpu.dll (not
+	// ggml_backend_load_all, which would eagerly load ggml-cuda.dll here).
+	load_cpu_backend();
 
 	refresh_inference_devices(AppState);
 }
