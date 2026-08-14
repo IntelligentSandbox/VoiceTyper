@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -34,7 +35,62 @@ struct BenchOptions
 	int WarmupCount = 1;
 	int IterationCount = 5;
 	int ThreadCount = 1;
+	std::string LogMode = "off";
 };
+
+static FILE     *g_BenchLogFile  = nullptr;
+static std::mutex g_BenchLogMutex;
+static bool       g_BenchVerbose  = false;
+
+static std::string get_exe_dir();
+
+static void
+bench_log_callback(ggml_log_level Level, const char *Message, void *)
+{
+	if (!g_BenchLogFile) return;
+	if (!g_BenchVerbose && Level < GGML_LOG_LEVEL_WARN) return;
+	if (!Message || Message[0] == '\0') return;
+
+	std::lock_guard<std::mutex> Lock(g_BenchLogMutex);
+	fputs(Message, g_BenchLogFile);
+	if (Level >= GGML_LOG_LEVEL_WARN) fflush(g_BenchLogFile);
+}
+
+static void
+bench_log_nop(ggml_log_level, const char *, void *)
+{
+}
+
+static void
+setup_bench_logging(const BenchOptions &Options)
+{
+	if (Options.LogMode == "off")
+	{
+		whisper_log_set(bench_log_nop, nullptr);
+		ggml_log_set(bench_log_nop, nullptr);
+		return;
+	}
+
+	if (Options.LogMode == "verbose") g_BenchVerbose = true;
+
+	std::string LogPath = get_exe_dir() + "/bench.log";
+	g_BenchLogFile = fopen(LogPath.c_str(), "w");
+
+	whisper_log_set(bench_log_callback, nullptr);
+	ggml_log_set(bench_log_callback, nullptr);
+}
+
+static void
+shutdown_bench_logging()
+{
+	if (g_BenchLogFile)
+	{
+		std::lock_guard<std::mutex> Lock(g_BenchLogMutex);
+		fflush(g_BenchLogFile);
+		fclose(g_BenchLogFile);
+		g_BenchLogFile = nullptr;
+	}
+}
 
 static void
 print_usage(const char *ExeName)
@@ -43,7 +99,7 @@ print_usage(const char *ExeName)
 		<< " --audio <path> [--model <path>] [--expected-text <text>]"
 		<< " [--mode <record|streaming>] [--vad <on|off>] [--vad-model <path>]"
 		<< " [--device <cpu|gpu>] [--warmup <count>] [--iterations <count>]"
-		<< " [--threads <count>]\n";
+		<< " [--threads <count>] [--log <off|file|verbose>]\n";
 }
 
 static bool
@@ -156,6 +212,18 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 				return false;
 			}
 			Options->Device = DevStr;
+		}
+		else if (Arg == "--log")
+		{
+			const char *Value = require_value("--log");
+			if (!Value) return false;
+			std::string LogStr = Value;
+			if (LogStr != "off" && LogStr != "file" && LogStr != "verbose")
+			{
+				std::cerr << "--log must be 'off', 'file', or 'verbose'\n";
+				return false;
+			}
+			Options->LogMode = LogStr;
 		}
 		else
 		{
@@ -483,6 +551,8 @@ main(int ArgCount, char **Args)
 	WhisperModelState ModelState = {};
 	init_whisper_state(&ModelState);
 
+	setup_bench_logging(Options);
+
 	// GGML_BACKEND_DL: the CPU backend ships as a separate ggml-cpu.dll that
 	// must be registered before whisper can init it.
 	ggml_backend_load_all();
@@ -605,6 +675,7 @@ main(int ArgCount, char **Args)
 	std::cout << "{\"mode\":\"" << Options.Mode
 		<< "\",\"vad\":" << (Options.EnableVad ? "true" : "false")
 		<< ",\"device\":\"" << Options.Device << "\""
+		<< ",\"log\":\"" << Options.LogMode << "\""
 		<< ",\"model_load_ms\":" << format_ms(elapsed_ms(LoadStart, LoadEnd))
 		<< ",\"unit_count\":" << Units.size()
 		<< ",\"unit_durations_ms\":[";
@@ -644,5 +715,6 @@ main(int ArgCount, char **Args)
 	std::cout << "}\n";
 
 	unload_whisper_model(&ModelState);
+	shutdown_bench_logging();
 	return 0;
 }
