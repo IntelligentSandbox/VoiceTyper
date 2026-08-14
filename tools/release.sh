@@ -26,9 +26,11 @@ cd "$ROOT_DIR" || exit 1
 VERSION="$(tr -d '[:space:]' < VERSION)"
 TAG="v$VERSION"
 DIST_DIR="dist"
-REMOTE="${VOICETYPER_RELEASE_REMOTE:-origin}"
+REMOTE="${VOICETYPER_RELEASE_REMOTE:-github}"
 NIX_SSH="${VOICETYPER_NIX_SSH:-rock}"
 NIX_REPO="${VOICETYPER_NIX_REPO:-~/repos/VoiceTyper}"
+NIX_GIT_REMOTE="${VOICETYPER_NIX_GIT_REMOTE:-gitea}"
+NIX_RELEASE_REPO="${VOICETYPER_NIX_RELEASE_REPO:-}"
 CHANGELOG_FILE="$DIST_DIR/release-notes-$TAG.md"
 LINUX_PLATFORM="x86_64-linux"
 
@@ -71,9 +73,22 @@ Options:
                       Auto-enabled when \$CCACHE_DIR (default
                       /var/cache/voicetyper-ccache) exists on the NixOS box.
                       The cpu build warms the cache the cuda build then hits.
-  --remote NAME       Git remote to push the tag to (env: VOICETYPER_RELEASE_REMOTE, default: origin).
+  --remote NAME       Git remote the v<VERSION> tag is pushed to for the GitHub
+                      release (env: VOICETYPER_RELEASE_REMOTE, default: github).
   --nix-ssh TARGET    ssh target for the NixOS box (env: VOICETYPER_NIX_SSH, default: rock).
-  --nix-repo PATH     Repo path on the NixOS box (env: VOICETYPER_NIX_REPO, default: ~/repos/VoiceTyper).
+  --nix-git-remote NAME
+                      Code-tracking remote the release commit is synced to the
+                      NixOS box from for --linux builds; unpushed commits are
+                      pushed there first (env: VOICETYPER_NIX_GIT_REMOTE,
+                      default: gitea).
+  --nix-repo PATH     Dev repo on the NixOS box, only used as a local-clone seed to
+                      bootstrap the release tree; never checked out or otherwise
+                      modified (env: VOICETYPER_NIX_REPO, default: ~/repos/VoiceTyper).
+  --nix-release-repo PATH
+                      Dedicated release source tree on the NixOS box for --linux
+                      builds; force-checked-out + cleaned to the release commit
+                      every run (env: VOICETYPER_NIX_RELEASE_REPO, default:
+                      <nix-repo>-release). ccache is global and still shared.
   --notes-file PATH   Use PATH as the release notes instead of the auto-generated git changelog.
   -h|--help           Show this help.
 
@@ -99,7 +114,9 @@ while [ "$#" -gt 0 ]; do
 		--ccache) USE_CCACHE=1 ;;
 		--remote) [ "$#" -ge 2 ] || die "--remote requires a name."; REMOTE="$2"; shift ;;
 		--nix-ssh) [ "$#" -ge 2 ] || die "--nix-ssh requires a target."; NIX_SSH="$2"; shift ;;
+		--nix-git-remote) [ "$#" -ge 2 ] || die "--nix-git-remote requires a name."; NIX_GIT_REMOTE="$2"; shift ;;
 		--nix-repo) [ "$#" -ge 2 ] || die "--nix-repo requires a path."; NIX_REPO="$2"; shift ;;
+		--nix-release-repo) [ "$#" -ge 2 ] || die "--nix-release-repo requires a path."; NIX_RELEASE_REPO="$2"; shift ;;
 		--notes-file) [ "$#" -ge 2 ] || die "--notes-file requires a path."; NOTES_FILE="$2"; shift ;;
 		--internal-windows-build) INTERNAL_WINDOWS_BUILD=1 ;;
 		--internal-linux-package) INTERNAL_LINUX_PACKAGE=1 ;;
@@ -111,6 +128,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$VERSION" ] || die "VERSION is empty."
+
+# Resolved after arg parsing so --nix-repo also moves the default release tree.
+NIX_RELEASE_REPO="${NIX_RELEASE_REPO:-${NIX_REPO}-release}"
 
 # ---------------------------------------------------------------------------
 # Windows build + package
@@ -611,19 +631,76 @@ collect_assets() {
 	[ "${#RELEASE_ASSETS[@]}" -gt 0 ] || die "No package artifacts found in $DIST_DIR."
 }
 
-# Sync the remote NixOS tree to $commit and run the portable Linux build +
-# package there. This is the part of the Linux step that can overlap the Windows
-# build: it stays on the remote box and does NOT touch the local $DIST_DIR. The
-# artifact stream-back is done separately, after windows_package (which clears
+# Make sure $commit (the current-branch HEAD of this Windows checkout) is
+# reachable on $NIX_GIT_REMOTE so the NixOS box can fetch it into the release
+# tree. Fetches the remote's branch and, when it does not already contain the
+# commit, pushes the commit to it - otherwise building from an unpushed HEAD
+# would fail the release tree's checkout on the box.
+ensure_commit_on_remote() {
+	local commit="$1"
+	local branch remote_tip
+	branch="$(git branch --show-current 2>/dev/null || true)"
+	if [ -z "$branch" ]; then
+		echo "[linux] detached HEAD at $commit - assuming it is already on $NIX_GIT_REMOTE."
+		return 0
+	fi
+	git fetch "$NIX_GIT_REMOTE" || die "Fetching $NIX_GIT_REMOTE failed; cannot sync the release commit."
+	remote_tip="$(git rev-parse -q --verify "refs/remotes/$NIX_GIT_REMOTE/$branch^{commit}" || true)"
+	if [ -n "$remote_tip" ] && git merge-base --is-ancestor "$commit" "$remote_tip"; then
+		return 0
+	fi
+	echo "[linux] pushing $commit to $NIX_GIT_REMOTE/$branch so the NixOS box can fetch it..."
+	git push "$NIX_GIT_REMOTE" "$commit:refs/heads/$branch"
+}
+
+# Run the portable Linux build + package on the remote NixOS box in a dedicated
+# release tree ($NIX_RELEASE_REPO), force-synced to $commit before every build:
+# the current branch is fetched explicitly (the commit itself is guaranteed to
+# be on $REMOTE by ensure_commit_on_remote), then force-checked-out and cleaned
+# of all untracked + ignored files so each release starts from pristine source.
+# The dev checkout at $NIX_REPO is never touched (it only seeds a fast local
+# clone to bootstrap the release tree; without it the tree clones straight from
+# the git remote). ccache lives outside the tree (/var/cache/voicetyper-ccache)
+# and is still shared.
+# This is the part of the Linux step that can overlap the Windows build: it
+# stays on the remote box and does NOT touch the local $DIST_DIR. The artifact
+# stream-back is done separately, after windows_package (which clears
 # $DIST_DIR), to avoid clobbering it.
 linux_remote_build() {
 	local commit="$1"
+	local branch
 	local ccache_arg=""
+	local remote_url
 	[ "$USE_CCACHE" = "1" ] && ccache_arg="--ccache"
-	echo "Syncing remote tree to $commit..."
-	ssh "$NIX_SSH" "cd $NIX_REPO && git fetch --all --tags && git checkout '$commit'"
+	branch="$(git branch --show-current 2>/dev/null || true)"
+	ensure_commit_on_remote "$commit"
+	remote_url="$(git remote get-url "$NIX_GIT_REMOTE")"
+	echo "Syncing release tree $NIX_RELEASE_REPO to $commit (${branch:-detached HEAD})..."
+	ssh "$NIX_SSH" "set -e
+		if [ ! -d $NIX_RELEASE_REPO/.git ]; then
+			if [ -d $NIX_REPO/.git ]; then
+				echo '[linux] bootstrapping release tree from the dev repo (local clone)'
+				git clone $NIX_REPO $NIX_RELEASE_REPO
+				git -C $NIX_RELEASE_REPO remote set-url origin '$remote_url'
+			else
+				echo \"[linux] bootstrapping release tree from $remote_url\"
+				git clone '$remote_url' $NIX_RELEASE_REPO
+			fi
+		fi
+		cd $NIX_RELEASE_REPO
+		if [ -n '$branch' ]; then
+			git fetch origin --tags '+refs/heads/$branch:refs/remotes/origin/$branch'
+		else
+			git fetch --all --tags
+		fi
+		git cat-file -e '$commit^{commit}' || {
+			echo \"Error: commit $commit not found on $remote_url - is it pushed?\" >&2
+			exit 1
+		}
+		git checkout --force '$commit'
+		git clean -ffdx"
 	echo "Building + packaging on the NixOS box..."
-	ssh "$NIX_SSH" "cd $NIX_REPO && bash tools/release.sh --internal-linux-package $ccache_arg"
+	ssh "$NIX_SSH" "cd $NIX_RELEASE_REPO && bash tools/release.sh --internal-linux-package $ccache_arg"
 }
 
 # Populated when a background remote Linux build is in flight; cleared once it
@@ -764,7 +841,7 @@ if [ "$DO_LINUX" = "1" ]; then
 	if wait "$LINUX_BG_PID"; then
 		LINUX_BG_PID=""
 		echo "Streaming Linux artifacts back into local $DIST_DIR/..."
-		ssh "$NIX_SSH" "cd $NIX_REPO && tar -cf - -C $DIST_DIR ." | tar -xf - -C "$DIST_DIR"
+		ssh "$NIX_SSH" "cd $NIX_RELEASE_REPO && tar -cf - -C $DIST_DIR ." | tar -xf - -C "$DIST_DIR"
 		echo "    Linux join + stream took $((SECONDS - linux_start))s"
 	else
 		LINUX_BG_PID=""
