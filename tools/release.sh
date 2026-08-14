@@ -60,7 +60,9 @@ Operations:
                     --tag to cut it as part of the same run).
   --tag             also cut + push the v<VERSION> git tag. Created before the
                     build so the binary embeds the clean version string; pushed
-                    only after the build + package succeeds.
+                    only after the build + package succeeds. Any existing local
+                    + remote tag for v<VERSION> is removed first, unless a
+                    GitHub release for that tag already exists.
 
 Options:
   --linux             Also build + package portable Linux (flat tar.gz bundles,
@@ -705,9 +707,15 @@ fi
 if [ "$DO_TAG" = "1" ] || [ "$DO_RELEASE" = "1" ]; then
 	require_clean_tree
 	if [ "$DO_TAG" = "1" ]; then
-		tag_exists_locally && die "Local tag $TAG already exists."
-		tag_exists_remote && die "Remote tag $TAG already exists on $REMOTE."
-		release_exists && die "GitHub release $TAG already exists."
+		release_exists && die "GitHub release $TAG already exists; delete it from GitHub before re-cutting."
+		if tag_exists_locally; then
+			echo "Local tag $TAG already exists - removing."
+			git tag -d "$TAG" >/dev/null
+		fi
+		if tag_exists_remote; then
+			echo "Remote tag $TAG already exists on $REMOTE - removing."
+			git push "$REMOTE" --delete "$TAG" >/dev/null
+		fi
 	else
 		# --release without --tag: the tag must already exist on the remote so
 		# gh release create --verify-tag succeeds.
