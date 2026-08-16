@@ -222,6 +222,7 @@ struct CoreRuntimeState
 
 	// UI font
 	std::string UiFontName;
+	std::vector<std::string> UiFontNames;
 	int UiFontSize;
 
 	// Latest operation timings (milliseconds). -1.0 means "no measurement yet".

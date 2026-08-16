@@ -73,6 +73,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	query_available_stt_models(AppState);
 	query_whisper_thread_count(AppState);
 	query_hotkey_settings(AppState);
+	query_font_names(AppState);
 
 	if (!AppState->Ui.SettingsState.FontNameBufferInitialized)
 	{

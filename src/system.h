@@ -1,9 +1,71 @@
 #include "state.h"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <atomic>
 #include <cstdio>
+
+inline char
+ascii_lower(char Ch)
+{
+	return (Ch >= 'A' && Ch <= 'Z') ? (char)(Ch - 'A' + 'a') : Ch;
+}
+
+inline bool
+ascii_less_ci(const std::string &A, const std::string &B)
+{
+	size_t Count = A.size() < B.size() ? A.size() : B.size();
+	for (size_t i = 0; i < Count; i++)
+	{
+		char Ca = ascii_lower(A[i]);
+		char Cb = ascii_lower(B[i]);
+		if (Ca != Cb)
+		{
+			return Ca < Cb;
+		}
+	}
+	return A.size() < B.size();
+}
+
+inline bool
+ascii_equals_ci(const std::string &A, const std::string &B)
+{
+	if (A.size() != B.size()) return false;
+	for (size_t i = 0; i < A.size(); i++)
+	{
+		if (ascii_lower(A[i]) != ascii_lower(B[i]))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+inline bool
+ascii_contains_ci(const std::string &Text, const std::string &LowerNeedle)
+{
+	if (LowerNeedle.empty()) return true;
+
+	size_t Matched = 0;
+	for (size_t i = 0; i < Text.size(); i++)
+	{
+		char Ch = ascii_lower(Text[i]);
+		if (Ch == LowerNeedle[Matched])
+		{
+			Matched++;
+			if (Matched == LowerNeedle.size())
+			{
+				return true;
+			}
+		}
+		else
+		{
+			Matched = (Ch == LowerNeedle[0]) ? 1 : 0;
+		}
+	}
+	return false;
+}
 
 inline int
 query_logical_processor_count()
@@ -174,6 +236,35 @@ query_whisper_thread_count(GlobalState *AppState)
 	if (ThreadCount < 1) ThreadCount = 1;
 
 	AppState->WhisperThreadCount = ThreadCount;
+}
+
+inline void
+query_font_names(GlobalState *AppState)
+{
+	std::vector<PlatformFontInfo> Fonts = platform_enumerate_fonts();
+
+	std::vector<std::string> Names;
+	Names.reserve(Fonts.size());
+	for (const PlatformFontInfo &Font : Fonts)
+	{
+		if (!Font.Name.empty())
+		{
+			Names.push_back(Font.Name);
+		}
+	}
+
+	std::sort(Names.begin(), Names.end(), ascii_less_ci);
+
+	AppState->UiFontNames.clear();
+	for (const std::string &Name : Names)
+	{
+		if (!AppState->UiFontNames.empty() &&
+			ascii_equals_ci(AppState->UiFontNames.back(), Name))
+		{
+			continue;
+		}
+		AppState->UiFontNames.push_back(Name);
+	}
 }
 
 inline void

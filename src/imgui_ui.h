@@ -19,6 +19,8 @@
 #define BUTTON_COLOR_GREY    ImVec4(0.50f, 0.50f, 0.50f, 1.0f)
 #define BUTTON_COLOR_BLUE    ImVec4(0.13f, 0.59f, 0.95f, 1.0f)
 
+#define FONT_SUGGESTION_MAX_ROWS 5
+
 // ---------------------------------------------------------------------------
 // Styled button helper
 // ---------------------------------------------------------------------------
@@ -310,6 +312,90 @@ render_update_modal(GlobalState *AppState)
 }
 
 // ---------------------------------------------------------------------------
+// Font name input with a live typeahead dropdown of matching system fonts
+// ---------------------------------------------------------------------------
+static void
+font_name_apply(GlobalState *AppState, const char *Name)
+{
+	AppState->UiFontName = Name;
+	save_string_setting("ui_font_name", AppState->UiFontName.c_str());
+	AppState->Ui.FontReloadRequested = true;
+}
+
+static void
+render_font_name_input(GlobalState *AppState)
+{
+	SettingsWindowState *S = &AppState->Ui.SettingsState;
+
+	ImGui::TextUnformatted("Font");
+	ImGui::SetNextItemWidth(-1.0f);
+	ImGui::InputTextWithHint("##UiFontName", "Type to search system fonts...",
+		S->FontNameBuffer, sizeof(S->FontNameBuffer));
+	if (ImGui::IsItemDeactivatedAfterEdit())
+	{
+		font_name_apply(AppState, S->FontNameBuffer);
+	}
+
+	bool InputActive = ImGui::IsItemActive();
+
+	std::string LowerNeedle;
+	for (int i = 0; S->FontNameBuffer[i] != '\0'; i++)
+	{
+		LowerNeedle += ascii_lower(S->FontNameBuffer[i]);
+	}
+
+	std::vector<std::string> Matches;
+	for (const std::string &Name : AppState->UiFontNames)
+	{
+		if (ascii_contains_ci(Name, LowerNeedle))
+		{
+			Matches.push_back(Name);
+		}
+	}
+
+	if (InputActive && !Matches.empty())
+	{
+		ImGui::OpenPopup("##FontSuggestions");
+
+		ImGuiStyle &Style = ImGui::GetStyle();
+		ImVec2 ItemMin = ImGui::GetItemRectMin();
+		ImVec2 ItemMax = ImGui::GetItemRectMax();
+		float Width = ImGui::GetItemRectSize().x;
+		float RowHeight = ImGui::GetFrameHeight() + Style.ItemSpacing.y;
+		int VisibleRows = (int)Matches.size();
+		if (VisibleRows > FONT_SUGGESTION_MAX_ROWS) VisibleRows = FONT_SUGGESTION_MAX_ROWS;
+		float Height = Style.WindowPadding.y * 2.0f +
+			RowHeight * (float)VisibleRows - Style.ItemSpacing.y;
+
+		ImGui::SetNextWindowPos(ImVec2(ItemMin.x, ItemMax.y + Style.FramePadding.y));
+		ImGui::SetNextWindowSize(ImVec2(Width, Height));
+	}
+
+	if (ImGui::BeginPopup("##FontSuggestions", ImGuiWindowFlags_NoFocusOnAppearing))
+	{
+		bool KeepOpen = InputActive || ImGui::IsWindowHovered();
+		if (!KeepOpen || Matches.empty())
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		else
+		{
+			for (const std::string &Name : Matches)
+			{
+				bool IsCurrent = ascii_equals_ci(Name, AppState->UiFontName);
+				if (ImGui::Selectable(Name.c_str(), IsCurrent))
+				{
+					snprintf(S->FontNameBuffer, sizeof(S->FontNameBuffer), "%s", Name.c_str());
+					font_name_apply(AppState, Name.c_str());
+					ImGui::CloseCurrentPopup();
+				}
+			}
+		}
+		ImGui::EndPopup();
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Settings panel - rendered inline in the right column
 // ---------------------------------------------------------------------------
 static void
@@ -419,16 +505,7 @@ render_settings_panel(GlobalState *AppState)
 	}
 
 	ImGui::Separator();
-	ImGui::TextUnformatted("Font");
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::InputTextWithHint("##UiFontName", "OS font name, e.g. Segoe UI, Arial, Consolas",
-		S->FontNameBuffer, sizeof(S->FontNameBuffer));
-	if (ImGui::IsItemDeactivatedAfterEdit())
-	{
-		AppState->UiFontName = S->FontNameBuffer;
-		save_string_setting("ui_font_name", AppState->UiFontName.c_str());
-		AppState->Ui.FontReloadRequested = true;
-	}
+	render_font_name_input(AppState);
 
 	ImGui::TextUnformatted("Font size");
 	ImGui::SetNextItemWidth(-1.0f);
