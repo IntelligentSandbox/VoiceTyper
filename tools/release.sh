@@ -606,7 +606,6 @@ generate_notes() {
 
 	mkdir -p "$(dirname "$CHANGELOG_FILE")"
 	{
-		printf "# VoiceTyper %s\n\n" "$TAG"
 		if [ -n "$previous" ]; then printf "Changes since %s:\n\n" "$previous"; else printf "Changes:\n\n"; fi
 		git log "$range" --pretty=format:'- %s (%h)'
 		printf "\n"
