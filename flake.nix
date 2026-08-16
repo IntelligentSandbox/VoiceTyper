@@ -339,7 +339,9 @@
             export CCACHE_TEMPDIR="$TMPDIR/ccache-tmp"
           '';
         in
-        {
+        # rec because the portable-* package entries instantiate the
+        # mkPortableBundle factory defined alongside them below.
+        rec {
           default = pkgs.stdenv.mkDerivation (
             {
               pname = "voicetyper";
