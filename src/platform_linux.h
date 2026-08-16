@@ -319,3 +319,58 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 
 	return true;
 }
+
+inline bool
+platform_spawn_detached(const std::string &CommandLine, const std::string &WorkingDir, bool Hidden)
+{
+	(void)Hidden;
+
+	pid_t Pid = fork();
+	if (Pid < 0)
+	{
+		return false;
+	}
+	if (Pid > 0)
+	{
+		return true;
+	}
+
+	setsid();
+	if (!WorkingDir.empty())
+	{
+		chdir(WorkingDir.c_str());
+	}
+	execlp("sh", "sh", "-c", CommandLine.c_str(), (char *)nullptr);
+	_exit(127);
+}
+
+inline bool
+platform_is_installed_build()
+{
+	return false;
+}
+
+inline int
+platform_get_process_id()
+{
+	return (int)getpid();
+}
+
+inline std::string
+platform_get_temp_dir()
+{
+	return "/tmp";
+}
+
+inline void
+platform_open_url(const char *Url)
+{
+	pid_t Pid = fork();
+	if (Pid != 0)
+	{
+		return;
+	}
+
+	execlp("xdg-open", "xdg-open", Url, (char *)nullptr);
+	_exit(127);
+}

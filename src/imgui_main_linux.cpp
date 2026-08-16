@@ -192,6 +192,9 @@ main(int, char **)
 			}
 		}
 
+		if (AppState->ExitRequested.load()) Running = false;
+		if (!Running) break;
+
 		Now = performance_counter_now();
 
 		int AppTicksRun = 0;

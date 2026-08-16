@@ -5,6 +5,7 @@
 #include "model_downloader.h"
 #include "runtime_control.h"
 #include "system.h"
+#include "updater.h"
 
 struct AppFrameState
 {
@@ -29,6 +30,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->StreamingFinalizeOnStop = false;
 	AppState->IsModelTransitioning.store(false);
 	AppState->ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
+	AppState->ExitRequested.store(false);
 	AppState->Platform.OwnWindow = OwnWindow;
 	AppState->Ui.SettingsState.SelectedAction = 0;
 	AppState->Ui.SettingsState.LastPreviewTime = -1.0;
@@ -78,6 +80,8 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	load_cpu_backend();
 
 	refresh_inference_devices(AppState);
+
+	start_update_check(AppState);
 }
 
 inline AppFrameResult
@@ -121,6 +125,7 @@ inline void
 app_shutdown_runtime(GlobalState *AppState)
 {
 	shutdown_model_download(AppState);
+	shutdown_updater(AppState);
 
 	AppState->StreamingFinalizeOnStop.store(false);
 	AppState->CaptureRunning.store(false);

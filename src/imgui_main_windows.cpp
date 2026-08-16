@@ -500,6 +500,9 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 		if (!Running) break;
 
+		if (AppState->ExitRequested.load()) Running = false;
+		if (!Running) break;
+
 		Now = performance_counter_now();
 		Now = run_due_app_updates(Now);
 

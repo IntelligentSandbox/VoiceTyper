@@ -96,6 +96,64 @@ struct ModelDownloadState
 	ModelDownloadState &operator=(const ModelDownloadState &) = delete;
 };
 
+struct UpdateAssetInfo
+{
+	std::string Name;
+	std::string Url;
+	int64_t Size;
+};
+
+struct UpdateState
+{
+	std::atomic<bool> CheckRunning;
+	std::atomic<bool> CheckSucceeded;
+	std::atomic<bool> CheckFailed;
+	std::atomic<bool> DownloadRunning;
+	std::atomic<bool> DownloadCancelRequested;
+	std::atomic<bool> DownloadSucceeded;
+	std::atomic<bool> DownloadFailed;
+	std::atomic<int64_t> DownloadedBytes;
+	std::atomic<int64_t> TotalBytes;
+#ifndef _WIN32
+	std::atomic<int64_t> ChildPid;
+#endif
+
+	std::string LatestVersion;
+	std::string ReleaseUrl;
+	std::vector<UpdateAssetInfo> Assets;
+	bool IsNewerAvailable;
+	bool CheckJustFinished;
+	bool DownloadJustFinished;
+	bool ApplyOnDownload;
+
+	UpdateAssetInfo PendingAsset;
+	std::string DownloadDestPath;
+
+	std::thread Thread;
+
+	UpdateState() :
+		CheckRunning(false),
+		CheckSucceeded(false),
+		CheckFailed(false),
+		DownloadRunning(false),
+		DownloadCancelRequested(false),
+		DownloadSucceeded(false),
+		DownloadFailed(false),
+		DownloadedBytes(0),
+		TotalBytes(0),
+#ifndef _WIN32
+		ChildPid(0),
+#endif
+		IsNewerAvailable(false),
+		CheckJustFinished(false),
+		DownloadJustFinished(false),
+		ApplyOnDownload(false)
+	{}
+
+	UpdateState(const UpdateState &) = delete;
+	UpdateState &operator=(const UpdateState &) = delete;
+};
+
 // ---------------------------------------------------------------------------
 // Application State
 // ---------------------------------------------------------------------------
@@ -112,6 +170,7 @@ struct CoreRuntimeState
 	bool IsRecording;
 	bool IsStreaming;
 	std::atomic<bool> IsModelTransitioning;
+	std::atomic<bool> ExitRequested = false;
 	bool PlayRecordSound;
 	int StartSoundFreq;
 	int StopSoundFreq;
@@ -167,6 +226,7 @@ struct UiRuntimeState
 {
 	SettingsWindowState SettingsState;
 	ModelDownloadState Download;
+	UpdateState Update;
 	std::string ToastMessage;
 	double ToastExpireTime;
 	ColorRgba ToastBackgroundColor;

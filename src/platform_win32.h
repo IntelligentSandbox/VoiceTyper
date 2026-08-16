@@ -11,12 +11,15 @@
 
 #include <windows.h>
 #include <mmsystem.h>
+#include <shellapi.h>
 #include <mmdeviceapi.h>
 #include <propkey.h>
 #include <functiondiscoverykeys.h>
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "propsys.lib")
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "advapi32.lib")
 
 // ---------------------------------------------------------------------------
 // Platform interface implementations (declared in platform.h)
@@ -546,4 +549,91 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 	CloseHandle(PipeCtx.ReadyEvent);
 
 	return true;
+}
+
+inline bool
+platform_spawn_detached(const std::string &CommandLine, const std::string &WorkingDir, bool Hidden)
+{
+	int WsLength = MultiByteToWideChar(CP_UTF8, 0, CommandLine.c_str(), -1, nullptr, 0);
+	int WdLength = MultiByteToWideChar(CP_UTF8, 0, WorkingDir.c_str(), -1, nullptr, 0);
+	if (WsLength <= 0 || WdLength <= 0)
+	{
+		return false;
+	}
+
+	std::wstring WideCommandLine((size_t)WsLength, L'\0');
+	std::wstring WideWorkingDir((size_t)WdLength, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, CommandLine.c_str(), -1, WideCommandLine.data(), WsLength);
+	MultiByteToWideChar(CP_UTF8, 0, WorkingDir.c_str(), -1, WideWorkingDir.data(), WdLength);
+
+	STARTUPINFOW Si = {};
+	Si.cb = sizeof(Si);
+	PROCESS_INFORMATION Pi = {};
+	DWORD Flags = Hidden ? (DETACHED_PROCESS | CREATE_NO_WINDOW) : 0;
+
+	if (!CreateProcessW(nullptr, WideCommandLine.data(), nullptr, nullptr, FALSE,
+		Flags, nullptr, WorkingDir.empty() ? nullptr : WideWorkingDir.c_str(), &Si, &Pi))
+	{
+		return false;
+	}
+
+	CloseHandle(Pi.hThread);
+	CloseHandle(Pi.hProcess);
+	return true;
+}
+
+inline bool
+platform_is_installed_build()
+{
+	DWORD Value = 0;
+	DWORD Size = sizeof(Value);
+	LONG Result = RegGetValueW(HKEY_CURRENT_USER, L"Software\\VoiceTyper", L"installed",
+		RRF_RT_REG_DWORD, nullptr, &Value, &Size);
+	return Result == ERROR_SUCCESS && Value == 1;
+}
+
+inline int
+platform_get_process_id()
+{
+	return (int)GetCurrentProcessId();
+}
+
+inline std::string
+platform_get_temp_dir()
+{
+	WCHAR Buffer[MAX_PATH + 1] = {};
+	DWORD Length = GetTempPathW(MAX_PATH + 1, Buffer);
+	if (Length == 0 || Length > MAX_PATH)
+	{
+		return ".";
+	}
+
+	int Utf8Length = WideCharToMultiByte(CP_UTF8, 0, Buffer, (int)Length, nullptr, 0, nullptr, nullptr);
+	if (Utf8Length <= 0)
+	{
+		return ".";
+	}
+
+	std::string Result((size_t)Utf8Length, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, Buffer, (int)Length, Result.data(), Utf8Length, nullptr, nullptr);
+	while (!Result.empty() && (Result.back() == '\\' || Result.back() == '/'))
+	{
+		Result.pop_back();
+	}
+	return Result;
+}
+
+inline void
+platform_open_url(const char *Url)
+{
+	int Length = MultiByteToWideChar(CP_UTF8, 0, Url, -1, nullptr, 0);
+	if (Length <= 0)
+	{
+		return;
+	}
+
+	std::wstring WideUrl((size_t)Length, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, Url, -1, WideUrl.data(), Length);
+
+	ShellExecuteW(nullptr, L"open", WideUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }

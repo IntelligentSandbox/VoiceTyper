@@ -10,6 +10,7 @@
 #include "model_catalog.h"
 #include "model_assets.h"
 #include "model_downloader.h"
+#include "updater.h"
 
 #include <cstdio>
 
@@ -180,6 +181,114 @@ settings_preview_sound(GlobalState *AppState, int FreqHz, bool Force)
 }
 
 // ---------------------------------------------------------------------------
+// Update section - rendered inline in the settings panel
+// ---------------------------------------------------------------------------
+static void
+render_update_section(GlobalState *AppState)
+{
+	UpdateState *U = &AppState->Ui.Update;
+
+	poll_update_check(AppState);
+	poll_update_download(AppState);
+
+	if (U->DownloadJustFinished)
+	{
+		U->DownloadJustFinished = false;
+
+		if (U->DownloadSucceeded.load() && U->ApplyOnDownload)
+		{
+			if (updater_apply_downloaded_update(AppState))
+			{
+				AppState->ExitRequested.store(true);
+				return;
+			}
+			show_toast(AppState, "Update downloaded but the update step failed to launch.");
+		}
+	}
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("Updates");
+
+	if (U->DownloadRunning.load())
+	{
+		int64_t Done = U->DownloadedBytes.load();
+		int64_t Total = U->TotalBytes.load();
+		float Fraction = Total > 0 ? (float)((double)Done / (double)Total) : 0.0f;
+		char Overlay[64];
+		snprintf(Overlay, sizeof(Overlay), "%.1f / %.1f MB",
+			(double)Done / 1000000.0, (double)Total / 1000000.0);
+		ImGui::ProgressBar(Fraction, ImVec2(-1.0f, 0.0f), Overlay);
+		if (ImGui::Button("Cancel update download"))
+		{
+			cancel_update_download(AppState);
+		}
+		return;
+	}
+
+	if (ImGui::Button("Check for updates"))
+	{
+		start_update_check(AppState);
+	}
+	ImGui::SameLine();
+	if (ImGui::SmallButton("Releases page"))
+	{
+		platform_open_url(U->ReleaseUrl.empty() ? UPDATER_RELEASES_URL : U->ReleaseUrl.c_str());
+	}
+
+	if (U->CheckRunning.load())
+	{
+		ImGui::TextDisabled("Checking for updates...");
+		return;
+	}
+
+	if (U->CheckFailed.load())
+	{
+		ImGui::Text("Update check failed (GitHub unreachable?)");
+		return;
+	}
+
+	if (!U->CheckSucceeded.load()) return;
+	if (U->Assets.empty())
+	{
+		ImGui::TextDisabled("No matching downloads for this OS.");
+		return;
+	}
+
+	if (U->IsNewerAvailable)
+	{
+		ImGui::TextColored(ImVec4(0.20f, 0.90f, 0.30f, 1.0f), "Update available: %s",
+			U->LatestVersion.c_str());
+	}
+	else
+	{
+		ImGui::TextDisabled("Up to date (%s)", U->LatestVersion.c_str());
+	}
+
+	for (const UpdateAssetInfo &Asset : U->Assets)
+	{
+		ImGui::PushID(Asset.Name.c_str());
+		ImGui::BulletText("%s (%.1f MB)", Asset.Name.c_str(), (double)Asset.Size / 1000000.0);
+
+#ifdef _WIN32
+		bool IsMsi = updater_string_ends_with(Asset.Name, ".msi");
+		const char *ActionLabel = IsMsi ? "Run installer" : "Update portable";
+#else
+		const char *ActionLabel = "Update portable";
+#endif
+
+		ImGui::SameLine();
+		if (ImGui::SmallButton(ActionLabel))
+		{
+			start_update_download(AppState, Asset, true);
+		}
+		ImGui::PopID();
+	}
+
+	ImGui::TextDisabled("%s", platform_is_installed_build() ?
+		"Installed (MSI) build detected" : "Portable build detected");
+}
+
+// ---------------------------------------------------------------------------
 // Settings panel - rendered inline in the right column
 // ---------------------------------------------------------------------------
 static void
@@ -291,6 +400,8 @@ render_settings_panel(GlobalState *AppState)
 		if (AppState->WhisperThreadCount < 1) AppState->WhisperThreadCount = 1;
 		if (AppState->WhisperThreadCount > MaxCores) AppState->WhisperThreadCount = MaxCores;
 	}
+
+	render_update_section(AppState);
 
 	ImGui::Separator();
 
