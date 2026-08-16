@@ -4,11 +4,11 @@
 #
 # Compares three --log modes in VoiceTyperBench:
 #   off      - no-op log callback (baseline: zero logging overhead)
-#   file     - file-based logging, WARN+ only (normal app behavior)
-#   verbose  - file-based logging, all levels (app with VOICETYPER_VERBOSE=1)
+#   file     - file-based logging, WARN+ only
+#   verbose  - file-based logging, all levels
 #
-# The bench.log file written in file/verbose mode mimics the app's debug.log
-# (same level filtering, same mutex-protected fputs pattern as diag_write_log_line).
+# The bench.log file written in file/verbose mode mimics the file logging the
+# app used to do (same level filtering, same mutex-protected fputs pattern).
 #
 # Usage:
 #   tools/win-benchmark-logging.sh [--cuda] [--threads N] [--warmup N] [--iterations N]

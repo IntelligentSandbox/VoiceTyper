@@ -490,7 +490,7 @@ render_crash_dialog_ui(GlobalState *AppState)
 	ImGui::TextWrapped(
 		"VoiceTyper appears to have crashed on a previous run. "
 		"A crash report has been saved next to the executable that the developer "
-		"can use to diagnose the problem. A debug log is also saved alongside it.");
+		"can use to diagnose the problem.");
 
 	ImGui::Separator();
 

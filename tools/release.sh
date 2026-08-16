@@ -149,13 +149,12 @@ sync_asset_dir() {
 }
 
 # Strip files that only exist because the app was run from this build output
-# dir during development, so they never ship inside a distributable. debug.log
-# and voicetyper-crash-* are runtime output; settings.ini is reset to empty so
+# dir during development, so they never ship inside a distributable.
+# voicetyper-crash-* is runtime output; settings.ini is reset to empty so
 # no dev contents leak (the app rewrites it on the user's first settings change,
 # and the MSI ships it as a Permanent/NeverOverwrite component).
 strip_runtime_artifacts() {
 	local dir="$1"
-	rm -f "$dir/debug.log"
 	rm -f "$dir"/voicetyper-crash-*
 	: > "$dir/settings.ini"
 }
@@ -517,9 +516,9 @@ package_portable() {
 	chmod -R u+w "$root"
 
 	# The nix output is a clean build, but strip any runtime/local files just in
-	# case so the portable tarball stays pristine (no debug.log, no crash dumps,
-	# no settings.ini - the app creates that on the user's first settings change).
-	rm -f "$root/debug.log" "$root"/voicetyper-crash-* "$root/settings.ini"
+	# case so the portable tarball stays pristine (no crash dumps, no
+	# settings.ini - the app creates that on the user's first settings change).
+	rm -f "$root"/voicetyper-crash-* "$root/settings.ini"
 
 	tar -C "$stage" -czf "$DIST_DIR/$name" "$top"
 	echo "    packaged $name"

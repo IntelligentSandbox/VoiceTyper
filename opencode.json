@@ -1,1 +1,18 @@
-{ "$schema": "https://opencode.ai/config.json", "lsp": false }
+{
+	"$schema": "https://opencode.ai/config.json",
+	"lsp": false,
+	"mcp": {
+		"windbg": {
+			"type": "local",
+			"command": [
+				"mcp-windbg",
+				"--cdb-path",
+				"C:\\Users\\Warren\\AppData\\Local\\Microsoft\\WindowsApps\\cdbX64.exe"
+			],
+			"environment": {
+				"_NT_SYMBOL_PATH": "SRV*C:\\Symbols*https://msdl.microsoft.com/download/symbols"
+			},
+			"enabled": true
+		}
+	}
+}
