@@ -409,6 +409,14 @@ render_settings_panel(GlobalState *AppState)
 		AppState->Ui.FontReloadRequested = true;
 	}
 
+	ImGui::TextUnformatted("Font size");
+	ImGui::SetNextItemWidth(-1.0f);
+	if (ImGui::SliderInt("##UiFontSize", &AppState->UiFontSize, 8, 72, "%d px"))
+	{
+		AppState->Ui.FontReloadRequested = true;
+		save_int_setting("ui_font_size", AppState->UiFontSize);
+	}
+
 	ImGui::Text("CPU Cores for Inference:");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(100);
