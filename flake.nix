@@ -119,13 +119,16 @@
               # (SDL's cmake finds the scanner through the wayland-scanner.pc
               # pkg-config variable); SDL2 2.32's wayland driver also hard
               # requires the `egl` pkg-config module, provided by glvnd
-              # (libGL.dev), even though the app never uses GL. Explicit
-              # spkgs.* paths: a `with spkgs;` here would leave the `wayland`
-              # parameter shadowing the wayland package.
+              # (libGL.dev), even though the app never uses GL. libffi is
+              # needed because wayland-client.pc lists it in Requires.private,
+              # which pkg-config resolves during SDL's scanner-variable
+              # lookup. Explicit spkgs.* paths: a `with spkgs;` here would
+              # leave the `wayland` parameter shadowing the wayland package.
               waylandLibs = [
                 spkgs.wayland
                 spkgs.libxkbcommon
                 spkgs.libGL
+                spkgs.libffi
               ];
               videoLibs = if wayland then waylandLibs else xorgLibs;
             in
