@@ -114,15 +114,18 @@
                 alsa-lib
               ];
               # The Wayland client libs + xkbcommon, which SDL's wayland video
-              # driver requires at build time (wayland-egl / wayland-cursor /
-              # wayland-scanner all ship inside the `wayland` derivation; SDL's
-              # cmake finds the scanner through the wayland-scanner.pc
-              # pkg-config variable). Explicit spkgs.* paths: a
-              # `with spkgs;` here would leave the `wayland` parameter
-              # shadowing the wayland package.
+              # driver requires at build time. wayland-egl / wayland-cursor /
+              # wayland-scanner all ship inside the `wayland` derivation
+              # (SDL's cmake finds the scanner through the wayland-scanner.pc
+              # pkg-config variable); SDL2 2.32's wayland driver also hard
+              # requires the `egl` pkg-config module, provided by glvnd
+              # (libGL.dev), even though the app never uses GL. Explicit
+              # spkgs.* paths: a `with spkgs;` here would leave the `wayland`
+              # parameter shadowing the wayland package.
               waylandLibs = [
                 spkgs.wayland
                 spkgs.libxkbcommon
+                spkgs.libGL
               ];
               videoLibs = if wayland then waylandLibs else xorgLibs;
             in
