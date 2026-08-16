@@ -95,8 +95,6 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	load_cpu_backend();
 
 	refresh_inference_devices(AppState);
-
-	start_update_check(AppState);
 }
 
 inline AppFrameResult

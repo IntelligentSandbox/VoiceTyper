@@ -127,6 +127,7 @@ struct UpdateState
 	bool CheckJustFinished;
 	bool DownloadJustFinished;
 	bool ApplyOnDownload;
+	bool IsModalOpen;
 
 	UpdateAssetInfo PendingAsset;
 	std::string DownloadDestPath;
@@ -149,7 +150,8 @@ struct UpdateState
 		IsNewerAvailable(false),
 		CheckJustFinished(false),
 		DownloadJustFinished(false),
-		ApplyOnDownload(false)
+		ApplyOnDownload(false),
+		IsModalOpen(false)
 	{}
 
 	UpdateState(const UpdateState &) = delete;

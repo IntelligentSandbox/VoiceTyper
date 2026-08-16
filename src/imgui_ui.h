@@ -181,10 +181,10 @@ settings_preview_sound(GlobalState *AppState, int FreqHz, bool Force)
 }
 
 // ---------------------------------------------------------------------------
-// Update section - rendered inline in the settings panel
+// Update modal - floating window opened from the settings panel
 // ---------------------------------------------------------------------------
 static void
-render_update_section(GlobalState *AppState)
+render_update_modal(GlobalState *AppState)
 {
 	UpdateState *U = &AppState->Ui.Update;
 
@@ -206,86 +206,107 @@ render_update_section(GlobalState *AppState)
 		}
 	}
 
-	ImGui::Separator();
-	ImGui::TextUnformatted("Updates");
+	if (!U->IsModalOpen) return;
 
-	if (U->DownloadRunning.load())
+	ImVec2 Display = ImGui::GetIO().DisplaySize;
+	float WinW = Display.x * 0.6f;
+	if (WinW > 560.0f) WinW = 560.0f;
+	ImGui::SetNextWindowSize(ImVec2(WinW, 0.0f), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	bool Open = true;
+	if (ImGui::Begin("Check for Updates", &Open,
+		ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse))
 	{
-		int64_t Done = U->DownloadedBytes.load();
-		int64_t Total = U->TotalBytes.load();
-		float Fraction = Total > 0 ? (float)((double)Done / (double)Total) : 0.0f;
-		char Overlay[64];
-		snprintf(Overlay, sizeof(Overlay), "%.1f / %.1f MB",
-			(double)Done / 1000000.0, (double)Total / 1000000.0);
-		ImGui::ProgressBar(Fraction, ImVec2(-1.0f, 0.0f), Overlay);
-		if (ImGui::Button("Cancel update download"))
+		ImGui::TextDisabled("v%s", VOICETYPER_VERSION_FULL);
+		ImGui::Spacing();
+
+		if (U->DownloadRunning.load())
 		{
-			cancel_update_download(AppState);
+			int64_t Done = U->DownloadedBytes.load();
+			int64_t Total = U->TotalBytes.load();
+			float Fraction = Total > 0 ? (float)((double)Done / (double)Total) : 0.0f;
+			char Overlay[64];
+			snprintf(Overlay, sizeof(Overlay), "%.1f / %.1f MB",
+				(double)Done / 1000000.0, (double)Total / 1000000.0);
+			ImGui::ProgressBar(Fraction, ImVec2(-1.0f, 0.0f), Overlay);
+			if (ImGui::Button("Cancel update download"))
+			{
+				cancel_update_download(AppState);
+			}
 		}
-		return;
-	}
+		else if (U->CheckRunning.load())
+		{
+			ImGui::TextDisabled("Checking for updates...");
+		}
+		else
+		{
+			const char *CheckLabel = (U->CheckSucceeded.load() || U->CheckFailed.load()) ?
+				"Check again" : "Check for updates";
+			if (ImGui::Button(CheckLabel))
+			{
+				start_update_check(AppState);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Releases page"))
+			{
+				platform_open_url(U->ReleaseUrl.empty() ? UPDATER_RELEASES_URL : U->ReleaseUrl.c_str());
+			}
 
-	if (ImGui::Button("Check for updates"))
-	{
-		start_update_check(AppState);
-	}
-	ImGui::SameLine();
-	if (ImGui::SmallButton("Releases page"))
-	{
-		platform_open_url(U->ReleaseUrl.empty() ? UPDATER_RELEASES_URL : U->ReleaseUrl.c_str());
-	}
+			if (U->CheckFailed.load())
+			{
+				ImGui::Text("Update check failed (GitHub unreachable?)");
+			}
+			else if (U->CheckSucceeded.load())
+			{
+				if (U->Assets.empty())
+				{
+					ImGui::TextDisabled("No matching downloads for this OS.");
+				}
+				else
+				{
+					if (U->IsNewerAvailable)
+					{
+						ImGui::TextColored(ImVec4(0.20f, 0.90f, 0.30f, 1.0f), "Update available: %s",
+							U->LatestVersion.c_str());
+					}
+					else
+					{
+						ImGui::TextDisabled("Up to date (%s)", U->LatestVersion.c_str());
+					}
 
-	if (U->CheckRunning.load())
-	{
-		ImGui::TextDisabled("Checking for updates...");
-		return;
-	}
-
-	if (U->CheckFailed.load())
-	{
-		ImGui::Text("Update check failed (GitHub unreachable?)");
-		return;
-	}
-
-	if (!U->CheckSucceeded.load()) return;
-	if (U->Assets.empty())
-	{
-		ImGui::TextDisabled("No matching downloads for this OS.");
-		return;
-	}
-
-	if (U->IsNewerAvailable)
-	{
-		ImGui::TextColored(ImVec4(0.20f, 0.90f, 0.30f, 1.0f), "Update available: %s",
-			U->LatestVersion.c_str());
-	}
-	else
-	{
-		ImGui::TextDisabled("Up to date (%s)", U->LatestVersion.c_str());
-	}
-
-	for (const UpdateAssetInfo &Asset : U->Assets)
-	{
-		ImGui::PushID(Asset.Name.c_str());
-		ImGui::BulletText("%s (%.1f MB)", Asset.Name.c_str(), (double)Asset.Size / 1000000.0);
+					for (const UpdateAssetInfo &Asset : U->Assets)
+					{
+						ImGui::PushID(Asset.Name.c_str());
+						ImGui::BulletText("%s (%.1f MB)", Asset.Name.c_str(), (double)Asset.Size / 1000000.0);
 
 #ifdef _WIN32
-		bool IsMsi = updater_string_ends_with(Asset.Name, ".msi");
-		const char *ActionLabel = IsMsi ? "Run installer" : "Update portable";
+						bool IsMsi = updater_string_ends_with(Asset.Name, ".msi");
+						const char *ActionLabel = IsMsi ? "Run installer" : "Update portable";
 #else
-		const char *ActionLabel = "Update portable";
+						const char *ActionLabel = "Update portable";
 #endif
 
-		ImGui::SameLine();
-		if (ImGui::SmallButton(ActionLabel))
-		{
-			start_update_download(AppState, Asset, true);
+						ImGui::SameLine();
+						if (ImGui::SmallButton(ActionLabel))
+						{
+							start_update_download(AppState, Asset, true);
+						}
+						ImGui::PopID();
+					}
+				}
+			}
 		}
-		ImGui::PopID();
-	}
 
-	ImGui::TextDisabled("%s", platform_is_installed_build() ?
-		"Installed (MSI) build detected" : "Portable build detected");
+		ImGui::TextDisabled("%s", platform_is_installed_build() ?
+			"Installed (MSI) build detected" : "Portable build detected");
+
+		ImGui::Separator();
+		if (ImGui::Button("Close")) U->IsModalOpen = false;
+	}
+	ImGui::End();
+
+	if (!Open) U->IsModalOpen = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +448,13 @@ render_settings_panel(GlobalState *AppState)
 		if (AppState->WhisperThreadCount > MaxCores) AppState->WhisperThreadCount = MaxCores;
 	}
 
-	render_update_section(AppState);
+	ImGui::Separator();
+	ImGui::TextUnformatted("Updates");
+	if (ImGui::Button("Check for Updates", ImVec2(-1.0f, 0.0f)))
+	{
+		AppState->Ui.Update.IsModalOpen = true;
+		start_update_check(AppState);
+	}
 
 	ImGui::Separator();
 
@@ -1214,5 +1241,6 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	ImGui::End();
 
 	render_download_modal(AppState);
+	render_update_modal(AppState);
 	render_toast_ui(AppState, Io);
 }
