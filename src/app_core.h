@@ -7,6 +7,8 @@
 #include "system.h"
 #include "updater.h"
 
+#include <cstring>
+
 struct AppFrameState
 {
 	bool RecordKeyWasDown;
@@ -34,6 +36,8 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->Platform.OwnWindow = OwnWindow;
 	AppState->Ui.SettingsState.SelectedAction = 0;
 	AppState->Ui.SettingsState.LastPreviewTime = -1.0;
+	AppState->Ui.SettingsState.FontNameBuffer[0] = '\0';
+	AppState->Ui.SettingsState.FontNameBufferInitialized = false;
 	AppState->Ui.SettingsState.Capture.Captured = AppState->RecordHotkey;
 	AppState->Ui.SettingsState.Capture.HasCapture = AppState->RecordHotkey.is_valid();
 	AppState->Ui.SettingsState.Capture.IsCapturing = false;
@@ -51,6 +55,8 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->UseCharByCharInjection = false;
 	AppState->CopyToClipboardWhenNoTarget = false;
 	AppState->ShowTranscribedTextConfidence = false;
+	AppState->UiFontSize = 18;
+	AppState->Ui.FontReloadRequested = false;
 	AppState->RecordHotkeyMode = default_recording_hotkey_mode();
 
 	AppState->LastModelLoadMs.store(-1.0);
@@ -67,6 +73,14 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	query_available_stt_models(AppState);
 	query_whisper_thread_count(AppState);
 	query_hotkey_settings(AppState);
+
+	if (!AppState->Ui.SettingsState.FontNameBufferInitialized)
+	{
+		strncpy(AppState->Ui.SettingsState.FontNameBuffer, AppState->UiFontName.c_str(),
+			sizeof(AppState->Ui.SettingsState.FontNameBuffer) - 1);
+		AppState->Ui.SettingsState.FontNameBuffer[sizeof(AppState->Ui.SettingsState.FontNameBuffer) - 1] = '\0';
+		AppState->Ui.SettingsState.FontNameBufferInitialized = true;
+	}
 
 	// GGML_BACKEND_DL builds ship the CPU backend as a separate ggml-cpu.dll
 	// plugin next to the exe. The ggml backend registry starts empty, so the

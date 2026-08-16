@@ -637,3 +637,79 @@ platform_open_url(const char *Url)
 
 	ShellExecuteW(nullptr, L"open", WideUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
+
+static std::string
+win32_wide_to_utf8(const std::wstring &Wide)
+{
+	int Length = WideCharToMultiByte(CP_UTF8, 0, Wide.c_str(), (int)Wide.size(), nullptr, 0, nullptr, nullptr);
+	if (Length <= 0)
+	{
+		return std::string();
+	}
+
+	std::string Result((size_t)Length, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, Wide.c_str(), (int)Wide.size(), Result.data(), Length, nullptr, nullptr);
+	return Result;
+}
+
+inline std::vector<PlatformFontInfo>
+platform_enumerate_fonts()
+{
+	std::vector<PlatformFontInfo> Fonts;
+
+	HKEY Key = nullptr;
+	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+		0, KEY_READ, &Key) != ERROR_SUCCESS)
+	{
+		return Fonts;
+	}
+
+	std::string FontsDir = platform_path_from_universal("C:/Windows/Fonts/");
+
+	for (DWORD Index = 0;; Index++)
+	{
+		WCHAR NameBuf[512] = {};
+		DWORD NameLen = 512;
+		BYTE ValueBuf[MAX_PATH * 2] = {};
+		DWORD ValueLen = sizeof(ValueBuf);
+		DWORD Type = 0;
+
+		LONG Result = RegEnumValueW(Key, Index, NameBuf, &NameLen, nullptr, &Type, ValueBuf, &ValueLen);
+		if (Result == ERROR_NO_MORE_ITEMS) break;
+		if (Result != ERROR_SUCCESS) continue;
+		if (Type != REG_SZ) continue;
+
+		std::string Name = win32_wide_to_utf8(std::wstring(NameBuf, NameLen));
+		std::wstring WideValue((wchar_t *)ValueBuf, ValueLen / sizeof(wchar_t));
+		while (!WideValue.empty() && WideValue.back() == L'\0') WideValue.pop_back();
+		std::string File = win32_wide_to_utf8(WideValue);
+
+		size_t NameLen8 = Name.size();
+		if (NameLen8 > 11 && Name.compare(NameLen8 - 11, 11, " (TrueType)") == 0) Name.resize(NameLen8 - 11);
+		NameLen8 = Name.size();
+		if (NameLen8 > 11 && Name.compare(NameLen8 - 11, 11, " (OpenType)") == 0) Name.resize(NameLen8 - 11);
+
+		if (File.size() < 4) continue;
+		std::string Extension = File.substr(File.size() - 4);
+		for (char &Ch : Extension)
+		{
+			if (Ch >= 'A' && Ch <= 'Z') Ch = (char)(Ch - 'A' + 'a');
+		}
+		if (Extension != ".ttf" && Extension != ".otf") continue;
+
+		PlatformFontInfo Info;
+		Info.Name = Name;
+		if (File.size() > 2 && (File[1] == ':' || File[0] == '\\'))
+		{
+			Info.Path = File;
+		}
+		else
+		{
+			Info.Path = FontsDir + File;
+		}
+		Fonts.push_back(Info);
+	}
+
+	RegCloseKey(Key);
+	return Fonts;
+}

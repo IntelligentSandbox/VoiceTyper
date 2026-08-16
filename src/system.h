@@ -236,4 +236,52 @@ query_hotkey_settings(GlobalState *AppState)
 	bool ShowConfidence = false;
 	if (load_bool_setting("show_transcribed_text_confidence", &ShowConfidence))
 		AppState->ShowTranscribedTextConfidence = ShowConfidence;
+
+	std::string UiFontName;
+	if (load_string_setting("ui_font_name", &UiFontName)) AppState->UiFontName = UiFontName;
+
+	int UiFontSize = 0;
+	if (load_int_setting("ui_font_size", &UiFontSize))
+	{
+		if (UiFontSize >= 6 && UiFontSize <= 200) AppState->UiFontSize = UiFontSize;
+	}
+}
+
+inline bool
+resolve_font_path(const std::string &FontName, std::string *OutPath)
+{
+	if (FontName.empty()) return false;
+
+	std::vector<PlatformFontInfo> Fonts = platform_enumerate_fonts();
+
+	std::string Lower;
+	for (char Ch : FontName)
+	{
+		Lower += (Ch >= 'A' && Ch <= 'Z') ? (char)(Ch - 'A' + 'a') : Ch;
+	}
+
+	for (const PlatformFontInfo &Font : Fonts)
+	{
+		if (Font.Name == FontName)
+		{
+			*OutPath = Font.Path;
+			return true;
+		}
+	}
+
+	for (const PlatformFontInfo &Font : Fonts)
+	{
+		std::string Candidate;
+		for (char Ch : Font.Name)
+		{
+			Candidate += (Ch >= 'A' && Ch <= 'Z') ? (char)(Ch - 'A' + 'a') : Ch;
+		}
+		if (Candidate == Lower)
+		{
+			*OutPath = Font.Path;
+			return true;
+		}
+	}
+
+	return false;
 }

@@ -397,6 +397,18 @@ render_settings_panel(GlobalState *AppState)
 		save_int_setting("record_hotkey_mode", (int)AppState->RecordHotkeyMode);
 	}
 
+	ImGui::Separator();
+	ImGui::TextUnformatted("Font");
+	ImGui::SetNextItemWidth(-1.0f);
+	ImGui::InputTextWithHint("##UiFontName", "OS font name, e.g. Segoe UI, Arial, Consolas",
+		S->FontNameBuffer, sizeof(S->FontNameBuffer));
+	if (ImGui::IsItemDeactivatedAfterEdit())
+	{
+		AppState->UiFontName = S->FontNameBuffer;
+		save_string_setting("ui_font_name", AppState->UiFontName.c_str());
+		AppState->Ui.FontReloadRequested = true;
+	}
+
 	ImGui::Text("CPU Cores for Inference:");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(100);

@@ -51,6 +51,12 @@ struct TranscribedWord
 	float Confidence;
 };
 
+struct PlatformFontInfo
+{
+	std::string Name;
+	std::string Path;
+};
+
 struct PlatformFileInfo
 {
 	std::string Name;

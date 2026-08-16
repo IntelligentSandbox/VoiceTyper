@@ -277,9 +277,48 @@ swap_chain_is_still_occluded()
 // Render a single frame
 // ---------------------------------------------------------------------------
 static void
+win32_load_font_atlas(GlobalState *AppState)
+{
+	ImGuiIO &Io = ImGui::GetIO();
+	Io.Fonts->Clear();
+
+	bool Loaded = false;
+	if (!AppState->UiFontName.empty())
+	{
+		std::string Path;
+		if (resolve_font_path(AppState->UiFontName, &Path))
+		{
+			Loaded = Io.Fonts->AddFontFromFileTTF(Path.c_str(), (float)AppState->UiFontSize) != nullptr;
+		}
+		if (!Loaded) show_toast(AppState, "Configured font could not be loaded; using Georgia.");
+	}
+
+	if (!Loaded)
+	{
+		std::string FontPath = platform_path_from_universal("C:/Windows/Fonts/georgia.ttf");
+		Loaded = Io.Fonts->AddFontFromFileTTF(FontPath.c_str(), (float)AppState->UiFontSize) != nullptr;
+	}
+
+	if (!Loaded) Io.Fonts->AddFontDefault();
+}
+
+static void
+win32_apply_configured_font(GlobalState *AppState)
+{
+	win32_load_font_atlas(AppState);
+	ImGui_ImplDX11_InvalidateDeviceObjects();
+}
+
+static void
 render_frame()
 {
 	if (!g_ImGuiReady || !g_AppState) return;
+
+	if (g_AppState->Ui.FontReloadRequested)
+	{
+		g_AppState->Ui.FontReloadRequested = false;
+		win32_apply_configured_font(g_AppState);
+	}
 
 	ImGuiIO &Io = ImGui::GetIO();
 	ImGui_ImplDX11_NewFrame();
@@ -469,8 +508,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	ImGui::StyleColorsDark();
 
-	std::string FontPath = platform_path_from_universal("C:/Windows/Fonts/georgia.ttf");
-	Io.Fonts->AddFontFromFileTTF(FontPath.c_str(), 18.0f);
+	win32_load_font_atlas(AppState);
 
 	ImGui_ImplWin32_Init(Hwnd);
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);

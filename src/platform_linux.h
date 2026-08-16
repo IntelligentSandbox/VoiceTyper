@@ -374,3 +374,9 @@ platform_open_url(const char *Url)
 	execlp("xdg-open", "xdg-open", Url, (char *)nullptr);
 	_exit(127);
 }
+
+inline std::vector<PlatformFontInfo>
+platform_enumerate_fonts()
+{
+	return {};
+}

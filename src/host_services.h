@@ -25,6 +25,7 @@ bool platform_is_installed_build();
 int platform_get_process_id();
 std::string platform_get_temp_dir();
 void platform_open_url(const char *Url);
+std::vector<PlatformFontInfo> platform_enumerate_fonts();
 
 inline std::string
 platform_path_from_universal(const std::string &Path)

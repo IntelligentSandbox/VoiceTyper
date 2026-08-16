@@ -51,6 +51,8 @@ struct SettingsWindowState
 	int SelectedAction;
 	HotkeyCaptureState Capture;
 	double LastPreviewTime;
+	char FontNameBuffer[128];
+	bool FontNameBufferInitialized;
 };
 
 struct ModelDownloadState
@@ -216,6 +218,10 @@ struct CoreRuntimeState
 	// Inference threading
 	int WhisperThreadCount;
 
+	// UI font
+	std::string UiFontName;
+	int UiFontSize;
+
 	// Latest operation timings (milliseconds). -1.0 means "no measurement yet".
 	// Written from worker threads, read from the UI thread.
 	std::atomic<double> LastModelLoadMs;
@@ -241,6 +247,7 @@ struct UiRuntimeState
 	std::vector<TranscribedWord> TranscribedTextBoxWords;
 	std::vector<char> TranscribedTextBoxBuffer;
 	int TranscribedTextBoxSerial;
+	bool FontReloadRequested;
 };
 
 struct GlobalState : CoreRuntimeState
