@@ -117,10 +117,12 @@
               # driver requires at build time (wayland-egl / wayland-cursor /
               # wayland-scanner all ship inside the `wayland` derivation; SDL's
               # cmake finds the scanner through the wayland-scanner.pc
-              # pkg-config variable).
-              waylandLibs = with spkgs; [
-                wayland
-                libxkbcommon
+              # pkg-config variable). Explicit spkgs.* paths: a
+              # `with spkgs;` here would leave the `wayland` parameter
+              # shadowing the wayland package.
+              waylandLibs = [
+                spkgs.wayland
+                spkgs.libxkbcommon
               ];
               videoLibs = if wayland then waylandLibs else xorgLibs;
             in
