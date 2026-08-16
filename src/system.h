@@ -63,6 +63,7 @@ query_inference_devices(GlobalState *AppState)
 		if (SavedDevice == "CPU")
 		{
 			AppState->CurrentInferenceDeviceIndex = 0;
+			AppState->InferenceDevicePrefersCpu = true;
 		}
 		else
 		{
@@ -151,6 +152,11 @@ refresh_inference_devices(GlobalState *AppState)
 				}
 			}
 			AppState->PendingInferenceDeviceName.clear();
+		}
+
+		if (NewIndex == 0 && NewDevices.size() > 1 && !AppState->InferenceDevicePrefersCpu)
+		{
+			NewIndex = 1;
 		}
 
 		AppState->InferenceDevices = NewDevices;

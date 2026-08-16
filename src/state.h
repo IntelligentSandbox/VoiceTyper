@@ -131,6 +131,7 @@ struct CoreRuntimeState
 	std::atomic<bool> InferenceDevicesLoading = false;
 	std::thread InferenceDevicesThread;
 	std::string PendingInferenceDeviceName;
+	bool InferenceDevicePrefersCpu;
 
 	// Whisper Wrapper
 	int CurrentSTTModelIndex;
