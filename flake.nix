@@ -47,7 +47,7 @@
             libxrandr
           ];
 
-          # X11/ALSA client libs that the portable bundles ship next to the
+          # X11/ALSA client libs that the portable x11 bundles ship next to the
           # bundled libSDL2.so. The dynamic SDL2 build loads them via dlopen
           # (SDL_X11_SHARED / SDL_ALSA_SHARED) rather than DT_NEEDED, so they
           # don't show up in ldd's closure of libSDL2 and must be copied
@@ -65,24 +65,40 @@
             alsa-lib
           ];
 
+          # Wayland/ALSA client libs for the portable wayland bundles. Same
+          # dlopen story as xorgLibs (SDL_WAYLAND_SHARED / SDL_ALSA_SHARED):
+          # libwayland-client/cursor/egl and libxkbcommon never appear in
+          # ldd's closure of libSDL2 and must be copied explicitly.
+          waylandLibs = with pkgs; [
+            wayland
+            libxkbcommon
+            alsa-lib
+          ];
+
           # nixpkgs's SDL2 attribute is sdl2-compat, which dlopens SDL3 at
           # runtime and therefore cannot be bundled in a self-contained way.
           # For the portable packages we instead build the real SDL2
           # (libsdl-org/SDL 2.32.x) from upstream source. buildSDL2
-          # parameterizes the two variants used across the flake:
-          #   static = true  -> pkgsStatic (musl), SDL_STATIC=ON, for the
-          #                     truly-static `static` package.
-          #   static = false -> glibc, SDL_SHARED=ON, for the portable bundles
-          #                     (cuda-static, appimage, cuda-appimage) that
-          #                     ship the libSDL2 .so closure next to the app.
+          # parameterizes the variants used across the flake:
+          #   static = true   -> pkgsStatic (musl), SDL_STATIC=ON, X11-only
+          #                      (currently unused by any package).
+          #   static = false  -> glibc, SDL_SHARED=ON, for the portable
+          #                      bundles that ship the libSDL2 .so closure
+          #                      next to the app.
+          #   wayland = false -> X11 video driver only (SDL_X11=ON).
+          #   wayland = true  -> Wayland video driver only (SDL_WAYLAND=ON,
+          #                      SDL_X11=OFF); used by the *-wayland bundles.
           # Only ALSA is enabled as the audio backend (see cmakeFlags below —
           # PipeWire and PulseAudio are OFF); ALSA is the lowest common
           # denominator and PipeWire/PulseAudio expose an ALSA compat shim, so
           # audio still works on those systems. ALSA only needs the kernel API
-          # at runtime, so the resulting static binary still runs on any Linux
+          # at runtime, so the resulting binary still runs on any Linux
           # (including NixOS) without system .so deps.
           buildSDL2 =
-            { static }:
+            {
+              static ? false,
+              wayland ? false,
+            }:
             let
               spkgs = if static then pkgs.pkgsStatic else pkgs;
               xorgLibs = with spkgs; [
@@ -97,6 +113,16 @@
                 libxcb
                 alsa-lib
               ];
+              # The Wayland client libs + xkbcommon, which SDL's wayland video
+              # driver requires at build time (wayland-egl / wayland-cursor /
+              # wayland-scanner all ship inside the `wayland` derivation; SDL's
+              # cmake finds the scanner through the wayland-scanner.pc
+              # pkg-config variable).
+              waylandLibs = with spkgs; [
+                wayland
+                libxkbcommon
+              ];
+              videoLibs = if wayland then waylandLibs else xorgLibs;
             in
             spkgs.stdenv.mkDerivation (finalAttrs: {
               pname = if static then "SDL2-static" else "SDL2-dynamic";
@@ -108,15 +134,20 @@
               nativeBuildInputs = [
                 spkgs.buildPackages.cmake
                 spkgs.buildPackages.pkg-config
-              ];
-              buildInputs = pkgs.lib.optionals (!static) xorgLibs;
-              # The static build pulls the X11/ALSA client libs in at link
+              ]
+              # wayland-scanner for the wayland video driver. It normally
+              # resolves through the wayland-scanner.pc pkg-config variable,
+              # but also putting the wayland bin output on PATH covers
+              # find_program()-based lookup.
+              ++ pkgs.lib.optionals (!static && wayland) [ spkgs.buildPackages.wayland ];
+              # The static build pulls the video/ALSA client libs in at link
               # time via sdl2.pc's Libs.private, so they must be propagated to
               # downstream consumers. The shared build records them as
               # DT_NEEDED of libSDL2.so instead. Both variants still propagate
-              # xorgLibs so downstream apps can find the X11 headers that
+              # videoLibs so downstream apps can find the headers that
               # SDL_syswm.h includes.
-              propagatedBuildInputs = xorgLibs;
+              buildInputs = pkgs.lib.optionals (!static) videoLibs;
+              propagatedBuildInputs = videoLibs;
               cmakeFlags = [
                 (if static then "-DSDL_SHARED=OFF" else "-DSDL_SHARED=ON")
                 (if static then "-DSDL_STATIC=ON" else "-DSDL_STATIC=OFF")
@@ -129,8 +160,8 @@
                 "-DSDL_OPENGL=OFF"
                 "-DSDL_OPENGLES=OFF"
                 "-DSDL_VULKAN=OFF"
-                "-DSDL_X11=ON"
-                "-DSDL_WAYLAND=OFF"
+                (if wayland then "-DSDL_X11=OFF" else "-DSDL_X11=ON")
+                (if wayland then "-DSDL_WAYLAND=ON" else "-DSDL_WAYLAND=OFF")
                 "-DSDL_ALSA=ON"
                 "-DSDL_PIPEWIRE=OFF"
                 "-DSDL_PULSEAUDIO=OFF"
@@ -146,6 +177,12 @@
                 # SDL_LoadObject for its runtime X11/ALSA client library
                 # lookups (SDL_X11_SHARED / SDL_ALSA_SHARED).
                 (if static then "-DSDL_LOADSO=OFF" else "-DSDL_LOADSO=ON")
+              ]
+              ++ pkgs.lib.optionals wayland [
+                # SDL2 (>= 2.26) draws its own client-side decorations when
+                # libdecor is unavailable; skipping it keeps libdecor's plugin
+                # deps (gtk/cairo) out of the portable bundles.
+                "-DSDL_WAYLAND_LIBDECOR=OFF"
               ];
               # Two trivial build fixes against modern nixpkgs headers.
               #   1. ALSA: snd_pcm_info_free returns void (per <alsa/pcm.h>)
@@ -242,10 +279,14 @@
           # musl static SDL2 for the `static` package.
           staticSDL2 = buildSDL2 { static = true; };
 
-          # glibc shared SDL2 for the portable bundles (cuda-static, appimage,
-          # cuda-appimage). The app links libSDL2.so; the bundles ship the
-          # .so and its X11/ALSA closure next to the binary.
+          # glibc shared SDL2 for the portable bundles. The app links
+          # libSDL2.so; each bundle ships the .so and its video/ALSA client
+          # lib closure next to the binary.
           dynamicSDL2 = buildSDL2 { static = false; };
+          dynamicSDL2Wayland = buildSDL2 {
+            static = false;
+            wayland = true;
+          };
 
           # ---- ccache toggle (shared by every package) ----------------------
           # Reading $VOICETYPER_CCACHE / $CCACHE_DIR at eval time requires
@@ -432,9 +473,9 @@
               // ccacheEnv
             );
 
-          # Portable CPU bundle: a flat, Windows-style directory of dynamically
-          # linked ELFs plus their full .so closure and a bundled glibc
-          # ld-linux. Mirrors the Windows zip layout — the launcher, the
+          # Portable bundle factory: a flat, Windows-style directory of
+          # dynamically linked ELFs plus their full .so closure and a bundled
+          # glibc ld-linux. Mirrors the Windows zip layout — the launcher, the
           # whisper/ggml shared libs (libwhisper / libggml / libggml-base /
           # libggml-cpu), and ld-linux all sit at the top level. The real
           # binary (VoiceTyper.elf) must stay at the top level because both
@@ -444,176 +485,47 @@
           # on VoiceTyper.elf, so the bundle runs on any distro — including
           # NixOS, where /lib64/ld-linux-x86-64.so.2 does not exist (the
           # launcher bypasses the kernel's PT_INTERP lookup entirely).
-          portable = pkgs.stdenv.mkDerivation (
+          #
+          # { wayland }: selects the SDL2 video-driver flavour — false bundles
+          # the X11 build (libSDL2 + its X11/ALSA client libs), true bundles
+          # the Wayland build (libwayland-client/cursor/egl + libxkbcommon +
+          # ALSA). The app itself is identical either way: it renders via
+          # SDL's software renderer (imgui_impl_sdlrenderer2) and Linux text
+          # insertion is clipboard-based, so no display-server-specific code
+          # is compiled into the app.
+          #
+          # { cuda }: additionally bundles a cuda/ subdir holding the dlopened
+          # CUDA backend (libggml-cuda.so) and its cublas/cudart runtime — the
+          # same shape as the Windows cuda/ folder. libcuda.so.1 (the NVIDIA
+          # driver) is deliberately NOT bundled: the host driver supplies it,
+          # so cuda/libggml-cuda.so's rpath falls back to the standard driver
+          # locations.
+          mkPortableBundle =
             {
-              pname = "voicetyper-portable";
-              version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
-              src = ./.;
-
-              nativeBuildInputs =
-                with pkgs;
-                [
-                  cmake
-                  patchelf
-                  pkg-config
-                ]
-                ++ pkgs.lib.optional enableCcache ccache;
-
-              buildInputs = [
-                dynamicSDL2
-              ];
-
-              cmakeBuildType = "Release";
-              cmakeFlags = [
-                "-DVOICETYPER_BUILD_CUDA_PLUGIN=OFF"
-                "-DVOICETYPER_APP_IPO=OFF"
-                "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
-              ]
-              ++ ccacheCmakeFlags { };
-
-              preConfigure = ccachePreConfigure;
-
-              # The app + whisper/ggml shared libs and the libggml-cpu.so module
-              # are written to <build-dir>/Release_cpu/ via the target output
-              # overrides (CMAKE_RUNTIME_OUTPUT_DIRECTORY = the nix build dir).
-              buildPhase = ''
-                runHook preBuild
-                cmake --build . --config Release --parallel $NIX_BUILD_CORES
-                runHook postBuild
-              '';
-
-              installPhase = ''
-                runHook preInstall
-
-                mkdir -p $out
-                R="Release_cpu"
-                                cp -f "$R/VoiceTyper" $out/VoiceTyper.elf
-                                cp -Lf "$R/libwhisper.so.1" $out/libwhisper.so.1
-                                cp -Lf "$R/libggml.so.0" $out/libggml.so.0
-                                cp -Lf "$R/libggml-base.so.0" $out/libggml-base.so.0
-                                cp -Lf "$R/libggml-cpu.so" $out/libggml-cpu.so
-
-                                cp -Lf ${dynamicSDL2}/lib/libSDL2-2.0.so.0 $out/
-
-                                # libstdc++ / libgcc_s from the compiler runtime (the app is
-                                # built against the toolchain libstdc++; bundling keeps older
-                                # host libstdc++ from breaking it). The libstdc++.so.6 symlink
-                                # dereferences (-L) to the real versioned .so, avoiding the
-                                # -gdb.py pretty-printer that also matches a versioned glob.
-                                cp -Lf ${pkgs.stdenv.cc.cc.lib}/lib/libstdc++.so.6 $out/libstdc++.so.6
-                                cp -Lf ${pkgs.stdenv.cc.cc.lib}/lib/libgcc_s.so.1 $out/
-
-                                # glibc core + the dynamic linker. Bundling these lets the
-                                # launcher run the app under our own glibc regardless of the
-                                # host libc (and is what makes NixOS work).
-                                GLIBC_BASE=${pkgs.glibc}/lib
-                                for so in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 librt.so.1; do
-                                  cp -Lf "$GLIBC_BASE/$so" $out/
-                                done
-
-                                # libSDL2.so dlopens the X11/ALSA client libs at runtime
-                                # (SDL_X11_SHARED / SDL_ALSA_SHARED) instead of listing them as
-                                # DT_NEEDED, so ldd of the binary never sees them. Copy the
-                                # full X11/ALSA .so set explicitly, then pull the transitive
-                                # closure of everything in the bundle (libxcb -> libXau/
-                                # libXdmcp, libXcursor -> libXrender, ...) via ldd.
-                                for libdir in ${
-                                  pkgs.lib.replaceStrings [ ":" ] [ " " ] (pkgs.lib.makeLibraryPath xorgLibs)
-                                }; do
-                                  for so in "$libdir"/lib*.so*; do
-                                    [ -f "$so" ] || continue
-                                    base="$(basename "$so")"
-                                    case "$base" in
-                                      *.so | *.so.*[0-9]) ;;
-                                      *) continue ;;
-                                    esac
-                                    case "$base" in
-                                      ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
-                                      *) [ -e "$out/$base" ] || cp -Lf "$so" $out/ 2>/dev/null || true ;;
-                                    esac
-                                  done
-                                done
-                                for so in $out/*.so*; do
-                                  [ -f "$so" ] || continue
-                                  for dep in $(ldd "$so" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
-                                    base="$(basename "$dep")"
-                                    case "$base" in
-                                      ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
-                                      *) [ -e "$out/$base" ] || cp -Lf "$dep" $out/ 2>/dev/null || true ;;
-                                    esac
-                                  done
-                                done
-
-                                # /bin/sh launcher — present on every Linux including NixOS.
-                                # Does NOT export VOICETYPER_DATA_DIR, so settings/models/cuda
-                                # resolve to the bundle root (the real exe dir), matching the
-                                # Windows zip's portable behaviour.
-                                cat > $out/VoiceTyper <<'LAUNCHER'
-                #!/bin/sh
-                DIR="$(cd "$(dirname "$0")" && pwd)"
-                # Point the bundled glibc's lazy dlopens (libgcc_s for pthread cancellation,
-                # NSS modules) at the bundle first. Uses LD_LIBRARY_PATH (prepends, does not
-                # shadow) rather than ld-linux's --library-path (which would replace the
-                # search path). The bundled libs already carry an $ORIGIN rpath, so this is
-                # belt-and-suspenders for the loader's own lazy dlopens.
-                export LD_LIBRARY_PATH="$DIR:$DIR/cuda''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-                exec "$DIR/ld-linux-x86-64.so.2" "$DIR/VoiceTyper.elf" "$@"
-                LAUNCHER
-                                chmod +x $out/VoiceTyper
-
-                                runHook postInstall
-              '';
-
-              # Apply rpaths in postFixup (after nixpkgs's shrink-rpath / strip).
-              # Resolve runtime deps to the bundle itself. RUNPATH (not RPATH)
-              # keeps LD_LIBRARY_PATH authoritative and lets libdl / libpthread
-              # resolve to our bundled glibc. The FHS interpreter path is set so
-              # the ELF also runs directly on glibc distros; the bundled
-              # ld-linux launcher is what makes NixOS work.
-              postFixup = ''
-                patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 \
-                         --set-rpath '$ORIGIN' \
-                         $out/VoiceTyper.elf
-                for so in $out/*.so*; do
-                  [ -f "$so" ] || continue
-                  case "$(basename "$so")" in
-                    ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) continue ;;
-                  esac
-                  chmod +w "$so"
-                  patchelf --set-rpath '$ORIGIN' "$so"
-                done
-              '';
-
-              # We manage rpaths ourselves in postFixup (the bundle is
-              # relocatable via $ORIGIN), so skip nixpkgs's shrink-rpath step.
-              dontPatchELF = true;
-              # auditTmpdir runs before postFixup and would flag the pre-fix
-              # build-dir rpath; we overwrite every rpath in postFixup anyway.
-              noAuditTmpdir = true;
-              # fixupPhase would rewrite the launcher's /bin/sh shebang to a
-              # nix-store bash, which breaks the bundle on non-NixOS systems.
-              dontPatchShebangs = true;
-            }
-            // ccacheEnv
-          );
-
-          # Portable CUDA bundle: identical layout to `portable`, plus a cuda/
-          # subdir holding the dlopened CUDA backend (libggml-cuda.so) and its
-          # cublas/cudart runtime — the same shape as the Windows cuda/ folder.
-          # libcuda.so.1 (the NVIDIA driver) is deliberately NOT bundled: the
-          # host driver supplies it, so cuda/libggml-cuda.so's rpath falls back
-          # to the standard driver locations.
-          cuda-portable =
+              cuda ? false,
+              wayland ? false,
+            }:
             let
               unfreePkgs = import nixpkgs {
                 inherit system;
                 config.allowUnfree = true;
               };
               cudaPackages = unfreePkgs.cudaPackages_13_0;
+              stdenv = if cuda then cudaPackages.backendStdenv else pkgs.stdenv;
+              cudaRuntimeLibs = [
+                cudaPackages.cuda_cudart
+                cudaPackages.libcublas
+              ];
+              sdl2 = if wayland then dynamicSDL2Wayland else dynamicSDL2;
+              videoLibs = if wayland then waylandLibs else xorgLibs;
+              buildDir = if cuda then "Release_cuda-plugin" else "Release_cpu";
             in
-            cudaPackages.backendStdenv.mkDerivation (
+            stdenv.mkDerivation (
               {
-                pname = "voicetyper-cuda-portable";
+                pname =
+                  "voicetyper-"
+                  + (if cuda then "cuda-portable" else "portable")
+                  + (if wayland then "-wayland" else "-x11");
                 version = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./VERSION);
                 src = ./.;
 
@@ -623,27 +535,25 @@
                     cmake
                     patchelf
                     pkg-config
-                    cudaPackages.cuda_nvcc
                   ]
+                  ++ pkgs.lib.optional cuda cudaPackages.cuda_nvcc
                   ++ pkgs.lib.optional enableCcache ccache;
 
-                buildInputs = [
-                  dynamicSDL2
-                  cudaPackages.cuda_cudart
-                  cudaPackages.libcublas
-                ];
+                buildInputs = [ sdl2 ] ++ pkgs.lib.optionals cuda cudaRuntimeLibs;
 
                 cmakeBuildType = "Release";
                 cmakeFlags = [
-                  "-DVOICETYPER_BUILD_CUDA_PLUGIN=ON"
+                  "-DVOICETYPER_BUILD_CUDA_PLUGIN=${if cuda then "ON" else "OFF"}"
                   "-DVOICETYPER_APP_IPO=OFF"
                   "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE"
                 ]
-                ++ ccacheCmakeFlags { cuda = true; };
+                ++ ccacheCmakeFlags { cuda = cuda; };
 
                 preConfigure = ccachePreConfigure;
 
-                # See `portable` — outputs land in <build-dir>/Release_cuda-plugin/.
+                # The app + whisper/ggml shared libs and the libggml-cpu.so module
+                # are written to <build-dir>/${buildDir}/ via the target output
+                # overrides (CMAKE_RUNTIME_OUTPUT_DIRECTORY = the nix build dir).
                 buildPhase = ''
                   runHook preBuild
                   cmake --build . --config Release --parallel $NIX_BUILD_CORES
@@ -653,54 +563,71 @@
                 installPhase = ''
                   runHook preInstall
 
-                  mkdir -p $out/cuda
-                  R="Release_cuda-plugin"
+                  mkdir -p $out
+                  ${pkgs.lib.optionalString cuda "mkdir -p $out/cuda"}
+                  R="${buildDir}"
                   cp -f "$R/VoiceTyper" $out/VoiceTyper.elf
                   cp -Lf "$R/libwhisper.so.1" $out/libwhisper.so.1
                   cp -Lf "$R/libggml.so.0" $out/libggml.so.0
                   cp -Lf "$R/libggml-base.so.0" $out/libggml-base.so.0
                   cp -Lf "$R/libggml-cpu.so" $out/libggml-cpu.so
-                  cp -Lf "$R/libggml-cuda.so" $out/cuda/libggml-cuda.so
+                  ${pkgs.lib.optionalString cuda ''
+                    cp -Lf "$R/libggml-cuda.so" $out/cuda/libggml-cuda.so
+                  ''}
 
-                                    cp -Lf ${dynamicSDL2}/lib/libSDL2-2.0.so.0 $out/
+                  cp -Lf ${sdl2}/lib/libSDL2-2.0.so.0 $out/
 
-                  cp -Lf ${cudaPackages.backendStdenv.cc.cc.lib}/lib/libstdc++.so.6 $out/libstdc++.so.6
-                  cp -Lf ${cudaPackages.backendStdenv.cc.cc.lib}/lib/libgcc_s.so.1 $out/
+                  # libstdc++ / libgcc_s from the compiler runtime (the app is
+                  # built against the toolchain libstdc++; bundling keeps older
+                  # host libstdc++ from breaking it). The libstdc++.so.6 symlink
+                  # dereferences (-L) to the real versioned .so, avoiding the
+                  # -gdb.py pretty-printer that also matches a versioned glob.
+                  cp -Lf ${stdenv.cc.cc.lib}/lib/libstdc++.so.6 $out/libstdc++.so.6
+                  cp -Lf ${stdenv.cc.cc.lib}/lib/libgcc_s.so.1 $out/
 
-                                    GLIBC_BASE=${pkgs.glibc}/lib
-                                    for so in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 librt.so.1; do
-                                      cp -Lf "$GLIBC_BASE/$so" $out/
-                                    done
+                  # glibc core + the dynamic linker. Bundling these lets the
+                  # launcher run the app under our own glibc regardless of the
+                  # host libc (and is what makes NixOS work).
+                  GLIBC_BASE=${pkgs.glibc}/lib
+                  for so in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 librt.so.1; do
+                    cp -Lf "$GLIBC_BASE/$so" $out/
+                  done
 
-                                    # CUDA runtime libs, next to the plugin that dlopens/links
-                                    # them. libcuda.so.1 (the driver) is NOT bundled.
-                                    cp -Lf ${cudaPackages.cuda_cudart}/lib/libcudart.so.* $out/cuda/
-                                    cp -Lf ${cudaPackages.libcublas.lib}/lib/libcublas.so.* $out/cuda/
-                                    cp -Lf ${cudaPackages.libcublas.lib}/lib/libcublasLt.so.* $out/cuda/
+                  ${pkgs.lib.optionalString cuda ''
+                    # CUDA runtime libs, next to the plugin that dlopens/links
+                    # them. libcuda.so.1 (the driver) is NOT bundled.
+                    cp -Lf ${cudaPackages.cuda_cudart}/lib/libcudart.so.* $out/cuda/
+                    cp -Lf ${cudaPackages.libcublas.lib}/lib/libcublas.so.* $out/cuda/
+                    cp -Lf ${cudaPackages.libcublas.lib}/lib/libcublasLt.so.* $out/cuda/
+                  ''}
 
-                                    # X11/ALSA client libs that libSDL2.so dlopens (see the cpu
-                                    # bundle for why ldd can't see these).
-                                    for libdir in ${
-                                      pkgs.lib.replaceStrings [ ":" ] [ " " ] (pkgs.lib.makeLibraryPath xorgLibs)
-                                    }; do
-                                      for so in "$libdir"/lib*.so*; do
-                                        [ -f "$so" ] || continue
-                                        base="$(basename "$so")"
-                                        case "$base" in
-                                          *.so | *.so.*[0-9]) ;;
-                                          *) continue ;;
-                                        esac
-                                        case "$base" in
-                                          ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
-                                          *) [ -e "$out/$base" ] || cp -Lf "$so" $out/ 2>/dev/null || true ;;
-                                        esac
-                                      done
-                                    done
-                  # Transitive closure of the root AND cuda/ libs. Deps that
-                  # already live in cuda/ (cudart/cublas/cublasLt) are detected
-                  # via the $out/cuda/ check so they are not duplicated into
-                  # the root. libcuda.so.1 (the NVIDIA driver) is never bundled.
-                  for so in $out/*.so* $out/cuda/*.so*; do
+                  # libSDL2.so dlopens the ${if wayland then "Wayland" else "X11"}/ALSA client
+                  # libs at runtime (SDL_WAYLAND_SHARED / SDL_X11_SHARED /
+                  # SDL_ALSA_SHARED) instead of listing them as DT_NEEDED, so
+                  # ldd of the binary never sees them. Copy the full client .so
+                  # set explicitly, then pull the transitive closure of
+                  # everything in the bundle (libxcb -> libXau/libXdmcp,
+                  # libxkbcommon, ...) via ldd.
+                  for libdir in ${pkgs.lib.replaceStrings [ ":" ] [ " " ] (pkgs.lib.makeLibraryPath videoLibs)}; do
+                    for so in "$libdir"/lib*.so*; do
+                      [ -f "$so" ] || continue
+                      base="$(basename "$so")"
+                      case "$base" in
+                        *.so | *.so.*[0-9]) ;;
+                        *) continue ;;
+                      esac
+                      case "$base" in
+                        ld-linux*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libgcc_s.so.*) ;;
+                        *) [ -e "$out/$base" ] || cp -Lf "$so" $out/ 2>/dev/null || true ;;
+                      esac
+                    done
+                  done
+                  # Transitive closure of the root${pkgs.lib.optionalString cuda " AND cuda/"} libs. Deps
+                  # that already live in cuda/ (cudart/cublas/cublasLt) are
+                  # detected via the $out/cuda/ check so they are not
+                  # duplicated into the root. libcuda.so.1 (the NVIDIA driver)
+                  # is never bundled.
+                  for so in $out/*.so* ${pkgs.lib.optionalString cuda "$out/cuda/*.so*"}; do
                     [ -f "$so" ] || continue
                     for dep in $(ldd "$so" 2>/dev/null | awk '/=> \// {print $3}' | sort -u); do
                       base="$(basename "$dep")"
@@ -712,30 +639,37 @@
                     done
                   done
 
-                                    cat > $out/VoiceTyper <<'LAUNCHER'
+                  # /bin/sh launcher — present on every Linux including NixOS.
+                  # Does NOT export VOICETYPER_DATA_DIR, so settings/models/cuda
+                  # resolve to the bundle root (the real exe dir), matching the
+                  # Windows zip's portable behaviour.
+                  cat > $out/VoiceTyper <<'LAUNCHER'
                   #!/bin/sh
                   DIR="$(cd "$(dirname "$0")" && pwd)"
-                  # See the cpu bundle's launcher for why LD_LIBRARY_PATH (not --library-path).
-                  # $DIR/cuda lets the CUDA runtime libs resolve even if a sibling rpath misses.
+                  # Point the bundled glibc's lazy dlopens (libgcc_s for pthread
+                  # cancellation, NSS modules) at the bundle first. Uses
+                  # LD_LIBRARY_PATH (prepends, does not shadow) rather than
+                  # ld-linux's --library-path (which would replace the search
+                  # path). The bundled libs already carry an $ORIGIN rpath, so
+                  # this is belt-and-suspenders for the loader's own lazy
+                  # dlopens. $DIR/cuda lets the CUDA runtime libs resolve even
+                  # if a sibling rpath misses (harmless when cuda/ is absent).
                   export LD_LIBRARY_PATH="$DIR:$DIR/cuda''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
                   exec "$DIR/ld-linux-x86-64.so.2" "$DIR/VoiceTyper.elf" "$@"
                   LAUNCHER
-                                    chmod +x $out/VoiceTyper
+                  chmod +x $out/VoiceTyper
 
-                                    runHook postInstall
+                  runHook postInstall
                 '';
 
-                # Apply rpaths in postFixup (after nixpkgs's fixupPhase, whose
-                # patchelf --shrink-rpath / autoFixElfFiles strips absolute
-                # rpath entries that don't exist in the build sandbox — notably
-                # the NVIDIA driver locations — down to just $ORIGIN).
+                # Apply rpaths in postFixup (after nixpkgs's shrink-rpath /
+                # strip). Resolve runtime deps to the bundle itself. RUNPATH
+                # (not RPATH) keeps LD_LIBRARY_PATH authoritative and lets
+                # libdl / libpthread resolve to our bundled glibc. The FHS
+                # interpreter path is set so the ELF also runs directly on
+                # glibc distros; the bundled ld-linux launcher is what makes
+                # NixOS work.
                 postFixup = ''
-                  # Resolve runtime deps to the bundle itself. RUNPATH (not
-                  # RPATH) keeps LD_LIBRARY_PATH authoritative and lets libdl /
-                  # libpthread resolve to our bundled glibc. The FHS
-                  # interpreter path lets the ELF also run directly on glibc
-                  # distros; the bundled-ld-linux launcher is what makes NixOS
-                  # work.
                   patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 \
                            --set-rpath '$ORIGIN' \
                            $out/VoiceTyper.elf
@@ -747,32 +681,54 @@
                     chmod +w "$so"
                     patchelf --set-rpath '$ORIGIN' "$so"
                   done
-
-                  # cuda/ plugin + runtime libs: resolve ggml core libs from the
-                  # bundle root ($ORIGIN/..), sibling cuda libs from $ORIGIN,
-                  # then fall back to the standard NVIDIA driver locations for
-                  # libcuda.so.1 (which we deliberately do not bundle).
-                  for so in $out/cuda/*.so*; do
-                    [ -f "$so" ] || continue
-                    chmod +w "$so"
-                    patchelf --set-rpath '$ORIGIN/..:$ORIGIN:/run/opengl-driver/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib64:/lib64:/usr/local/cuda/lib64' "$so"
-                  done
+                  ${pkgs.lib.optionalString cuda ''
+                    # cuda/ plugin + runtime libs: resolve ggml core libs from
+                    # the bundle root ($ORIGIN/..), sibling cuda libs from
+                    # $ORIGIN, then fall back to the standard NVIDIA driver
+                    # locations for libcuda.so.1 (which we deliberately do not
+                    # bundle).
+                    for so in $out/cuda/*.so*; do
+                      [ -f "$so" ] || continue
+                      chmod +w "$so"
+                      patchelf --set-rpath '$ORIGIN/..:$ORIGIN:/run/opengl-driver/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib64:/lib64:/usr/local/cuda/lib64' "$so"
+                    done
+                  ''}
                 '';
 
-                # We manage rpaths ourselves in postFixup (the portable bundle
-                # is relocatable via $ORIGIN); skip nixpkgs's shrink-rpath step
-                # (the patchelf setup hook's patchELF), which would strip the
-                # cuda/ libs' $ORIGIN/.. entry and the NVIDIA driver fallbacks.
+                # We manage rpaths ourselves in postFixup (the bundle is
+                # relocatable via $ORIGIN), so skip nixpkgs's shrink-rpath
+                # step (the patchelf setup hook's patchELF), which would strip
+                # the cuda/ libs' $ORIGIN/.. entry and the NVIDIA driver
+                # fallbacks.
                 dontPatchELF = true;
                 # auditTmpdir is a fixupOutput hook and therefore runs BEFORE
                 # postFixup, so it would see the pre-fix rpath (the build dir,
                 # i.e. $TMPDIR) and fail with a forbidden-/build/ error. We
                 # deliberately overwrite every rpath in postFixup, so skip it.
                 noAuditTmpdir = true;
+                # fixupPhase would rewrite the launcher's /bin/sh shebang to a
+                # nix-store bash, which breaks the bundle on non-NixOS systems.
                 dontPatchShebangs = true;
               }
               // ccacheEnv
             );
+
+          portable-x11 = mkPortableBundle {
+            cuda = false;
+            wayland = false;
+          };
+          portable-wayland = mkPortableBundle {
+            cuda = false;
+            wayland = true;
+          };
+          cuda-portable-x11 = mkPortableBundle {
+            cuda = true;
+            wayland = false;
+          };
+          cuda-portable-wayland = mkPortableBundle {
+            cuda = true;
+            wayland = true;
+          };
         }
         # The mingw-w64 cross target is only defined from an x86_64-linux
         # host (the only dev box that uses it).
@@ -822,24 +778,24 @@
                   runHook postBuild
                 '';
 
-                  # The target output overrides put VoiceTyper.exe and the
-                  # whisper/ggml DLLs (incl. the dlopened ggml-cpu.dll
-                  # backend) into <build-dir>/Release_cpu/ - the same flat
-                  # layout as the Windows release build, runnable directly
-                  # under wine64. The mingw runtime DLLs the exe links
-                  # (libstdc++-6, libgcc_s_seh-1 from the cross gcc,
-                  # libmcfgthread-2 from its threading model) are bundled
-                  # too so $out is self-contained on a Windows box.
-                  installPhase = ''
-                    runHook preInstall
-                    mkdir -p $out
-                    cp -f Release_cpu/VoiceTyper.exe $out/
-                    cp -f Release_cpu/*.dll $out/
-                    cp -f ${mingwPkgs.stdenv.cc.cc.lib}/x86_64-w64-mingw32/lib/libstdc++-6.dll $out/
-                    cp -f ${mingwPkgs.stdenv.cc.cc.lib}/x86_64-w64-mingw32/lib/libgcc_s_seh-1.dll $out/
-                    cp -f ${mingwPkgs.windows.mcfgthreads}/bin/libmcfgthread-2.dll $out/
-                    runHook postInstall
-                  '';
+                # The target output overrides put VoiceTyper.exe and the
+                # whisper/ggml DLLs (incl. the dlopened ggml-cpu.dll
+                # backend) into <build-dir>/Release_cpu/ - the same flat
+                # layout as the Windows release build, runnable directly
+                # under wine64. The mingw runtime DLLs the exe links
+                # (libstdc++-6, libgcc_s_seh-1 from the cross gcc,
+                # libmcfgthread-2 from its threading model) are bundled
+                # too so $out is self-contained on a Windows box.
+                installPhase = ''
+                  runHook preInstall
+                  mkdir -p $out
+                  cp -f Release_cpu/VoiceTyper.exe $out/
+                  cp -f Release_cpu/*.dll $out/
+                  cp -f ${mingwPkgs.stdenv.cc.cc.lib}/x86_64-w64-mingw32/lib/libstdc++-6.dll $out/
+                  cp -f ${mingwPkgs.stdenv.cc.cc.lib}/x86_64-w64-mingw32/lib/libgcc_s_seh-1.dll $out/
+                  cp -f ${mingwPkgs.windows.mcfgthreads}/bin/libmcfgthread-2.dll $out/
+                  runHook postInstall
+                '';
               }
               // ccacheEnv
             );

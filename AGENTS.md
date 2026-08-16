@@ -5,7 +5,8 @@ slashes for paths (`ls`, `cp`, `mv`) and reference paths relatively, e.g. `./src
 Detect the host platform at the start of each session by running `uname -s`, since the
 same project is built on both Windows and NixOS/Linux and the tooling differs:
 - `Linux`            -> native Linux (NixOS). Native paths like `/home/<user>/VoiceTyper`.
-                       The nix flake packages (.#default, .#cuda, .#portable, .#cuda-portable)
+                       The nix flake packages (.#default, .#cuda, .#portable-x11,
+                       .#portable-wayland, .#cuda-portable-x11, .#cuda-portable-wayland)
                        are invoked directly via `nix build`;
                        `tools/release.sh --linux` orchestrates them remotely for releases.
 - `MINGW*` / `MSYS*` -> Windows under git bash. Paths like `/c/dir1/dir2`.
@@ -27,8 +28,9 @@ repo root). Flags compose:
     tools/release.sh                  build + package Windows (cpu + cuda)  -> dist/
     tools/release.sh --release        build + package + create a DRAFT GitHub release
     tools/release.sh --tag --release  cut v<VERSION> tag + build + package + DRAFT release
-    tools/release.sh ... --linux      also build + package portable Linux (cpu + cuda:
-                                      static + AppImage) on the remote NixOS box over ssh
+    tools/release.sh ... --linux      also build + package portable Linux (cpu + cuda,
+                                      each as x11 and wayland SDL2 variants) on the
+                                      remote NixOS box over ssh
                                       (VOICETYPER_NIX_SSH, default 'rock')
 
 The script inlines the Visual Studio (cmake) / 7z / WiX MSI steps for Windows
@@ -42,12 +44,17 @@ For a quick dev build without packaging, invoke cmake directly, e.g.:
     cmake --build build/cpu --config Release
 
 On NixOS the individual flake packages can still be built directly for dev:
-    nix build .#default | .#cuda | .#portable | .#cuda-portable
+    nix build .#default | .#cuda | .#portable-x11 | .#portable-wayland |
+               .#cuda-portable-x11 | .#cuda-portable-wayland
 
 The portable packages produce flat, Windows-style distributable directories
 (dynamically linked ELFs + the full .so closure + a bundled ld-linux, with the
 CUDA variant adding a `cuda/` subdir holding `libggml-cuda.so` + cublas/cudart).
-`tools/release.sh --linux` tars them into `VoiceTyper-v<VERSION>-x86_64-linux-{cpu,cuda}.tar.gz`.
+Each comes in an x11 and a wayland flavour that differ only in the bundled
+SDL2's video driver; the app itself is display-server agnostic (software
+renderer, clipboard-based text insertion).
+`tools/release.sh --linux` tars them into
+`VoiceTyper-v<VERSION>-x86_64-linux-{cpu,cuda}-{x11,wayland}.tar.gz`.
 The top-level `VoiceTyper` is a `/bin/sh` launcher that execs the bundled
 ld-linux on `VoiceTyper.elf`, so the bundle runs on most distros including
 NixOS (it bypasses the kernel's PT_INTERP lookup, which fails there).

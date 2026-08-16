@@ -67,12 +67,13 @@ Operations:
                     GitHub release for that tag already exists.
 
 Options:
-  --linux             Also build + package portable Linux (flat tar.gz bundles,
-                      cpu + cuda) on the remote NixOS box over ssh.
+  --linux             Also build + package portable Linux (flat tar.gz bundles:
+                      cpu + cuda, each as x11 and wayland SDL2 video-driver
+                      variants) on the remote NixOS box over ssh.
   --ccache            Enable ccache for the nix builds (Linux, cpu + cuda).
                       Auto-enabled when \$CCACHE_DIR (default
                       /var/cache/voicetyper-ccache) exists on the NixOS box.
-                      The cpu build warms the cache the cuda build then hits.
+                      The cpu builds warm the cache the cuda builds then hit.
   --remote NAME       Git remote the v<VERSION> tag is pushed to for the GitHub
                       release (env: VOICETYPER_RELEASE_REMOTE, default: github).
   --nix-ssh TARGET    ssh target for the NixOS box (env: VOICETYPER_NIX_SSH, default: rock).
@@ -494,10 +495,11 @@ build_nix() {
 	nix build ".#$package" --out-link "$out_link" "${ccache_args[@]}"
 }
 
-# Package a portable Linux bundle (the nix `portable` / `cuda-portable` output)
-# into a versioned tar.gz. The nix output is already the flat, Windows-style
-# directory (launcher + VoiceTyper.elf + .so closure + ld-linux [+ cuda/]), so
-# this just copies it into a named top-level dir and tars it up.
+# Package a portable Linux bundle (the nix portable-x11 / portable-wayland /
+# cuda-portable-x11 / cuda-portable-wayland outputs) into a versioned tar.gz.
+# The nix output is already the flat, Windows-style directory (launcher +
+# VoiceTyper.elf + .so closure + ld-linux [+ cuda/]), so this just copies it
+# into a named top-level dir and tars it up.
 package_portable() {
 	local result_link="$1"
 	local variant="$2"
@@ -524,10 +526,11 @@ package_portable() {
 	echo "    packaged $name"
 }
 
-# Build + package one portable variant. Runs as a background job so the cpu and
-# cuda variants build in parallel (they are independent nix derivations). ccache
-# is shared: enabling it for the cpu build warms the cache that the cuda build's
-# CPU objects then hit, so CPU objects compile once instead of twice.
+# Build + package one portable variant. Runs as a background job so the four
+# variants build in parallel (they are independent nix derivations). ccache
+# is shared: enabling it for the cpu builds warms the cache that the cuda
+# builds' CPU objects then hit, so CPU objects compile once instead of per
+# variant.
 build_and_package_portable() {
 	local package="$1"
 	local out_link="$2"
@@ -556,12 +559,14 @@ linux_package() {
 	mkdir -p "$DIST_DIR"
 
 	echo "=== Building portable Linux packages ($LINUX_PLATFORM) for v$VERSION ==="
-	echo "    (cpu + cuda build in parallel; both share ccache when enabled)"
+	echo "    (cpu + cuda, x11 + wayland build in parallel; all share ccache when enabled)"
 	local start=$SECONDS
 	JOB_PIDS=()
 	JOB_NAMES=()
-	run_job "portable (cpu)" build_and_package_portable portable result-portable cpu "$want_ccache"
-	run_job "portable (cuda)" build_and_package_portable cuda-portable result-cuda-portable cuda "$want_ccache"
+	run_job "portable (cpu-x11)" build_and_package_portable portable-x11 result-portable-x11 cpu-x11 "$want_ccache"
+	run_job "portable (cpu-wayland)" build_and_package_portable portable-wayland result-portable-wayland cpu-wayland "$want_ccache"
+	run_job "portable (cuda-x11)" build_and_package_portable cuda-portable-x11 result-cuda-portable-x11 cuda-x11 "$want_ccache"
+	run_job "portable (cuda-wayland)" build_and_package_portable cuda-portable-wayland result-cuda-portable-wayland cuda-wayland "$want_ccache"
 	wait_for_jobs
 	echo "    Linux builds took $((SECONDS - start))s"
 
