@@ -434,7 +434,6 @@ render_settings_panel(GlobalState *AppState)
 	ImGui::SetNextItemWidth(-1.0f);
 	if (ImGui::SliderInt("##UiFontSize", &AppState->UiFontSize, 8, 72, "%d px"))
 	{
-		AppState->Ui.FontReloadRequested = true;
 		save_int_setting("ui_font_size", AppState->UiFontSize);
 	}
 
@@ -1201,6 +1200,8 @@ render_download_modal(GlobalState *AppState)
 inline void
 render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 {
+	ImGui::GetStyle()._NextFrameFontSizeBase = (float)AppState->UiFontSize;
+
 	ImGui::SetNextWindowPos(ImVec2(0, 0));
 	ImGui::SetNextWindowSize(Io.DisplaySize);
 	ImGui::Begin(
