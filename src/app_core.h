@@ -50,6 +50,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;
 	AppState->UseCharByCharInjection = false;
 	AppState->CopyToClipboardWhenNoTarget = false;
+	AppState->ShowTranscribedTextConfidence = false;
 	AppState->RecordHotkeyMode = default_recording_hotkey_mode();
 
 	AppState->LastModelLoadMs.store(-1.0);

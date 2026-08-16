@@ -232,4 +232,8 @@ query_hotkey_settings(GlobalState *AppState)
 	bool CopyToClipboard = false;
 	if (load_bool_setting("copy_to_clipboard_when_no_target", &CopyToClipboard))
 		AppState->CopyToClipboardWhenNoTarget = CopyToClipboard;
+
+	bool ShowConfidence = false;
+	if (load_bool_setting("show_transcribed_text_confidence", &ShowConfidence))
+		AppState->ShowTranscribedTextConfidence = ShowConfidence;
 }

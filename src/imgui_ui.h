@@ -384,6 +384,12 @@ render_settings_panel(GlobalState *AppState)
 		save_bool_setting("copy_to_clipboard_when_no_target", AppState->CopyToClipboardWhenNoTarget);
 	}
 
+	if (ImGui::Checkbox("Show word confidence colors in the Transcribed Text box",
+		&AppState->ShowTranscribedTextConfidence))
+	{
+		save_bool_setting("show_transcribed_text_confidence", AppState->ShowTranscribedTextConfidence);
+	}
+
 	bool UseToggleMode = (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
 	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
 	{
@@ -879,6 +885,67 @@ render_bottom_bar(GlobalState *AppState)
 	ImGui::Text("Paste: %s", format_timing_ms(AppState->LastPasteMs.load()).c_str());
 }
 
+static ImVec4
+transcribed_word_confidence_color(float Confidence)
+{
+	if (Confidence >= 0.85f) return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	if (Confidence >= 0.60f) return ImVec4(0.92f, 0.78f, 0.30f, 1.0f);
+	return ImVec4(0.92f, 0.35f, 0.35f, 1.0f);
+}
+
+static void
+render_transcribed_text_box(GlobalState *AppState)
+{
+	UiRuntimeState *Ui = &AppState->Ui;
+
+	{
+		std::lock_guard<std::mutex> Lock(Ui->TranscribedTextMutex);
+		if (Ui->TranscribedTextSerial != Ui->TranscribedTextBoxSerial)
+		{
+			Ui->TranscribedTextBoxSerial = Ui->TranscribedTextSerial;
+			Ui->TranscribedTextBoxWords = Ui->TranscribedTextWords;
+
+			Ui->TranscribedTextBoxBuffer.clear();
+			for (const TranscribedWord &Word : Ui->TranscribedTextBoxWords)
+			{
+				Ui->TranscribedTextBoxBuffer.insert(
+					Ui->TranscribedTextBoxBuffer.end(),
+					Word.Text.begin(), Word.Text.end());
+			}
+			Ui->TranscribedTextBoxBuffer.push_back('\0');
+		}
+	}
+
+	if (Ui->TranscribedTextBoxBuffer.empty()) Ui->TranscribedTextBoxBuffer.push_back('\0');
+
+	ImGui::TextDisabled("Transcribed Text");
+
+	const float BoxHeight = ImGui::GetTextLineHeightWithSpacing() * 6.0f +
+		ImGui::GetStyle().FramePadding.y * 2.0f;
+
+	if (!AppState->ShowTranscribedTextConfidence)
+	{
+		ImGui::InputTextMultiline("##TranscribedText",
+			Ui->TranscribedTextBoxBuffer.data(),
+			Ui->TranscribedTextBoxBuffer.size(),
+			ImVec2(-1.0f, BoxHeight),
+			ImGuiInputTextFlags_ReadOnly);
+		return;
+	}
+
+	if (ImGui::BeginChild("##TranscribedTextConfidence", ImVec2(-1.0f, BoxHeight), ImGuiChildFlags_Borders))
+	{
+		for (const TranscribedWord &Word : Ui->TranscribedTextBoxWords)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, transcribed_word_confidence_color(Word.Confidence));
+			ImGui::TextUnformatted(Word.Text.c_str());
+			ImGui::PopStyleColor();
+			ImGui::SameLine(0.0f, 0.0f);
+		}
+	}
+	ImGui::EndChild();
+}
+
 // ---------------------------------------------------------------------------
 // Model downloader modal
 // ---------------------------------------------------------------------------
@@ -1116,6 +1183,11 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	float TallerEndY = (LeftEndY > RightEndY) ? LeftEndY : RightEndY;
 	ImGui::SetCursorPos(ImVec2(Padding, TallerEndY + Padding));
 	render_bottom_bar(AppState);
+
+	const float BottomBarEndY = ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y;
+	ImGui::SetCursorPos(ImVec2(Padding, BottomBarEndY));
+	ImGui::SetNextItemWidth(-1.0f);
+	render_transcribed_text_box(AppState);
 
 	render_crash_dialog_ui(AppState);
 

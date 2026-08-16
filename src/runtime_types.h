@@ -45,6 +45,12 @@ struct AudioInputDeviceInfo
 	bool IsDefault;
 };
 
+struct TranscribedWord
+{
+	std::string Text;
+	float Confidence;
+};
+
 struct PlatformFileInfo
 {
 	std::string Name;

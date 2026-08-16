@@ -177,6 +177,7 @@ struct CoreRuntimeState
 	int CancelSoundFreq;
 	bool UseCharByCharInjection;
 	bool CopyToClipboardWhenNoTarget;
+	bool ShowTranscribedTextConfidence;
 
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;
@@ -234,6 +235,12 @@ struct UiRuntimeState
 	bool IsCrashDialogOpen;
 	bool CrashDialogOpened;
 	std::vector<std::string> PendingCrashDumps;
+	std::mutex TranscribedTextMutex;
+	std::vector<TranscribedWord> TranscribedTextWords;
+	int TranscribedTextSerial;
+	std::vector<TranscribedWord> TranscribedTextBoxWords;
+	std::vector<char> TranscribedTextBoxBuffer;
+	int TranscribedTextBoxSerial;
 };
 
 struct GlobalState : CoreRuntimeState

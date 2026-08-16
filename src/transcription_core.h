@@ -1,10 +1,13 @@
 #pragma once
 
+#include "runtime_types.h"
 #include "whisper.h"
 
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <string>
+#include <vector>
 
 inline bool
 vad_model_file_available(const char *VadModelPath)
@@ -56,9 +59,11 @@ transcribe_pcm_to_string(
 	whisper_full_params &Params,
 	const float *Samples,
 	int SampleCount,
-	std::string *OutText)
+	std::string *OutText,
+	std::vector<TranscribedWord> *OutWords = nullptr)
 {
 	OutText->clear();
+	if (OutWords) OutWords->clear();
 
 	int Ret = whisper_full(Context, Params, Samples, SampleCount);
 	if (Ret != 0) return Ret;
@@ -79,6 +84,36 @@ transcribe_pcm_to_string(
 	{
 		size_t End = OutText->find_last_not_of(" \t\n\r");
 		*OutText = OutText->substr(Start, End - Start + 1);
+	}
+
+	if (OutWords)
+	{
+		for (int i = 0; i < NumSegments; i++)
+		{
+			int NumTokens = whisper_full_n_tokens(Context, i);
+			for (int j = 0; j < NumTokens; j++)
+			{
+				const char *TokenText = whisper_full_get_token_text(Context, i, j);
+				if (!TokenText || TokenText[0] == '\0') continue;
+				if (strncmp(TokenText, "[_TT_", 5) == 0) continue;
+
+				float P = whisper_full_get_token_p(Context, i, j);
+
+				if (TokenText[0] == ' ' || OutWords->empty())
+				{
+					TranscribedWord Word;
+					Word.Text = TokenText;
+					Word.Confidence = P;
+					OutWords->push_back(Word);
+				}
+				else
+				{
+					TranscribedWord &Word = OutWords->back();
+					Word.Text += TokenText;
+					if (P < Word.Confidence) Word.Confidence = P;
+				}
+			}
+		}
 	}
 
 	return 0;
