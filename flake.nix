@@ -143,11 +143,10 @@
                 spkgs.buildPackages.cmake
                 spkgs.buildPackages.pkg-config
               ]
-              # wayland-scanner for the wayland video driver. It normally
-              # resolves through the wayland-scanner.pc pkg-config variable,
-              # but also putting the wayland bin output on PATH covers
-              # find_program()-based lookup.
-              ++ pkgs.lib.optionals (!static && wayland) [ spkgs.buildPackages.wayland ];
+              # wayland-scanner (its own nixpkgs package; the `wayland` package
+              # has no bin output) for the wayland video driver's generated
+              # protocol code — SDL2's cmake locates it via find_program().
+              ++ pkgs.lib.optionals (!static && wayland) [ spkgs.buildPackages.wayland-scanner ];
               # The static build pulls the video/ALSA client libs in at link
               # time via sdl2.pc's Libs.private, so they must be propagated to
               # downstream consumers. The shared build records them as
