@@ -1243,11 +1243,12 @@ render_download_modal(GlobalState *AppState)
 	float ContentW = ModelColW + SizeColW + ActionColW + Style.CellPadding.x * 2.0f * 3.0f;
 	float WinW = ContentW + Style.WindowPadding.x * 2.0f + Style.ScrollbarSize;
 	if (WinW > Display.x * 0.95f) WinW = Display.x * 0.95f;
-	ImGui::SetNextWindowSize(ImVec2(WinW, Display.y * 0.7f), ImGuiCond_Appearing);
-	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowBgAlpha(1.0f);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(WinW, 0.0f), ImVec2(Display.x * 0.95f, Display.y * 0.95f));
+	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
 	bool Open = true;
-	if (ImGui::Begin("Download Models", &Open, ImGuiWindowFlags_NoCollapse))
+	if (ImGui::Begin("Download Models", &Open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		bool Running = D->IsRunning.load();
 		if (Running)
