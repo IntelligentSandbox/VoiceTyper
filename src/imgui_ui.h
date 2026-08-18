@@ -322,6 +322,59 @@ font_name_apply(GlobalState *AppState, const char *Name)
 	AppState->Ui.FontReloadRequested = true;
 }
 
+struct FontNameInputNav
+{
+	SettingsWindowState *S;
+	bool ScrollToSelection;
+};
+
+static int
+font_name_input_callback(ImGuiInputTextCallbackData *Data)
+{
+	FontNameInputNav *Nav = (FontNameInputNav *)Data->UserData;
+	SettingsWindowState *S = Nav->S;
+	int Count = S->FontSuggestionMatchCount;
+	if (Count <= 0)
+	{
+		return 0;
+	}
+
+	if (Data->EventKey == ImGuiKey_UpArrow)
+	{
+		if (S->FontSuggestionIndex < 0)
+		{
+			S->FontSuggestionIndex = Count - 1;
+		}
+		else if (S->FontSuggestionIndex == 0)
+		{
+			S->FontSuggestionIndex = -1;
+		}
+		else
+		{
+			S->FontSuggestionIndex--;
+		}
+		Nav->ScrollToSelection = true;
+	}
+	else if (Data->EventKey == ImGuiKey_DownArrow)
+	{
+		if (S->FontSuggestionIndex < 0)
+		{
+			S->FontSuggestionIndex = 0;
+		}
+		else if (S->FontSuggestionIndex >= Count - 1)
+		{
+			S->FontSuggestionIndex = -1;
+		}
+		else
+		{
+			S->FontSuggestionIndex++;
+		}
+		Nav->ScrollToSelection = true;
+	}
+
+	return 0;
+}
+
 static void
 render_font_name_input(GlobalState *AppState)
 {
@@ -329,14 +382,29 @@ render_font_name_input(GlobalState *AppState)
 
 	ImGui::TextUnformatted("Font");
 	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::InputTextWithHint("##UiFontName", "Type to search system fonts...",
-		S->FontNameBuffer, sizeof(S->FontNameBuffer));
-	if (ImGui::IsItemDeactivatedAfterEdit())
+
+	// CallbackHistory makes the InputText claim the Up/Down arrow keys so
+	// keyboard nav doesn't move focus to other widgets while the suggestion
+	// dropdown is open.
+	FontNameInputNav Nav = {};
+	Nav.S = S;
+	ImGuiInputTextFlags InputFlags = ImGuiInputTextFlags_EnterReturnsTrue |
+		ImGuiInputTextFlags_CallbackHistory;
+	bool EnterPressed = ImGui::InputTextWithHint("##UiFontName", "Type to search system fonts...",
+		S->FontNameBuffer, sizeof(S->FontNameBuffer), InputFlags, font_name_input_callback, &Nav);
+	// Enter deactivates the input, so capture the highlighted suggestion before
+	// the loss-of-focus reset below wipes it.
+	int EnterSelection = S->FontSuggestionIndex;
+	if (ImGui::IsItemEdited())
 	{
-		font_name_apply(AppState, S->FontNameBuffer);
+		S->FontSuggestionIndex = -1;
 	}
 
 	bool InputActive = ImGui::IsItemActive();
+	if (!InputActive && S->FontSuggestionIndex != -1)
+	{
+		S->FontSuggestionIndex = -1;
+	}
 
 	std::string LowerNeedle;
 	for (int i = 0; S->FontNameBuffer[i] != '\0'; i++)
@@ -353,7 +421,44 @@ render_font_name_input(GlobalState *AppState)
 		}
 	}
 
-	if (InputActive && !Matches.empty())
+	if (S->FontSuggestionIndex >= (int)Matches.size())
+	{
+		S->FontSuggestionIndex = (int)Matches.size() - 1;
+	}
+	S->FontSuggestionMatchCount = (int)Matches.size();
+
+	if (EnterPressed)
+	{
+		if (EnterSelection >= 0 && EnterSelection < (int)Matches.size())
+		{
+			snprintf(S->FontNameBuffer, sizeof(S->FontNameBuffer), "%s", Matches[EnterSelection].c_str());
+		}
+		font_name_apply(AppState, S->FontNameBuffer);
+		S->FontSuggestionIndex = -1;
+	}
+	else if (ImGui::IsItemDeactivatedAfterEdit())
+	{
+		// A click on a suggestion row deactivates the input mid-click; don't
+		// commit the typed text then (the row click applies instead, and the
+		// mid-click font reload would flash a load-failure toast).
+		ImGuiStyle &Style = ImGui::GetStyle();
+		ImVec2 ItemMin = ImGui::GetItemRectMin();
+		ImVec2 ItemMax = ImGui::GetItemRectMax();
+		float Width = ImGui::GetItemRectSize().x;
+		float RowHeight = ImGui::GetFrameHeight() + Style.ItemSpacing.y;
+		int VisibleRows = (int)Matches.size();
+		if (VisibleRows > FONT_SUGGESTION_MAX_ROWS) VisibleRows = FONT_SUGGESTION_MAX_ROWS;
+		float Height = Style.WindowPadding.y * 2.0f +
+			RowHeight * (float)VisibleRows - Style.ItemSpacing.y;
+		ImVec2 PopupMin = ImVec2(ItemMin.x, ItemMax.y + Style.FramePadding.y);
+		ImVec2 PopupMax = ImVec2(PopupMin.x + Width, PopupMin.y + Height);
+		if (!ImGui::IsMouseHoveringRect(PopupMin, PopupMax, false))
+		{
+			font_name_apply(AppState, S->FontNameBuffer);
+		}
+	}
+
+	if ((InputActive || ImGui::IsPopupOpen("##FontSuggestions")) && !Matches.empty())
 	{
 		ImGui::OpenPopup("##FontSuggestions");
 
@@ -373,22 +478,39 @@ render_font_name_input(GlobalState *AppState)
 
 	if (ImGui::BeginPopup("##FontSuggestions", ImGuiWindowFlags_NoFocusOnAppearing))
 	{
-		bool KeepOpen = InputActive || ImGui::IsWindowHovered();
+		// Clicking into the input focuses the main window and brings it to the
+		// display front, which would leave this reused popup window rendering
+		// behind it (NoFocusOnAppearing skips the popup's own bring-to-front).
+		ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+		// While the click is held the input's active-id blocks plain hover
+		// queries, which would close the popup on the mouse-down frame and
+		// swallow the click (same reason combos use this flag).
+		bool KeepOpen = InputActive ||
+			ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 		if (!KeepOpen || Matches.empty())
 		{
 			ImGui::CloseCurrentPopup();
 		}
 		else
 		{
+			int RowIndex = 0;
 			for (const std::string &Name : Matches)
 			{
 				bool IsCurrent = ascii_equals_ci(Name, AppState->UiFontName);
-				if (ImGui::Selectable(Name.c_str(), IsCurrent))
+				bool IsSelected = RowIndex == S->FontSuggestionIndex;
+				if (ImGui::Selectable(Name.c_str(), IsCurrent || IsSelected))
 				{
 					snprintf(S->FontNameBuffer, sizeof(S->FontNameBuffer), "%s", Name.c_str());
 					font_name_apply(AppState, Name.c_str());
 					ImGui::CloseCurrentPopup();
+					S->FontSuggestionIndex = -1;
 				}
+				if (IsSelected && Nav.ScrollToSelection)
+				{
+					ImGui::SetScrollHereY();
+				}
+				RowIndex++;
 			}
 		}
 		ImGui::EndPopup();

@@ -38,6 +38,8 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->Ui.SettingsState.LastPreviewTime = -1.0;
 	AppState->Ui.SettingsState.FontNameBuffer[0] = '\0';
 	AppState->Ui.SettingsState.FontNameBufferInitialized = false;
+	AppState->Ui.SettingsState.FontSuggestionIndex = -1;
+	AppState->Ui.SettingsState.FontSuggestionMatchCount = 0;
 	AppState->Ui.SettingsState.Capture.Captured = AppState->RecordHotkey;
 	AppState->Ui.SettingsState.Capture.HasCapture = AppState->RecordHotkey.is_valid();
 	AppState->Ui.SettingsState.Capture.IsCapturing = false;

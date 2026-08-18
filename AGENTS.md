@@ -90,8 +90,7 @@ replacing the `[PLAN]` entry, and stop for review before proceeding.
 
 ### Control Flow
 - Use **early returns** where possible to reduce nesting/indentation
-- Single-statement `if` and `else` bodies go on the **same line** as the condition, without curly brackets (the 120-char line limit does not apply to these)
-- Multi-statement `if`/`else` bodies use curly brackets on **separate lines**
+- Single and Multi-statement `if`/`else` bodies use curly brackets on **separate lines**
 - Single-statement `for` loops **must** use curly brackets
 
 ### General

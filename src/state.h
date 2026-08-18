@@ -53,6 +53,8 @@ struct SettingsWindowState
 	double LastPreviewTime;
 	char FontNameBuffer[128];
 	bool FontNameBufferInitialized;
+	int FontSuggestionIndex;
+	int FontSuggestionMatchCount;
 };
 
 struct ModelDownloadState
