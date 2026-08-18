@@ -95,7 +95,7 @@ transcribe_pcm_to_string(
 			{
 				const char *TokenText = whisper_full_get_token_text(Context, i, j);
 				if (!TokenText || TokenText[0] == '\0') continue;
-				if (strncmp(TokenText, "[_TT_", 5) == 0) continue;
+				if (whisper_full_get_token_id(Context, i, j) >= whisper_token_eot(Context)) continue;
 
 				float P = whisper_full_get_token_p(Context, i, j);
 
