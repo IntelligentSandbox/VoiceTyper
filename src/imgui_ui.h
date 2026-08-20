@@ -215,6 +215,7 @@ render_update_modal(GlobalState *AppState)
 	if (WinW > 560.0f) WinW = 560.0f;
 	ImGui::SetNextWindowSize(ImVec2(WinW, 0.0f), ImGuiCond_Appearing);
 	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowBgAlpha(1.0f);
 
 	bool Open = true;
 	if (ImGui::Begin("Check for Updates", &Open,
