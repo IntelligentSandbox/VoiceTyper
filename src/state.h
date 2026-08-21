@@ -131,6 +131,13 @@ struct UpdateState
 	bool ApplyOnDownload;
 	bool IsModalOpen;
 
+	std::string StagingLatestVersion;
+	std::string StagingReleaseUrl;
+	std::vector<UpdateAssetInfo> StagingAssets;
+	bool StagingIsNewerAvailable;
+	bool StagingCheckSucceeded;
+	bool ThreadIsCheck;
+
 	UpdateAssetInfo PendingAsset;
 	std::string DownloadDestPath;
 
@@ -153,7 +160,10 @@ struct UpdateState
 		CheckJustFinished(false),
 		DownloadJustFinished(false),
 		ApplyOnDownload(false),
-		IsModalOpen(false)
+		IsModalOpen(false),
+		StagingIsNewerAvailable(false),
+		StagingCheckSucceeded(false),
+		ThreadIsCheck(false)
 	{}
 
 	UpdateState(const UpdateState &) = delete;

@@ -394,6 +394,8 @@ updater_fetch_string_linux(const std::string &Url, std::string *OutBody)
 static void
 updater_check_thread(GlobalState *AppState)
 {
+	UpdateState *U = &AppState->Ui.Update;
+
 	std::string Body;
 	bool Fetched =
 #ifdef _WIN32
@@ -407,8 +409,8 @@ updater_check_thread(GlobalState *AppState)
 	std::vector<UpdateAssetInfo> Assets;
 	if (!Fetched || !updater_parse_release_json(Body, &TagName, &HtmlUrl, &Assets))
 	{
-		AppState->Ui.Update.CheckFailed.store(true);
-		AppState->Ui.Update.CheckRunning.store(false);
+		U->StagingCheckSucceeded = false;
+		U->CheckRunning.store(false);
 		return;
 	}
 
@@ -430,14 +432,14 @@ updater_check_thread(GlobalState *AppState)
 	bool HaveLatest = updater_parse_version(TagName, &Latest);
 	bool HaveCurrent = updater_parse_version(updater_current_version_base(), &Current);
 
-	AppState->Ui.Update.LatestVersion = TagName;
-	AppState->Ui.Update.ReleaseUrl = HtmlUrl.empty() ? UPDATER_RELEASES_URL : HtmlUrl;
-	AppState->Ui.Update.Assets = Matching;
-	AppState->Ui.Update.IsNewerAvailable =
+	U->StagingLatestVersion = TagName;
+	U->StagingReleaseUrl = HtmlUrl.empty() ? UPDATER_RELEASES_URL : HtmlUrl;
+	U->StagingAssets = std::move(Matching);
+	U->StagingIsNewerAvailable =
 		HaveLatest && HaveCurrent && updater_version_is_newer(Latest, Current);
+	U->StagingCheckSucceeded = true;
 
-	AppState->Ui.Update.CheckSucceeded.store(true);
-	AppState->Ui.Update.CheckRunning.store(false);
+	U->CheckRunning.store(false);
 }
 
 #ifdef _WIN32
@@ -555,19 +557,40 @@ updater_download_thread(GlobalState *AppState, std::string Url, std::string Dest
 }
 #endif
 
+inline void
+updater_publish_finished_check(GlobalState *AppState)
+{
+	UpdateState *U = &AppState->Ui.Update;
+	if (U->StagingCheckSucceeded)
+	{
+		U->LatestVersion = std::move(U->StagingLatestVersion);
+		U->ReleaseUrl = std::move(U->StagingReleaseUrl);
+		U->Assets = std::move(U->StagingAssets);
+		U->IsNewerAvailable = U->StagingIsNewerAvailable;
+		U->CheckFailed.store(false);
+		U->CheckSucceeded.store(true);
+	}
+	else
+	{
+		U->CheckSucceeded.store(false);
+		U->CheckFailed.store(true);
+	}
+}
+
 inline bool
 start_update_check(GlobalState *AppState)
 {
 	UpdateState *U = &AppState->Ui.Update;
 	if (U->CheckRunning.load() || U->DownloadRunning.load()) return false;
-	if (U->Thread.joinable()) U->Thread.join();
+	if (U->Thread.joinable())
+	{
+		bool WasUnpublishedCheck = U->ThreadIsCheck && !U->CheckJustFinished;
+		U->Thread.join();
+		if (WasUnpublishedCheck) updater_publish_finished_check(AppState);
+	}
 
-	U->CheckSucceeded.store(false);
-	U->CheckFailed.store(false);
 	U->CheckJustFinished = false;
-	U->IsNewerAvailable = false;
-	U->Assets.clear();
-	U->LatestVersion.clear();
+	U->ThreadIsCheck = true;
 
 	U->CheckRunning.store(true);
 	U->Thread = std::thread(updater_check_thread, AppState);
@@ -592,6 +615,7 @@ start_update_download(GlobalState *AppState, const UpdateAssetInfo &Asset, bool 
 	U->ApplyOnDownload = ApplyOnDownload;
 	U->PendingAsset = Asset;
 	U->DownloadDestPath = DestPath;
+	U->ThreadIsCheck = false;
 #ifndef _WIN32
 	U->ChildPid.store(0);
 #endif
@@ -619,9 +643,11 @@ poll_update_check(GlobalState *AppState)
 	UpdateState *U = &AppState->Ui.Update;
 	if (U->CheckRunning.load()) return;
 	if (!U->Thread.joinable()) return;
+	if (!U->ThreadIsCheck) return;
 	if (U->CheckJustFinished) return;
 
 	U->Thread.join();
+	updater_publish_finished_check(AppState);
 	U->CheckJustFinished = true;
 }
 
@@ -631,6 +657,7 @@ poll_update_download(GlobalState *AppState)
 	UpdateState *U = &AppState->Ui.Update;
 	if (U->DownloadRunning.load()) return;
 	if (!U->Thread.joinable()) return;
+	if (U->ThreadIsCheck) return;
 	if (U->DownloadJustFinished) return;
 
 	U->Thread.join();

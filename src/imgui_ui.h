@@ -238,14 +238,14 @@ render_update_modal(GlobalState *AppState)
 				cancel_update_download(AppState);
 			}
 		}
-		else if (U->CheckRunning.load())
-		{
-			ImGui::TextDisabled("Checking for updates...");
-		}
 		else
 		{
-			const char *CheckLabel = (U->CheckSucceeded.load() || U->CheckFailed.load()) ?
+			bool Checking = U->CheckRunning.load();
+			bool Succeeded = U->CheckSucceeded.load();
+			const char *CheckLabel = (Succeeded || U->CheckFailed.load()) ?
 				"Check again" : "Check for updates";
+
+			if (Checking) ImGui::BeginDisabled();
 			if (ImGui::Button(CheckLabel))
 			{
 				start_update_check(AppState);
@@ -256,26 +256,34 @@ render_update_modal(GlobalState *AppState)
 				platform_open_url(U->ReleaseUrl.empty() ? UPDATER_RELEASES_URL : U->ReleaseUrl.c_str());
 			}
 
-			if (U->CheckFailed.load())
+			if (Checking)
+			{
+				ImGui::TextDisabled("Checking for updates...");
+			}
+			else if (U->CheckFailed.load())
 			{
 				ImGui::Text("Update check failed (GitHub unreachable?)");
 			}
-			else if (U->CheckSucceeded.load())
+
+			if (Succeeded)
 			{
 				if (U->Assets.empty())
 				{
-					ImGui::TextDisabled("No matching downloads for this OS.");
+					if (!Checking) ImGui::TextDisabled("No matching downloads for this OS.");
 				}
 				else
 				{
-					if (U->IsNewerAvailable)
+					if (!Checking)
 					{
-						ImGui::TextColored(ImVec4(0.20f, 0.90f, 0.30f, 1.0f), "Update available: %s",
-							U->LatestVersion.c_str());
-					}
-					else
-					{
-						ImGui::TextDisabled("Up to date (%s)", U->LatestVersion.c_str());
+						if (U->IsNewerAvailable)
+						{
+							ImGui::TextColored(ImVec4(0.20f, 0.90f, 0.30f, 1.0f), "Update available: %s",
+								U->LatestVersion.c_str());
+						}
+						else
+						{
+							ImGui::TextDisabled("Up to date (%s)", U->LatestVersion.c_str());
+						}
 					}
 
 					for (const UpdateAssetInfo &Asset : U->Assets)
@@ -299,6 +307,7 @@ render_update_modal(GlobalState *AppState)
 					}
 				}
 			}
+			if (Checking) ImGui::EndDisabled();
 		}
 
 		ImGui::TextDisabled("%s", platform_is_installed_build() ?
