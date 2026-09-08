@@ -51,7 +51,7 @@ migrate_legacy_data_dir_settings()
 	remove(OldPath.c_str());
 
 	std::string DataDir = platform_join_path(platform_get_data_dir(), "data");
-	platform_remove_directory(DataDir);
+	platform_remove_empty_directory(DataDir);
 }
 
 inline std::map<std::string, std::string>

@@ -1007,7 +1007,7 @@ render_settings_panel(GlobalState *AppState)
 
 	if (colored_button("Copy Exe Dir Path", UtilityBtnSize, BUTTON_COLOR_GREY))
 	{
-		std::string ExeDir = platform_get_data_dir();
+		std::string ExeDir = platform_get_binary_dir();
 		ImGui::SetClipboardText(ExeDir.c_str());
 		show_success_toast(AppState, "Exe dir copied to clipboard!");
 	}

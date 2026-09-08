@@ -390,7 +390,7 @@ platform_is_key_down(AppKeyCode Key)
 }
 
 inline std::string
-platform_get_exe_path()
+platform_get_binary_path()
 {
 	char ExePath[MAX_PATH] = {};
 	GetModuleFileNameA(nullptr, ExePath, MAX_PATH);
@@ -400,7 +400,7 @@ platform_get_exe_path()
 inline std::string
 platform_get_binary_dir()
 {
-	std::string ExePath = platform_get_exe_path();
+	std::string ExePath = platform_get_binary_path();
 	size_t LastSlash = ExePath.find_last_of("\\/");
 	if (LastSlash != std::string::npos) ExePath.resize(LastSlash);
 	return ExePath;
@@ -424,7 +424,7 @@ platform_ensure_directory(const std::string &Path)
 }
 
 inline bool
-platform_remove_directory(const std::string &Path)
+platform_remove_empty_directory(const std::string &Path)
 {
 	if (Path.empty()) return false;
 	return RemoveDirectoryA(Path.c_str()) != 0;

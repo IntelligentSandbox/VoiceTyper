@@ -50,7 +50,7 @@ static FILE     *g_BenchLogFile  = nullptr;
 static std::mutex g_BenchLogMutex;
 static bool       g_BenchVerbose  = false;
 
-static std::string get_exe_dir();
+static std::string get_binary_dir();
 
 static void
 bench_log_callback(ggml_log_level Level, const char *Message, void *)
@@ -81,7 +81,7 @@ setup_bench_logging(const BenchOptions &Options)
 
 	if (Options.LogMode == "verbose") g_BenchVerbose = true;
 
-	std::string LogPath = get_exe_dir() + "/bench.log";
+	std::string LogPath = get_binary_dir() + "/bench.log";
 	g_BenchLogFile = fopen(LogPath.c_str(), "w");
 
 	whisper_log_set(bench_log_callback, nullptr);
@@ -648,7 +648,7 @@ format_ms(double Milliseconds)
 }
 
 static std::string
-get_exe_dir()
+get_binary_dir()
 {
 #ifdef _WIN32
 	char ExePath[1024] = {};
@@ -673,9 +673,9 @@ static void
 load_cpu_backend()
 {
 #ifdef _WIN32
-	std::string PluginPath = get_exe_dir() + "/ggml-cpu.dll";
+	std::string PluginPath = get_binary_dir() + "/ggml-cpu.dll";
 #else
-	std::string PluginPath = get_exe_dir() + "/libggml-cpu.so";
+	std::string PluginPath = get_binary_dir() + "/libggml-cpu.so";
 #endif
 
 	FILE *F = std::fopen(PluginPath.c_str(), "rb");
@@ -688,7 +688,7 @@ load_cpu_backend()
 static bool
 load_cuda_plugin(std::string *Error)
 {
-	std::string ExeDir = get_exe_dir();
+	std::string ExeDir = get_binary_dir();
 #ifdef _WIN32
 	std::string PluginPath = ExeDir + "/ggml-cuda.dll";
 #else
