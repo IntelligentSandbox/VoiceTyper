@@ -19,6 +19,7 @@ void platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int Duratio
 bool platform_is_key_down(AppKeyCode Key);
 std::string platform_get_exe_path();
 std::string platform_get_exe_dir();
+std::string platform_get_binary_dir();
 bool platform_ensure_directory(const std::string &Path);
 bool platform_remove_directory(const std::string &Path);
 std::vector<PlatformFileInfo> platform_list_files(const std::string &Dir);

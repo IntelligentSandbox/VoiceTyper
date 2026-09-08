@@ -147,7 +147,7 @@ query_inference_devices(GlobalState *AppState)
 inline void
 load_cpu_backend()
 {
-	std::string ExeDir = platform_get_exe_dir();
+	std::string ExeDir = platform_get_binary_dir();
 
 #ifdef _WIN32
 	std::string PluginPath = platform_join_path(ExeDir, "ggml-cpu.dll");
@@ -170,7 +170,7 @@ refresh_inference_devices(GlobalState *AppState)
 
 	AppState->InferenceDevicesThread = std::thread([AppState]()
 	{
-		std::string ExeDir = platform_get_exe_dir();
+		std::string ExeDir = platform_get_binary_dir();
 
 #ifdef _WIN32
 		std::string PluginPath = platform_join_path(ExeDir, "ggml-cuda.dll");

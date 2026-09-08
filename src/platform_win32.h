@@ -406,6 +406,15 @@ platform_get_exe_dir()
 	return ExePath;
 }
 
+inline std::string
+platform_get_binary_dir()
+{
+	std::string ExePath = platform_get_exe_path();
+	size_t LastSlash = ExePath.find_last_of("\\/");
+	if (LastSlash != std::string::npos) ExePath.resize(LastSlash);
+	return ExePath;
+}
+
 inline bool
 platform_ensure_directory(const std::string &Path)
 {
