@@ -398,7 +398,7 @@ platform_get_exe_path()
 }
 
 inline std::string
-platform_get_exe_dir()
+platform_get_binary_dir()
 {
 	std::string ExePath = platform_get_exe_path();
 	size_t LastSlash = ExePath.find_last_of("\\/");
@@ -407,12 +407,9 @@ platform_get_exe_dir()
 }
 
 inline std::string
-platform_get_binary_dir()
+platform_get_data_dir()
 {
-	std::string ExePath = platform_get_exe_path();
-	size_t LastSlash = ExePath.find_last_of("\\/");
-	if (LastSlash != std::string::npos) ExePath.resize(LastSlash);
-	return ExePath;
+	return platform_get_binary_dir();
 }
 
 inline bool

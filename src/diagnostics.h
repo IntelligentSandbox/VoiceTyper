@@ -45,7 +45,7 @@ diag_crash_dump_path_for_now()
 	Filename += TimeBuf;
 	Filename += CRASH_DUMP_SUFFIX;
 
-	return platform_join_path(platform_get_exe_dir(), Filename);
+	return platform_join_path(platform_get_data_dir(), Filename);
 }
 
 inline void
@@ -130,7 +130,7 @@ check_for_previous_crash_dumps(std::vector<std::string> *OutPaths)
 {
 	OutPaths->clear();
 
-	std::string Dir = platform_get_exe_dir();
+	std::string Dir = platform_get_data_dir();
 	std::vector<PlatformFileInfo> Files = platform_list_files(Dir);
 
 	size_t SuffixLen = strlen(CRASH_DUMP_SUFFIX);

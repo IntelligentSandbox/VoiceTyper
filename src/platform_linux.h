@@ -889,11 +889,8 @@ platform_get_exe_path()
 }
 
 inline std::string
-platform_get_exe_dir()
+platform_get_binary_dir()
 {
-	const char *DataDir = getenv("VOICETYPER_DATA_DIR");
-	if (DataDir && DataDir[0] != '\0') return std::string(DataDir);
-
 	std::string ExePath = platform_get_exe_path();
 	size_t LastSlash = ExePath.find_last_of('/');
 	if (LastSlash != std::string::npos) ExePath.resize(LastSlash);
@@ -901,12 +898,12 @@ platform_get_exe_dir()
 }
 
 inline std::string
-platform_get_binary_dir()
+platform_get_data_dir()
 {
-	std::string ExePath = platform_get_exe_path();
-	size_t LastSlash = ExePath.find_last_of('/');
-	if (LastSlash != std::string::npos) ExePath.resize(LastSlash);
-	return ExePath;
+	const char *DataDir = getenv("VOICETYPER_DATA_DIR");
+	if (DataDir && DataDir[0] != '\0') return std::string(DataDir);
+
+	return platform_get_binary_dir();
 }
 
 inline bool

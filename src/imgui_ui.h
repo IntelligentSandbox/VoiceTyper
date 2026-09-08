@@ -1007,7 +1007,7 @@ render_settings_panel(GlobalState *AppState)
 
 	if (colored_button("Copy Exe Dir Path", UtilityBtnSize, BUTTON_COLOR_GREY))
 	{
-		std::string ExeDir = platform_get_exe_dir();
+		std::string ExeDir = platform_get_data_dir();
 		ImGui::SetClipboardText(ExeDir.c_str());
 		show_success_toast(AppState, "Exe dir copied to clipboard!");
 	}
@@ -1898,13 +1898,13 @@ render_download_modal(GlobalState *AppState)
 				{
 					D->PendingModelName = M.Name;
 					D->PendingUrl = catalog_model_url(M.Name);
-					std::string SttDir = platform_join_path(platform_get_exe_dir(), "stt_models");
+					std::string SttDir = platform_join_path(platform_get_data_dir(), "stt_models");
 					D->PendingDestPath = platform_join_path(SttDir, Filename);
 					D->PendingSize = M.SizeBytes;
 					if (Installed) D->WantsOverwriteConfirm = true;
 					else
 					{
-						platform_ensure_directory(platform_join_path(platform_get_exe_dir(), "stt_models"));
+						platform_ensure_directory(platform_join_path(platform_get_data_dir(), "stt_models"));
 						start_model_download(AppState, M.Name, D->PendingUrl, D->PendingDestPath, M.SizeBytes);
 					}
 				}
@@ -1915,7 +1915,7 @@ render_download_modal(GlobalState *AppState)
 					std::string DeleteLabel = std::string("Delete##del-cat-") + M.Name;
 					if (colored_button(DeleteLabel.c_str(), ImVec2(BtnW, 0.0f), BUTTON_COLOR_RED))
 					{
-						std::string SttDir = platform_join_path(platform_get_exe_dir(), "stt_models");
+						std::string SttDir = platform_join_path(platform_get_data_dir(), "stt_models");
 						std::string Path = platform_join_path(SttDir, Filename);
 						if (remove(Path.c_str()) == 0)
 						{
@@ -1961,7 +1961,7 @@ render_download_modal(GlobalState *AppState)
 				{
 					D->PendingModelName = VAD_MODEL_DISPLAY_NAME;
 					D->PendingUrl = vad_model_url();
-					std::string VadDir = platform_join_path(platform_get_exe_dir(), "vad_models");
+					std::string VadDir = platform_join_path(platform_get_data_dir(), "vad_models");
 					D->PendingDestPath = platform_join_path(VadDir, VAD_MODEL_FILENAME);
 					D->PendingSize = VAD_MODEL_SIZE_BYTES;
 					if (VadInstalled) D->WantsOverwriteConfirm = true;

@@ -10,13 +10,13 @@
 inline std::string
 get_settings_file_path()
 {
-	return platform_join_path(platform_get_exe_dir(), "settings.ini");
+	return platform_join_path(platform_get_data_dir(), "settings.ini");
 }
 
 inline void
 cleanup_legacy_settings_json()
 {
-	std::string Path = platform_join_path(platform_get_exe_dir(), "settings.json");
+	std::string Path = platform_join_path(platform_get_data_dir(), "settings.json");
 	remove(Path.c_str());
 }
 
@@ -24,7 +24,7 @@ inline void
 migrate_legacy_data_dir_settings()
 {
 	std::string NewPath = get_settings_file_path();
-	std::string OldPath = platform_join_path(platform_get_exe_dir(), "data/settings.ini");
+	std::string OldPath = platform_join_path(platform_get_data_dir(), "data/settings.ini");
 
 	FILE *OldFile = fopen(OldPath.c_str(), "r");
 	if (!OldFile) return;
@@ -50,7 +50,7 @@ migrate_legacy_data_dir_settings()
 	// file already had content the legacy copy is a stale duplicate.
 	remove(OldPath.c_str());
 
-	std::string DataDir = platform_join_path(platform_get_exe_dir(), "data");
+	std::string DataDir = platform_join_path(platform_get_data_dir(), "data");
 	platform_remove_directory(DataDir);
 }
 

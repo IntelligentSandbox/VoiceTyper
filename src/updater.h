@@ -942,7 +942,7 @@ updater_string_ends_with(const std::string &Text, const char *Suffix)
 static bool
 updater_apply_portable_zip(const std::string &ZipPath)
 {
-	std::string ExeDir = updater_forward_slashes(platform_get_exe_dir());
+	std::string ExeDir = updater_forward_slashes(platform_get_data_dir());
 	std::string BatPath = updater_forward_slashes(
 		platform_join_path(platform_get_temp_dir(), "voicetyper-apply-update.bat"));
 	std::string Zip = updater_forward_slashes(ZipPath);
@@ -983,7 +983,7 @@ updater_apply_msi(const std::string &MsiPath)
 static bool
 updater_apply_portable_tarball(const std::string &TarPath)
 {
-	std::string ExeDir = platform_get_exe_dir();
+	std::string ExeDir = platform_get_data_dir();
 	std::string ScriptPath = platform_join_path(platform_get_temp_dir(), "voicetyper-apply-update.sh");
 
 	char PidStr[32];

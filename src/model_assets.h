@@ -13,13 +13,13 @@ inline void
 query_vad_model_path(GlobalState *AppState)
 {
 	AppState->VadModelPath = platform_join_path(
-		platform_join_path(platform_get_exe_dir(), "vad_models"), VAD_MODEL_FILENAME);
+		platform_join_path(platform_get_data_dir(), "vad_models"), VAD_MODEL_FILENAME);
 }
 
 inline bool
 vad_model_installed(GlobalState *AppState)
 {
-	std::string Dir = platform_join_path(platform_get_exe_dir(), "vad_models");
+	std::string Dir = platform_join_path(platform_get_data_dir(), "vad_models");
 	std::vector<PlatformFileInfo> Files = platform_list_files(Dir);
 	for (const PlatformFileInfo &File : Files)
 	{
@@ -34,7 +34,7 @@ cleanup_partial_model_downloads()
 	const char *DirNames[] = { "stt_models", "vad_models" };
 	for (const char *DirName : DirNames)
 	{
-		std::string Dir = platform_join_path(platform_get_exe_dir(), DirName);
+		std::string Dir = platform_join_path(platform_get_data_dir(), DirName);
 		std::vector<PlatformFileInfo> Files = platform_list_files(Dir);
 		for (const PlatformFileInfo &File : Files)
 		{
@@ -50,7 +50,7 @@ query_available_stt_models(GlobalState *AppState)
 	AppState->STTModelNames.clear();
 	AppState->STTModelPaths.clear();
 
-	std::string Dir = platform_join_path(platform_get_exe_dir(), "stt_models");
+	std::string Dir = platform_join_path(platform_get_data_dir(), "stt_models");
 	std::vector<PlatformFileInfo> Files = platform_list_files(Dir);
 
 	for (const PlatformFileInfo &File : Files)
