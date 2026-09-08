@@ -69,9 +69,62 @@ milliseconds_until_counter(Uint64 Now, Uint64 Deadline)
 }
 
 static void
+linux_load_font_atlas(GlobalState *AppState)
+{
+	ImGuiIO &Io = ImGui::GetIO();
+	Io.Fonts->Clear();
+
+	bool Loaded = false;
+	if (!AppState->UiFontName.empty())
+	{
+		std::string Path;
+		if (resolve_font_path(AppState->UiFontName, &Path))
+		{
+			Loaded = Io.Fonts->AddFontFromFileTTF(Path.c_str(), (float)AppState->UiFontSize) != nullptr;
+		}
+		if (!Loaded)
+		{
+			show_toast(AppState, "Configured font could not be loaded; using a system default.");
+		}
+	}
+
+	if (!Loaded)
+	{
+		const char *FallbackNames[] = {
+			"DejaVu Sans",
+			"Liberation Sans",
+			"Noto Sans",
+			"FreeSans",
+			"Ubuntu",
+		};
+		for (const char *Name : FallbackNames)
+		{
+			std::string Path;
+			if (resolve_font_path(Name, &Path) &&
+				Io.Fonts->AddFontFromFileTTF(Path.c_str(), (float)AppState->UiFontSize) != nullptr)
+			{
+				Loaded = true;
+				break;
+			}
+		}
+	}
+
+	if (!Loaded)
+	{
+		Io.Fonts->AddFontDefault();
+	}
+}
+
+static void
 render_frame(SDL_Renderer *Renderer)
 {
 	if (!g_AppState) return;
+
+	if (g_AppState->Ui.FontReloadRequested)
+	{
+		g_AppState->Ui.FontReloadRequested = false;
+		linux_load_font_atlas(g_AppState);
+	}
 
 	int OutputW = 0;
 	int OutputH = 0;
@@ -150,7 +203,7 @@ main(int, char **)
 	Io.IniFilename = nullptr;
 
 	apply_ui_theme(AppState);
-	Io.Fonts->AddFontDefault();
+	linux_load_font_atlas(AppState);
 
 	ImGui_ImplSDL2_InitForSDLRenderer(Window, Renderer);
 	ImGui_ImplSDLRenderer2_Init(Renderer);

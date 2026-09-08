@@ -31,6 +31,7 @@
           runtimeLibs = with pkgs; [
             SDL2
             alsa-lib
+            fontconfig
             libGL
             libglvnd
             libxkbcommon
@@ -590,6 +591,13 @@
                   ''}
 
                   cp -Lf ${sdl2}/lib/libSDL2-2.0.so.0 $out/
+
+                  # libfontconfig.so.1 for the app's dlopen'd font enumeration
+                  # (display-server agnostic: serves both the x11 and wayland
+                  # flavours). Its freetype/expat/... closure is pulled in by
+                  # the ldd loop below; config still comes from the host's
+                  # /etc/fonts so the host's fonts are enumerated.
+                  cp -Lf ${pkgs.fontconfig.lib}/lib/libfontconfig.so.1 $out/
 
                   # libstdc++ / libgcc_s from the compiler runtime (the app is
                   # built against the toolchain libstdc++; bundling keeps older

@@ -13,7 +13,9 @@
 #include <cstdio>
 #include <cstring>
 #include <dirent.h>
+#include <dlfcn.h>
 #include <limits.h>
+#include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <thread>
@@ -25,8 +27,6 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 #include <SDL_syswm.h>
-#include <dlfcn.h>
-#include <mutex>
 #endif
 
 inline std::vector<AudioInputDeviceInfo>
@@ -1195,15 +1195,211 @@ linux_font_scan_dir(const std::string &Dir, int Depth, std::vector<PlatformFontI
 	closedir(Directory);
 }
 
+static int
+linux_font_face_rank(const std::string &Path)
+{
+	size_t Slash = Path.find_last_of('/');
+	std::string FileName = (Slash == std::string::npos) ? Path : Path.substr(Slash + 1);
+	std::string Lower = linux_string_to_lower(FileName);
+	if (Lower.find("regular") != std::string::npos)
+	{
+		return 0;
+	}
+	if (Lower.find("bold") != std::string::npos || Lower.find("italic") != std::string::npos ||
+		Lower.find("oblique") != std::string::npos || Lower.find("light") != std::string::npos ||
+		Lower.find("thin") != std::string::npos || Lower.find("black") != std::string::npos ||
+		Lower.find("medium") != std::string::npos || Lower.find("condensed") != std::string::npos)
+	{
+		return 2;
+	}
+	return 1;
+}
+
 static bool
 linux_font_less(const PlatformFontInfo &A, const PlatformFontInfo &B)
 {
-	return linux_string_to_lower(A.Name) < linux_string_to_lower(B.Name);
+	std::string LowerA = linux_string_to_lower(A.Name);
+	std::string LowerB = linux_string_to_lower(B.Name);
+	if (LowerA != LowerB)
+	{
+		return LowerA < LowerB;
+	}
+
+	int RankA = linux_font_face_rank(A.Path);
+	int RankB = linux_font_face_rank(B.Path);
+	if (RankA != RankB)
+	{
+		return RankA < RankB;
+	}
+
+	return A.Path < B.Path;
+}
+
+static bool
+linux_font_same(const PlatformFontInfo &A, const PlatformFontInfo &B)
+{
+	return A.Path == B.Path && linux_string_to_lower(A.Name) == linux_string_to_lower(B.Name);
+}
+
+// fontconfig enumeration. fontconfig is the display-server-agnostic font
+// registry on Linux: the same query works under both X11 and Wayland, and it
+// knows every font the desktop sees (distro font packages, NixOS profiles,
+// ~/.local/share/fonts, flatpak extras, ...) with proper family names and the
+// file backing each face. The library is dlopened (like libX11 above) so
+// systems without it fall back to the plain directory scan below.
+typedef int LinuxFcBool;
+typedef int LinuxFcResult;
+typedef struct LinuxFcConfig LinuxFcConfig;
+typedef struct LinuxFcPattern LinuxFcPattern;
+typedef struct LinuxFcObjectSet LinuxFcObjectSet;
+typedef unsigned char LinuxFcChar8;
+
+struct LinuxFcFontSet
+{
+	int NFont;
+	int SFont;
+	LinuxFcPattern **Fonts;
+};
+
+struct LinuxFcApiType
+{
+	void *Lib;
+	bool Ready;
+
+	LinuxFcBool (*FcInit)(void);
+	LinuxFcPattern *(*FcPatternCreate)(void);
+	void (*FcPatternDestroy)(LinuxFcPattern *);
+	LinuxFcBool (*FcPatternAddBool)(LinuxFcPattern *, const char *, LinuxFcBool);
+	LinuxFcObjectSet *(*FcObjectSetCreate)(void);
+	LinuxFcBool (*FcObjectSetAdd)(LinuxFcObjectSet *, const char *);
+	void (*FcObjectSetDestroy)(LinuxFcObjectSet *);
+	LinuxFcFontSet *(*FcFontList)(LinuxFcConfig *, LinuxFcPattern *, LinuxFcObjectSet *);
+	LinuxFcResult (*FcPatternGetString)(LinuxFcPattern *, const char *, int, LinuxFcChar8 **);
+	void (*FcFontSetDestroy)(LinuxFcFontSet *);
+};
+
+static LinuxFcApiType g_LinuxFcApi = {};
+static std::once_flag g_LinuxFcOnce;
+
+static void
+linux_fc_init_once()
+{
+	void *Lib = dlopen("libfontconfig.so.1", RTLD_LAZY | RTLD_LOCAL);
+	if (!Lib)
+	{
+		return;
+	}
+
+	LinuxFcApiType Api = {};
+	Api.Lib = Lib;
+	Api.FcInit = reinterpret_cast<LinuxFcBool (*)(void)>(dlsym(Lib, "FcInit"));
+	Api.FcPatternCreate = reinterpret_cast<LinuxFcPattern *(*)(void)>(dlsym(Lib, "FcPatternCreate"));
+	Api.FcPatternDestroy = reinterpret_cast<void (*)(LinuxFcPattern *)>(dlsym(Lib, "FcPatternDestroy"));
+	Api.FcPatternAddBool = reinterpret_cast<LinuxFcBool (*)(LinuxFcPattern *, const char *, LinuxFcBool)>(
+		dlsym(Lib, "FcPatternAddBool"));
+	Api.FcObjectSetCreate = reinterpret_cast<LinuxFcObjectSet *(*)(void)>(dlsym(Lib, "FcObjectSetCreate"));
+	Api.FcObjectSetAdd = reinterpret_cast<LinuxFcBool (*)(LinuxFcObjectSet *, const char *)>(dlsym(Lib, "FcObjectSetAdd"));
+	Api.FcObjectSetDestroy = reinterpret_cast<void (*)(LinuxFcObjectSet *)>(dlsym(Lib, "FcObjectSetDestroy"));
+	Api.FcFontList = reinterpret_cast<LinuxFcFontSet *(*)(LinuxFcConfig *, LinuxFcPattern *, LinuxFcObjectSet *)>(
+		dlsym(Lib, "FcFontList"));
+	Api.FcPatternGetString = reinterpret_cast<LinuxFcResult (*)(LinuxFcPattern *, const char *, int, LinuxFcChar8 **)>(
+		dlsym(Lib, "FcPatternGetString"));
+	Api.FcFontSetDestroy = reinterpret_cast<void (*)(LinuxFcFontSet *)>(dlsym(Lib, "FcFontSetDestroy"));
+
+	if (!Api.FcInit || !Api.FcPatternCreate || !Api.FcPatternDestroy || !Api.FcPatternAddBool ||
+		!Api.FcObjectSetCreate || !Api.FcObjectSetAdd || !Api.FcObjectSetDestroy || !Api.FcFontList ||
+		!Api.FcPatternGetString || !Api.FcFontSetDestroy)
+	{
+		dlclose(Lib);
+		return;
+	}
+
+	if (!Api.FcInit())
+	{
+		dlclose(Lib);
+		return;
+	}
+
+	Api.Ready = true;
+	g_LinuxFcApi = Api;
+}
+
+static bool
+linux_font_enumerate_fontconfig(std::vector<PlatformFontInfo> &Fonts)
+{
+	std::call_once(g_LinuxFcOnce, linux_fc_init_once);
+	LinuxFcApiType *Api = &g_LinuxFcApi;
+	if (!Api->Ready)
+	{
+		return false;
+	}
+
+	LinuxFcPattern *Pattern = Api->FcPatternCreate();
+	LinuxFcObjectSet *ObjectSet = Api->FcObjectSetCreate();
+	if (!Pattern || !ObjectSet)
+	{
+		if (Pattern)
+		{
+			Api->FcPatternDestroy(Pattern);
+		}
+		if (ObjectSet)
+		{
+			Api->FcObjectSetDestroy(ObjectSet);
+		}
+		return false;
+	}
+
+	Api->FcPatternAddBool(Pattern, "scalable", 1);
+	Api->FcObjectSetAdd(ObjectSet, "family");
+	Api->FcObjectSetAdd(ObjectSet, "file");
+
+	LinuxFcFontSet *FontSet = Api->FcFontList(nullptr, Pattern, ObjectSet);
+	Api->FcPatternDestroy(Pattern);
+	Api->FcObjectSetDestroy(ObjectSet);
+	if (!FontSet)
+	{
+		return false;
+	}
+
+	for (int Index = 0; Index < FontSet->NFont; Index++)
+	{
+		LinuxFcChar8 *Family = nullptr;
+		LinuxFcChar8 *File = nullptr;
+		if (Api->FcPatternGetString(FontSet->Fonts[Index], "family", 0, &Family) != 0)
+		{
+			continue;
+		}
+		if (Api->FcPatternGetString(FontSet->Fonts[Index], "file", 0, &File) != 0)
+		{
+			continue;
+		}
+		if (!Family || !File || !Family[0] || !File[0])
+		{
+			continue;
+		}
+
+		PlatformFontInfo Info = {};
+		Info.Name = reinterpret_cast<const char *>(Family);
+		Info.Path = reinterpret_cast<const char *>(File);
+		Fonts.push_back(Info);
+	}
+
+	Api->FcFontSetDestroy(FontSet);
+
+	return Fonts.size() > 0;
 }
 
 inline std::vector<PlatformFontInfo>
 platform_enumerate_fonts()
 {
+	std::vector<PlatformFontInfo> Fonts;
+	if (linux_font_enumerate_fontconfig(Fonts))
+	{
+		std::sort(Fonts.begin(), Fonts.end(), linux_font_less);
+		Fonts.erase(std::unique(Fonts.begin(), Fonts.end(), linux_font_same), Fonts.end());
+		return Fonts;
+	}
+
 	std::vector<std::string> CandidateDirs;
 
 	const char *Home = getenv("HOME");
@@ -1223,7 +1419,7 @@ platform_enumerate_fonts()
 		linux_font_push_dir(CandidateDirs, platform_join_path(Home, ".fonts"));
 	}
 
-	std::string DataDirs = "/usr/local/share:/usr/share";
+	std::string DataDirs = "/usr/local/share:/usr/share:/run/current-system/sw/share";
 	const char *XdgDataDirs = getenv("XDG_DATA_DIRS");
 	if (XdgDataDirs && XdgDataDirs[0] != '\0')
 	{
@@ -1249,7 +1445,6 @@ platform_enumerate_fonts()
 	linux_font_push_dir(CandidateDirs, "/usr/share/fonts");
 	linux_font_push_dir(CandidateDirs, "/usr/local/share/fonts");
 
-	std::vector<PlatformFontInfo> Fonts;
 	for (const std::string &Dir : CandidateDirs)
 	{
 		linux_font_scan_dir(Dir, 0, Fonts);
