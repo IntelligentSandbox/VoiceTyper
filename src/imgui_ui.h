@@ -1262,8 +1262,9 @@ render_hotkeys_modal(GlobalState *AppState)
         HotkeyMarkStyle.DiameterScale = 0.75f;
 		hover_help_mark(
 			"Override the paste text keyboard shortcut for individual programs, matched by executable name. "
+			"Type a program name below and press Enter to start capturing its shortcut. "
 			"Click a shortcut to change it, X to remove it.",
-            HotkeyMarkStyle);
+			HotkeyMarkStyle);
 		ImGui::SameLine();
 		std::string DefaultPasteLabel = AppState->PasteHotkey.is_valid()
 			? hotkey_to_label(AppState->PasteHotkey) : "(none)";
@@ -1350,11 +1351,14 @@ render_hotkeys_modal(GlobalState *AppState)
 		else
 		{
 			ImGui::SetNextItemWidth(-1.0f);
-			ImGui::InputTextWithHint("##NewPasteOverrideProcess", "Program executable name (e.g. Code.exe, WindowsTerminal.exe)",
-				S->NewPasteOverrideProcess, sizeof(S->NewPasteOverrideProcess));
+			bool NameConfirmed = ImGui::InputTextWithHint("##NewPasteOverrideProcess",
+				"Program executable name (e.g. Code.exe, WindowsTerminal.exe)",
+				S->NewPasteOverrideProcess, sizeof(S->NewPasteOverrideProcess),
+				ImGuiInputTextFlags_EnterReturnsTrue);
 			std::string NewName = paste_override_process_name_from_input(S->NewPasteOverrideProcess);
-			if (colored_button("Set Paste Hotkey for Program...", ImVec2(-1.0f, 30.0f), BUTTON_COLOR_GREY,
-				!NewName.empty()))
+			bool StartCapture = colored_button("Set Paste Hotkey for Program...", ImVec2(-1.0f, 30.0f),
+				BUTTON_COLOR_GREY, !NewName.empty());
+			if ((StartCapture || NameConfirmed) && !NewName.empty())
 			{
 				S->PasteOverrideCaptureProcess = NewName;
 				S->PasteOverrideCapture.Captured = {};
