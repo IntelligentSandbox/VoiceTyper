@@ -202,11 +202,77 @@ platform_set_clipboard_text_win32(const char *Utf8Text)
 	return true;
 }
 
+static bool
+platform_get_clipboard_text_win32(std::wstring *Out, bool *HasText)
+{
+	if (!Out || !HasText || !OpenClipboard(nullptr)) return false;
+
+	bool Ok = false;
+	*HasText = false;
+	HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+	if (hData)
+	{
+		const wchar_t *pMem = (const wchar_t *)GlobalLock(hData);
+		if (pMem)
+		{
+			Out->assign(pMem);
+			GlobalUnlock(hData);
+			*HasText = !Out->empty();
+		}
+	}
+	CloseClipboard();
+	return true;
+}
+
+static bool
+platform_restore_clipboard_text_win32(const std::wstring &Wide)
+{
+	if (Wide.empty()) return false;
+
+	SIZE_T Bytes = (Wide.size() + 1) * sizeof(wchar_t);
+	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, Bytes);
+	if (!hMem) return false;
+
+	wchar_t *pMem = (wchar_t *)GlobalLock(hMem);
+	if (!pMem)
+	{
+		GlobalFree(hMem);
+		return false;
+	}
+	memcpy(pMem, Wide.c_str(), Bytes);
+	GlobalUnlock(hMem);
+
+	if (!OpenClipboard(nullptr))
+	{
+		GlobalFree(hMem);
+		return false;
+	}
+
+	EmptyClipboard();
+	bool Ok = SetClipboardData(CF_UNICODETEXT, hMem) != nullptr;
+	CloseClipboard();
+	if (!Ok) GlobalFree(hMem);
+	return Ok;
+}
+
+static bool
+platform_clear_clipboard_win32()
+{
+	if (!OpenClipboard(nullptr)) return false;
+	EmptyClipboard();
+	CloseClipboard();
+	return true;
+}
+
 static void
 platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const HotkeyConfig &PasteHotkey)
 {
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
+
+	std::wstring PreviousClipboard;
+	bool HadPreviousText = false;
+	bool InspectedClipboard = platform_get_clipboard_text_win32(&PreviousClipboard, &HadPreviousText);
 
 	if (!platform_set_clipboard_text_win32(Utf8Text)) return;
 
@@ -253,6 +319,12 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 	}
 
 	SendInput(Count, Inputs, sizeof(INPUT));
+
+	Sleep(200);
+
+	if (!InspectedClipboard) return;
+	if (HadPreviousText) platform_restore_clipboard_text_win32(PreviousClipboard);
+	else platform_clear_clipboard_win32();
 }
 
 inline void

@@ -444,6 +444,12 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 			}
 		}
 
+		char *PreviousClipboard = SDL_GetClipboardText();
+		bool HadPreviousText = PreviousClipboard && PreviousClipboard[0] != '\0';
+		std::string PreviousText = HadPreviousText ? std::string(PreviousClipboard) : std::string();
+		bool CanRestoreClipboard = PreviousClipboard != nullptr;
+		if (PreviousClipboard) SDL_free(PreviousClipboard);
+
 		SDL_SetClipboardText(Utf8);
 		linux_x11_activate_window(*Api, Dpy, Root, XID);
 		usleep(50000);
@@ -513,6 +519,12 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 		}
 		Api->XSync(Dpy, False);
 		Api->XSetErrorHandler(Prev);
+
+		if (CanRestoreClipboard)
+		{
+			usleep(200000);
+			SDL_SetClipboardText(PreviousText.c_str());
+		}
 		return;
 	}
 #else
