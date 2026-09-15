@@ -43,6 +43,7 @@ static bool                    g_InSizeMove              = false;
 static LONGLONG                g_AppUpdateIntervalTicks  = 0;
 static LONGLONG                g_NextAppTick             = 0;
 static AppFrameState           g_FrameState              = {};
+static bool                    g_HasPresentedFrame       = false;
 
 // ---------------------------------------------------------------------------
 // Forward Declarations
@@ -327,6 +328,7 @@ render_frame()
 	// TODO: Reevaluate this if vsync fights the explicit render scheduler or causes cadence issues.
 	HRESULT Hr = g_SwapChain->Present(1, 0);
 	g_SwapChainOccluded = (Hr == DXGI_STATUS_OCCLUDED);
+	g_HasPresentedFrame = true;
 }
 
 // Runs any due app update ticks, shared by the main loop and the live-resize
@@ -376,6 +378,7 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 			g_SwapChain->ResizeBuffers(
 				0, (UINT)LOWORD(LParam), (UINT)HIWORD(LParam), DXGI_FORMAT_UNKNOWN, 0);
 			create_render_target();
+			g_HasPresentedFrame = false;
 		}
 		return 0;
 
@@ -401,12 +404,15 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 		return 0;
 
 	case WM_PAINT:
-		if (g_InSizeMove)
+		if (g_InSizeMove || !g_HasPresentedFrame)
 		{
-			LONGLONG Now = performance_counter_now();
-			run_due_app_updates(Now);
-			if (window_can_render(Hwnd)) render_frame();
-			return 0;
+			if (g_ImGuiReady)
+			{
+				LONGLONG Now = performance_counter_now();
+				run_due_app_updates(Now);
+				if (window_can_render(Hwnd)) render_frame();
+				return 0;
+			}
 		}
 		ValidateRect(Hwnd, nullptr);
 		return 0;
@@ -507,11 +513,18 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	g_NextAppTick = Now;
 	LONGLONG NextRenderTick = Now;
 
+	// Render one frame while the window is still hidden: this warms the font
+	// atlas upload and the DX11 pipeline and leaves a real frame in the
+	// backbuffer, so the window never composites an uninitialized surface.
+	render_frame();
+
 	// The window is shown only once every UI-thread initialization (settings,
-	// fonts, ImGui + DX11 backends) is done, so the first presented frame is
-	// drawn immediately after it appears instead of showing a blank window.
+	// fonts, ImGui + DX11 backends) is done. The first frame shown is rendered
+	// for the final window size (a maximizing ShowWindow resizes the swapchain
+	// first), so no stale or wrongly laid-out frame is ever presented.
 	ShowWindow(Hwnd, Maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
 	UpdateWindow(Hwnd);
+	render_frame();
 
 	// Kick the CUDA/GPU probe last: loading the CUDA plugin DLLs holds the
 	// loader lock, so it must not overlap the UI thread's init work above.

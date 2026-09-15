@@ -36,6 +36,7 @@ save_window_size(SDL_Window *Window)
 	if (Width < WINDOW_MIN_WIDTH || Height < WINDOW_MIN_HEIGHT) return;
 
 	save_window_size_setting(Width, Height);
+	save_bool_setting("window_maximized", (SDL_GetWindowFlags(Window) & SDL_WINDOW_MAXIMIZED) != 0);
 }
 
 static Uint64
@@ -164,15 +165,17 @@ main(int, char **)
 
 	int WindowWidth = WINDOW_DEFAULT_WIDTH;
 	int WindowHeight = WINDOW_DEFAULT_HEIGHT;
-	load_window_size(&WindowWidth, &WindowHeight);
+	bool HasSavedWindowSize = load_window_size(&WindowWidth, &WindowHeight);
+
+	bool Maximized = true;
+	if (HasSavedWindowSize) load_bool_setting("window_maximized", &Maximized);
 
 	SDL_Window *Window = SDL_CreateWindow(
 		"VoiceTyper",
 		SDL_WINDOWPOS_CENTERED,
 		SDL_WINDOWPOS_CENTERED,
-		WindowWidth,
-		WindowHeight,
-		SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_MAXIMIZED);
+		WindowWidth, WindowHeight,
+		SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
 	if (!Window)
 	{
 		printf("[platform_linux] SDL window creation failed: %s\n", SDL_GetError());
@@ -207,6 +210,37 @@ main(int, char **)
 
 	ImGui_ImplSDL2_InitForSDLRenderer(Window, Renderer);
 	ImGui_ImplSDLRenderer2_Init(Renderer);
+
+	if (Maximized)
+	{
+		SDL_MaximizeWindow(Window);
+
+		// Let the WM/compositor apply the maximize while the window is still
+		// hidden, so the first rendered frame uses the final window size.
+		Uint32 HardDeadline = SDL_GetTicks() + 150;
+		Uint32 LastSizeEvent = SDL_GetTicks();
+		SDL_Event Event;
+		while (SDL_GetTicks() - LastSizeEvent < 30 && SDL_GetTicks() < HardDeadline)
+		{
+			while (SDL_PollEvent(&Event))
+			{
+				ImGui_ImplSDL2_ProcessEvent(&Event);
+				if (Event.type == SDL_WINDOWEVENT &&
+					(Event.window.event == SDL_WINDOWEVENT_RESIZED ||
+					 Event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED))
+				{
+					LastSizeEvent = SDL_GetTicks();
+				}
+			}
+			SDL_Delay(5);
+		}
+	}
+
+	// Render the first frame for the final window size before showing the
+	// window, so the first thing presented on screen is the properly laid-out
+	// UI instead of a blank or wrongly sized layout.
+	render_frame(Renderer);
+	SDL_ShowWindow(Window);
 
 	// Kick the CUDA/GPU probe last: dlopening the CUDA plugin and its .so
 	// closure holds the loader lock, so it must not overlap the UI thread's
