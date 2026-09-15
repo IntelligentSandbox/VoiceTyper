@@ -37,6 +37,16 @@ save_window_size(SDL_Window *Window)
 
 	save_window_size_setting(Width, Height);
 	save_bool_setting("window_maximized", (SDL_GetWindowFlags(Window) & SDL_WINDOW_MAXIMIZED) != 0);
+
+	// Wayland positions windows itself; the queried coordinates are not
+	// meaningful there and must not overwrite a useful X11-saved position.
+	const char *VideoDriver = SDL_GetCurrentVideoDriver();
+	if (VideoDriver && std::string(VideoDriver) == "wayland") return;
+
+	int X = 0;
+	int Y = 0;
+	SDL_GetWindowPosition(Window, &X, &Y);
+	save_window_position_setting(X, Y);
 }
 
 static Uint64
@@ -170,10 +180,25 @@ main(int, char **)
 	bool Maximized = true;
 	if (HasSavedWindowSize) load_bool_setting("window_maximized", &Maximized);
 
+	// Restore the exact last-closed position when the display server allows
+	// client positioning (X11); on Wayland the compositor decides and the
+	// coordinates are ignored.
+	int WindowX = SDL_WINDOWPOS_CENTERED;
+	int WindowY = SDL_WINDOWPOS_CENTERED;
+	if (HasSavedWindowSize)
+	{
+		int SavedX = 0;
+		int SavedY = 0;
+		if (load_window_position_setting(&SavedX, &SavedY))
+		{
+			WindowX = SavedX;
+			WindowY = SavedY;
+		}
+	}
+
 	SDL_Window *Window = SDL_CreateWindow(
 		"VoiceTyper",
-		SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED,
+		WindowX, WindowY,
 		WindowWidth, WindowHeight,
 		SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
 	if (!Window)

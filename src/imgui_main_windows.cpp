@@ -148,7 +148,7 @@ load_window_size(int *OutWidth, int *OutHeight)
 }
 
 static void
-save_window_size(HWND Hwnd)
+save_window_placement(HWND Hwnd)
 {
 	WINDOWPLACEMENT Placement = {};
 	Placement.length = sizeof(WINDOWPLACEMENT);
@@ -159,7 +159,14 @@ save_window_size(HWND Hwnd)
 	int Height = Rect.bottom - Rect.top;
 	if (Width < WINDOW_MIN_WIDTH || Height < WINDOW_MIN_HEIGHT) return;
 
+	// WINDOWPLACEMENT coordinates are workspace coordinates (relative to the
+	// primary monitor's work area); convert to the screen coordinates that
+	// CreateWindowW expects.
+	RECT WorkArea = {};
+	SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0);
+
 	save_window_size_setting(Width, Height);
+	save_window_position_setting(Rect.left + WorkArea.left, Rect.top + WorkArea.top);
 	save_bool_setting("window_maximized", Placement.showCmd == SW_SHOWMAXIMIZED);
 }
 
@@ -422,7 +429,7 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 		break;
 
 	case WM_DESTROY:
-		save_window_size(Hwnd);
+		save_window_placement(Hwnd);
 		PostQuitMessage(0);
 		return 0;
 	}
@@ -460,9 +467,30 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	bool Maximized = true;
 	if (HasSavedWindowSize) load_bool_setting("window_maximized", &Maximized);
 
+	// Restore the exact last-closed position instead of CW_USEDEFAULT, which
+	// cascades the window to a different spot on every launch. Fall back to
+	// the default placement when no position is saved or when its monitor is
+	// gone (display unplugged / resolution change).
+	int WindowX = CW_USEDEFAULT;
+	int WindowY = CW_USEDEFAULT;
+	if (HasSavedWindowSize)
+	{
+		int SavedX = 0;
+		int SavedY = 0;
+		if (load_window_position_setting(&SavedX, &SavedY))
+		{
+			RECT Candidate = {SavedX, SavedY, SavedX + WindowWidth, SavedY + WindowHeight};
+			if (MonitorFromRect(&Candidate, MONITOR_DEFAULTTONULL))
+			{
+				WindowX = SavedX;
+				WindowY = SavedY;
+			}
+		}
+	}
+
 	HWND Hwnd = CreateWindowW(
 		Wc.lpszClassName, L"VoiceTyper", WS_OVERLAPPEDWINDOW,
-		CW_USEDEFAULT, CW_USEDEFAULT,
+		WindowX, WindowY,
 		WindowWidth, WindowHeight,
 		nullptr, nullptr, Instance, nullptr);
 

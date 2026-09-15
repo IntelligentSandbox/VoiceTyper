@@ -142,3 +142,37 @@ load_window_size_setting(int *OutWidth, int *OutHeight)
 	if (HeightEnd != HeightIt->second.size()) return false;
 	return true;
 }
+
+inline bool
+save_window_position_setting(int X, int Y)
+{
+	auto Map = read_settings_map();
+	Map["window_x"] = std::to_string(X);
+	Map["window_y"] = std::to_string(Y);
+	return write_settings_map(Map);
+}
+
+inline bool
+load_window_position_setting(int *OutX, int *OutY)
+{
+	auto Map = read_settings_map();
+	auto XIt = Map.find("window_x");
+	auto YIt = Map.find("window_y");
+	if (XIt == Map.end() || YIt == Map.end()) return false;
+
+	size_t XEnd = 0;
+	size_t YEnd = 0;
+	try
+	{
+		*OutX = std::stoi(XIt->second, &XEnd);
+		*OutY = std::stoi(YIt->second, &YEnd);
+	}
+	catch (...)
+	{
+		return false;
+	}
+
+	if (XEnd != XIt->second.size()) return false;
+	if (YEnd != YIt->second.size()) return false;
+	return true;
+}
