@@ -270,6 +270,9 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
 
+	std::wstring PastedWide(WideLen - 1, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, &PastedWide[0], WideLen);
+
 	std::wstring PreviousClipboard;
 	bool HadPreviousText = false;
 	bool InspectedClipboard = platform_get_clipboard_text_win32(&PreviousClipboard, &HadPreviousText);
@@ -322,7 +325,12 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 
 	Sleep(200);
 
+	std::wstring CurrentClipboard;
+	bool CurrentHasText = false;
+	if (!platform_get_clipboard_text_win32(&CurrentClipboard, &CurrentHasText)) return;
+	if (!CurrentHasText || CurrentClipboard != PastedWide) return;
 	if (!InspectedClipboard) return;
+
 	if (HadPreviousText) platform_restore_clipboard_text_win32(PreviousClipboard);
 	else platform_clear_clipboard_win32();
 }

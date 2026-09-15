@@ -523,7 +523,11 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 		if (CanRestoreClipboard)
 		{
 			usleep(200000);
-			SDL_SetClipboardText(PreviousText.c_str());
+
+			char *CurrentClipboard = SDL_GetClipboardText();
+			bool Unchanged = CurrentClipboard && strcmp(CurrentClipboard, Utf8) == 0;
+			if (CurrentClipboard) SDL_free(CurrentClipboard);
+			if (Unchanged) SDL_SetClipboardText(PreviousText.c_str());
 		}
 		return;
 	}
