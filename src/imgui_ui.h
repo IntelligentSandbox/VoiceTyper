@@ -959,6 +959,34 @@ render_settings_panel(GlobalState *AppState)
 		save_bool_setting("copy_to_clipboard_when_no_target", AppState->CopyToClipboardWhenNoTarget);
 	}
 
+	if (ImGui::Checkbox("Preserve original system clipboard when using paste text injection",
+		&AppState->PreserveClipboardOnPaste))
+	{
+		save_bool_setting("preserve_clipboard_on_paste", AppState->PreserveClipboardOnPaste);
+	}
+
+	if (AppState->PreserveClipboardOnPaste)
+	{
+		ImGui::Indent(20.0f);
+		ImGui::TextUnformatted("Restore Delay (ms)");
+		ImGui::SameLine();
+		HelpMarkStyle RestoreDelayMarkStyle = help_mark_default_style();
+		RestoreDelayMarkStyle.DiameterScale = 0.75f;
+		hover_help_mark(
+			"How long to wait after pasting before restoring the previous clipboard contents, "
+			"so the target program has time to read the pasted text.",
+			RestoreDelayMarkStyle);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
+		if (ImGui::InputInt("##ClipboardRestoreDelayMs", &AppState->ClipboardRestoreDelayMs, 10, 100))
+		{
+			if (AppState->ClipboardRestoreDelayMs < 0) AppState->ClipboardRestoreDelayMs = 0;
+			if (AppState->ClipboardRestoreDelayMs > 10000) AppState->ClipboardRestoreDelayMs = 10000;
+			save_int_setting("clipboard_restore_delay_ms", AppState->ClipboardRestoreDelayMs);
+		}
+		ImGui::Unindent(20.0f);
+	}
+
 	bool UseToggleMode = (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
 	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
 	{

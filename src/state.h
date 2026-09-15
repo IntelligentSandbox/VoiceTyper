@@ -192,6 +192,8 @@ struct CoreRuntimeState
 	int CancelSoundFreq;
 	bool UseCharByCharInjection;
 	bool CopyToClipboardWhenNoTarget;
+	bool PreserveClipboardOnPaste;
+	int ClipboardRestoreDelayMs;
 
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;

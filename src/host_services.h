@@ -9,7 +9,7 @@ struct GlobalState;
 
 bool platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex);
 std::vector<AudioInputDeviceInfo> platform_query_audio_devices();
-void platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *Utf8, bool CharByChar, HotkeyConfig PasteHotkey);
+void platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *Utf8, bool CharByChar, HotkeyConfig PasteHotkey, bool PreserveClipboard, int ClipboardRestoreDelayMs);
 void platform_set_clipboard_text(PlatformRuntimeState *Platform, const char *Utf8);
 void *platform_get_foreground_window(PlatformRuntimeState *Platform);
 std::string platform_get_window_process_name(void *Window);

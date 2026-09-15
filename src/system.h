@@ -343,6 +343,17 @@ query_hotkey_settings(GlobalState *AppState)
 	if (load_bool_setting("copy_to_clipboard_when_no_target", &CopyToClipboard))
 		AppState->CopyToClipboardWhenNoTarget = CopyToClipboard;
 
+	bool PreserveClipboard = false;
+	if (load_bool_setting("preserve_clipboard_on_paste", &PreserveClipboard))
+		AppState->PreserveClipboardOnPaste = PreserveClipboard;
+
+	int ClipboardRestoreDelayMs = 0;
+	if (load_int_setting("clipboard_restore_delay_ms", &ClipboardRestoreDelayMs))
+	{
+		if (ClipboardRestoreDelayMs >= 0 && ClipboardRestoreDelayMs <= 10000)
+			AppState->ClipboardRestoreDelayMs = ClipboardRestoreDelayMs;
+	}
+
 	std::string UiFontName;
 	if (load_string_setting("ui_font_name", &UiFontName)) AppState->UiFontName = UiFontName;
 

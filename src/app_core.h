@@ -69,6 +69,8 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;
 	AppState->UseCharByCharInjection = false;
 	AppState->CopyToClipboardWhenNoTarget = false;
+	AppState->PreserveClipboardOnPaste = false;
+	AppState->ClipboardRestoreDelayMs = 200;
 	AppState->UiFontSize = 18;
 	AppState->Ui.FontReloadRequested = false;
 	AppState->Ui.LightMode = false;

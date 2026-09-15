@@ -333,7 +333,7 @@ linux_x11_activate_window(const LinuxX11ApiType &Api, Display *Dpy, Window Root,
 
 inline void
 platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *Utf8, bool CharByChar,
-	HotkeyConfig PasteHotkey)
+	HotkeyConfig PasteHotkey, bool PreserveClipboard, int ClipboardRestoreDelayMs)
 {
 	if (!Utf8 || Utf8[0] == '\0')
 	{
@@ -347,6 +347,12 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 	{
 		return;
 	}
+
+	// TODO: back up the clipboard before SDL_SetClipboardText and restore it after the
+	// paste settles when PreserveClipboard is set, honoring ClipboardRestoreDelayMs,
+	// like the win32 layer does.
+	(void)PreserveClipboard;
+	(void)ClipboardRestoreDelayMs;
 
 #ifdef VOICETYPER_HAVE_X11
 	std::unique_lock<std::mutex> X11Lock;
@@ -444,12 +450,6 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 			}
 		}
 
-		char *PreviousClipboard = SDL_GetClipboardText();
-		bool HadPreviousText = PreviousClipboard && PreviousClipboard[0] != '\0';
-		std::string PreviousText = HadPreviousText ? std::string(PreviousClipboard) : std::string();
-		bool CanRestoreClipboard = PreviousClipboard != nullptr;
-		if (PreviousClipboard) SDL_free(PreviousClipboard);
-
 		SDL_SetClipboardText(Utf8);
 		linux_x11_activate_window(*Api, Dpy, Root, XID);
 		usleep(50000);
@@ -519,16 +519,6 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 		}
 		Api->XSync(Dpy, False);
 		Api->XSetErrorHandler(Prev);
-
-		if (CanRestoreClipboard)
-		{
-			usleep(200000);
-
-			char *CurrentClipboard = SDL_GetClipboardText();
-			bool Unchanged = CurrentClipboard && strcmp(CurrentClipboard, Utf8) == 0;
-			if (CurrentClipboard) SDL_free(CurrentClipboard);
-			if (Unchanged) SDL_SetClipboardText(PreviousText.c_str());
-		}
 		return;
 	}
 #else

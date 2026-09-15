@@ -124,7 +124,9 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 			TargetWindow,
 			Transcription.c_str(),
 			AppState->UseCharByCharInjection,
-			PasteHotkey);
+			PasteHotkey,
+			AppState->PreserveClipboardOnPaste,
+			AppState->ClipboardRestoreDelayMs);
 		std::chrono::steady_clock::time_point PasteEnd = std::chrono::steady_clock::now();
 		double PasteMs = std::chrono::duration<double, std::milli>(PasteEnd - PasteStart).count();
 		AppState->LastPasteMs.store(PasteMs);

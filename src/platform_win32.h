@@ -265,17 +265,22 @@ platform_clear_clipboard_win32()
 }
 
 static void
-platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const HotkeyConfig &PasteHotkey)
+platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const HotkeyConfig &PasteHotkey,
+	bool PreserveClipboard, int ClipboardRestoreDelayMs)
 {
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
 
-	std::wstring PastedWide(WideLen - 1, L'\0');
-	MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, &PastedWide[0], WideLen);
-
+	std::wstring PastedWide;
 	std::wstring PreviousClipboard;
 	bool HadPreviousText = false;
-	bool InspectedClipboard = platform_get_clipboard_text_win32(&PreviousClipboard, &HadPreviousText);
+	bool InspectedClipboard = false;
+	if (PreserveClipboard)
+	{
+		PastedWide.resize(WideLen - 1, L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, &PastedWide[0], WideLen);
+		InspectedClipboard = platform_get_clipboard_text_win32(&PreviousClipboard, &HadPreviousText);
+	}
 
 	if (!platform_set_clipboard_text_win32(Utf8Text)) return;
 
@@ -323,7 +328,11 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 
 	SendInput(Count, Inputs, sizeof(INPUT));
 
-	Sleep(200);
+	if (!PreserveClipboard) return;
+
+	if (ClipboardRestoreDelayMs < 0) ClipboardRestoreDelayMs = 0;
+	if (ClipboardRestoreDelayMs > 10000) ClipboardRestoreDelayMs = 10000;
+	if (ClipboardRestoreDelayMs > 0) Sleep((DWORD)ClipboardRestoreDelayMs);
 
 	std::wstring CurrentClipboard;
 	bool CurrentHasText = false;
@@ -337,14 +346,14 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 
 inline void
 platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *Utf8, bool CharByChar,
-	HotkeyConfig PasteHotkey)
+	HotkeyConfig PasteHotkey, bool PreserveClipboard, int ClipboardRestoreDelayMs)
 {
 	(void)Platform;
 	HWND HWnd = (HWND)Window;
 	if (!HWnd || !Utf8 || Utf8[0] == '\0') return;
 
 	if (CharByChar) platform_inject_text_char_by_char(HWnd, Utf8);
-	else platform_inject_text_via_paste(HWnd, Utf8, PasteHotkey);
+	else platform_inject_text_via_paste(HWnd, Utf8, PasteHotkey, PreserveClipboard, ClipboardRestoreDelayMs);
 }
 
 inline void
