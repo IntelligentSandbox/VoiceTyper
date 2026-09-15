@@ -208,6 +208,11 @@ main(int, char **)
 	ImGui_ImplSDL2_InitForSDLRenderer(Window, Renderer);
 	ImGui_ImplSDLRenderer2_Init(Renderer);
 
+	// Kick the CUDA/GPU probe last: dlopening the CUDA plugin and its .so
+	// closure holds the loader lock, so it must not overlap the UI thread's
+	// init work above.
+	refresh_inference_devices(AppState);
+
 	const Uint64 AppUpdateIntervalTicks = performance_interval_for_hz(APP_UPDATE_HZ);
 	Uint64 Now = performance_counter_now();
 	Uint64 NextAppTick = Now;

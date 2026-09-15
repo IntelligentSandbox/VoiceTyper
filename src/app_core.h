@@ -116,13 +116,14 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	// (whisper.cpp's whisper_backend_init throws if no CPU device is
 	// registered, breaking every model load — CPU or GPU, since whisper
 	// always pulls in a CPU backend). This is fast: just LoadLibrary + CPU
-	// feature detection. The slow CUDA driver init stays on the background
-	// thread in refresh_inference_devices, which loads ggml-cuda.dll from the
-	// exe dir; load_cpu_backend() deliberately loads only ggml-cpu.dll (not
+	// feature detection. The slow CUDA probe (refresh_inference_devices,
+	// which loads ggml-cuda.dll and runs driver init) is deliberately NOT
+	// started here: its DLL loading holds the process loader lock and would
+	// stall this thread's own LoadLibrary work. The platform main kicks it
+	// only after all UI-thread initialization (fonts, backends) is done.
+	// load_cpu_backend() also deliberately loads only ggml-cpu.dll (not
 	// ggml_backend_load_all, which would eagerly load ggml-cuda.dll here).
 	load_cpu_backend();
-
-	refresh_inference_devices(AppState);
 }
 
 inline AppFrameResult

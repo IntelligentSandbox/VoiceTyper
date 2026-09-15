@@ -473,9 +473,6 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		return 1;
 	}
 
-	ShowWindow(Hwnd, Maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
-	UpdateWindow(Hwnd);
-
 	GlobalState AppStateStorage = {};
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;
@@ -509,6 +506,16 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	LONGLONG Now = performance_counter_now();
 	g_NextAppTick = Now;
 	LONGLONG NextRenderTick = Now;
+
+	// The window is shown only once every UI-thread initialization (settings,
+	// fonts, ImGui + DX11 backends) is done, so the first presented frame is
+	// drawn immediately after it appears instead of showing a blank window.
+	ShowWindow(Hwnd, Maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
+	UpdateWindow(Hwnd);
+
+	// Kick the CUDA/GPU probe last: loading the CUDA plugin DLLs holds the
+	// loader lock, so it must not overlap the UI thread's init work above.
+	refresh_inference_devices(AppState);
 
 	bool Running = true;
 	while (Running)
