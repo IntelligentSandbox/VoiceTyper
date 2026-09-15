@@ -364,7 +364,11 @@ runtime_toggle_stt_model_load(GlobalState *AppState)
 
 	if (is_whisper_model_loaded(&AppState->WhisperState))
 	{
-		unload_whisper_model(&AppState->WhisperState);
+		// ModelIndex -1 = unload only. whisper_free of a GPU-backed context
+		// touches CUDA (buffer frees can synchronize the device), so it must
+		// run on the model-transition worker, never on the UI thread.
+		runtime_start_model_transition(AppState, -1, AppState->CurrentInferenceDeviceIndex,
+			true, MODEL_TRANSITION_FAILURE_NONE);
 	}
 	else
 	{
