@@ -384,6 +384,9 @@ enum HotkeyCaptureResult
 // Advances an in-progress hotkey capture. Returns HOTKEY_CAPTURE_CLEARED when
 // Escape was pressed (callers clear or cancel their target) or
 // HOTKEY_CAPTURE_COMMITTED with *OutCaptured once every held key is released.
+// While Capture->Arming is set, keys still held from before the capture
+// started (e.g. the Enter keypress that launched it) are ignored until the
+// keyboard goes idle, so their release can't be captured as the shortcut.
 static HotkeyCaptureResult
 poll_hotkey_capture(HotkeyCaptureState *Capture, HotkeyConfig *OutCaptured)
 {
@@ -398,6 +401,7 @@ poll_hotkey_capture(HotkeyCaptureState *Capture, HotkeyConfig *OutCaptured)
 		Capture->PeakModifiers = 0;
 		Capture->PeakVirtualKey = 0;
 		Capture->ReleaseFrames = 0;
+		Capture->Arming = false;
 		ImGui::ClearActiveID();
 		ImGui::SetNextFrameWantCaptureKeyboard(true);
 		return HOTKEY_CAPTURE_CLEARED;
@@ -405,6 +409,18 @@ poll_hotkey_capture(HotkeyCaptureState *Capture, HotkeyConfig *OutCaptured)
 
 	AppHotkeyModifiers Mods = poll_modifier_state();
 	AppKeyCode Vk = poll_nonmodifier_key();
+
+	if (Capture->Arming)
+	{
+		if (Vk != APP_KEY_NONE)
+		{
+			Capture->PeakModifiers = 0;
+			Capture->PeakVirtualKey = 0;
+			Capture->ReleaseFrames = 0;
+			return HOTKEY_CAPTURE_ACTIVE;
+		}
+		Capture->Arming = false;
+	}
 
 	if (Mods != 0 || Vk != APP_KEY_NONE)
 	{
@@ -1270,6 +1286,7 @@ render_hotkeys_modal(GlobalState *AppState)
 				S->Capture.IsCapturing = !S->Capture.IsCapturing;
 				if (S->Capture.IsCapturing)
 				{
+					S->Capture.Arming = true;
 					S->Capture.PeakModifiers = 0;
 					S->Capture.PeakVirtualKey = 0;
 					S->Capture.ReleaseFrames = 0;
@@ -1323,6 +1340,7 @@ render_hotkeys_modal(GlobalState *AppState)
 				S->PasteOverrideCapture.Captured = {};
 				S->PasteOverrideCapture.HasCapture = false;
 				S->PasteOverrideCapture.IsCapturing = true;
+				S->PasteOverrideCapture.Arming = true;
 				S->PasteOverrideCapture.PeakModifiers = 0;
 				S->PasteOverrideCapture.PeakVirtualKey = 0;
 				S->PasteOverrideCapture.ReleaseFrames = 0;
@@ -1392,6 +1410,7 @@ render_hotkeys_modal(GlobalState *AppState)
 				S->PasteOverrideCapture.Captured = {};
 				S->PasteOverrideCapture.HasCapture = false;
 				S->PasteOverrideCapture.IsCapturing = true;
+				S->PasteOverrideCapture.Arming = true;
 				S->PasteOverrideCapture.PeakModifiers = 0;
 				S->PasteOverrideCapture.PeakVirtualKey = 0;
 				S->PasteOverrideCapture.ReleaseFrames = 0;

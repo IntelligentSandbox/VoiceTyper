@@ -15,6 +15,7 @@ struct HotkeyCaptureState
 	HotkeyConfig Captured;
 	bool         HasCapture;
 	bool         IsCapturing;
+	bool         Arming;
 	AppHotkeyModifiers PeakModifiers;
 	AppKeyCode         PeakVirtualKey;
 	int          ReleaseFrames;
