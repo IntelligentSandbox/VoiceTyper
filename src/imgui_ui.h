@@ -571,12 +571,8 @@ render_update_modal(GlobalState *AppState)
 						ImGui::PushID(Asset.Name.c_str());
 						ImGui::BulletText("%s (%.1f MB)", Asset.Name.c_str(), (double)Asset.Size / 1000000.0);
 
-#ifdef _WIN32
-						bool IsMsi = updater_string_ends_with(Asset.Name, ".msi");
-						const char *ActionLabel = IsMsi ? "Run installer" : "Update portable";
-#else
-						const char *ActionLabel = "Update portable";
-#endif
+						const char *ActionLabel = platform_asset_is_installer(Asset.Name) ?
+							"Run installer" : "Update portable";
 
 						ImGui::SameLine();
 						if (ImGui::SmallButton(ActionLabel))

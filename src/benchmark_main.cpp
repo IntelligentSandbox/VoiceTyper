@@ -1,5 +1,6 @@
 #define NOMINMAX
 
+#include "host_services.h"
 #include "transcription_core.h"
 #include "whisper_wrapper.h"
 #include "stream_chunker.h"
@@ -18,12 +19,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
 
 struct BenchOptions
 {
@@ -49,8 +44,6 @@ struct BenchOptions
 static FILE     *g_BenchLogFile  = nullptr;
 static std::mutex g_BenchLogMutex;
 static bool       g_BenchVerbose  = false;
-
-static std::string get_binary_dir();
 
 static void
 bench_log_callback(ggml_log_level Level, const char *Message, void *)
@@ -81,7 +74,7 @@ setup_bench_logging(const BenchOptions &Options)
 
 	if (Options.LogMode == "verbose") g_BenchVerbose = true;
 
-	std::string LogPath = get_binary_dir() + "/bench.log";
+	std::string LogPath = platform_join_path(platform_get_binary_dir(), "bench.log");
 	g_BenchLogFile = fopen(LogPath.c_str(), "w");
 
 	whisper_log_set(bench_log_callback, nullptr);
@@ -647,36 +640,10 @@ format_ms(double Milliseconds)
 	return Out.str();
 }
 
-static std::string
-get_binary_dir()
-{
-#ifdef _WIN32
-	char ExePath[1024] = {};
-	GetModuleFileNameA(nullptr, ExePath, sizeof(ExePath));
-	std::string S = ExePath;
-	size_t Pos = S.find_last_of("\\/");
-	if (Pos != std::string::npos) S.resize(Pos);
-	return S;
-#else
-	char Buf[4096] = {};
-	ssize_t Len = readlink("/proc/self/exe", Buf, sizeof(Buf) - 1);
-	if (Len <= 0) return ".";
-	Buf[Len] = '\0';
-	std::string S = Buf;
-	size_t Pos = S.find_last_of('/');
-	if (Pos != std::string::npos) S.resize(Pos);
-	return S;
-#endif
-}
-
 static void
 load_cpu_backend()
 {
-#ifdef _WIN32
-	std::string PluginPath = get_binary_dir() + "/ggml-cpu.dll";
-#else
-	std::string PluginPath = get_binary_dir() + "/libggml-cpu.so";
-#endif
+	std::string PluginPath = platform_ggml_backend_library_path(platform_get_binary_dir(), "cpu");
 
 	FILE *F = std::fopen(PluginPath.c_str(), "rb");
 	if (!F) return;
@@ -688,12 +655,7 @@ load_cpu_backend()
 static bool
 load_cuda_plugin(std::string *Error)
 {
-	std::string ExeDir = get_binary_dir();
-#ifdef _WIN32
-	std::string PluginPath = ExeDir + "/ggml-cuda.dll";
-#else
-	std::string PluginPath = ExeDir + "/cuda/libggml-cuda.so";
-#endif
+	std::string PluginPath = platform_ggml_backend_library_path(platform_get_binary_dir(), "cuda");
 
 	FILE *F = std::fopen(PluginPath.c_str(), "rb");
 	if (!F)

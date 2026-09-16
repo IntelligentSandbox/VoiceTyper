@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +19,7 @@
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -1459,6 +1461,300 @@ platform_enumerate_fonts()
 	std::sort(Fonts.begin(), Fonts.end(), linux_font_less);
 
 	return Fonts;
+}
+
+inline std::string
+platform_path_from_universal(const std::string &Path)
+{
+	return Path;
+}
+
+inline std::string
+platform_ggml_backend_library_path(const std::string &SearchDir, const char *BackendName)
+{
+	std::string SubDir = (strcmp(BackendName, "cuda") == 0) ? "cuda/" : "";
+	return platform_join_path(SearchDir, SubDir + "libggml-" + BackendName + ".so");
+}
+
+inline void
+platform_init_crash_diagnostics()
+{
+}
+
+inline void
+platform_shutdown_crash_diagnostics()
+{
+}
+
+inline void
+platform_open_folder_selecting_file(const std::string &)
+{
+	// Non-Win32 ports: no-op for now.
+}
+
+// ---------------------------------------------------------------------------
+// Downloads / updater
+// ---------------------------------------------------------------------------
+
+static void
+linux_terminate_child(int64_t Pid)
+{
+	if (Pid > 0) kill((pid_t)Pid, SIGTERM);
+}
+
+inline void
+platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, int64_t ExpectedSize)
+{
+	AppState->Ui.Download.DownloadedBytes.store(0);
+	AppState->Ui.Download.TotalBytes.store(ExpectedSize);
+
+	std::string PartPath = DestPath + ".part";
+
+	pid_t Pid = fork();
+	if (Pid < 0)
+	{
+		AppState->Ui.Download.Failed.store(true);
+		AppState->Ui.Download.IsRunning.store(false);
+		return;
+	}
+	if (Pid == 0)
+	{
+		execlp("curl", "curl", "-L", "-s", "--fail", "-o", PartPath.c_str(), Url.c_str(), (char *)nullptr);
+		execlp("wget", "wget", "-q", "-O", PartPath.c_str(), Url.c_str(), (char *)nullptr);
+		_exit(127);
+	}
+
+	AppState->Ui.Download.ChildPid.store((int64_t)Pid);
+
+	int Status = 0;
+	bool Canceled = false;
+
+	for (;;)
+	{
+		pid_t Result = waitpid(Pid, &Status, WNOHANG);
+		if (Result == Pid) break;
+		if (Result == -1) { Status = -1; break; }
+
+		if (AppState->Ui.Download.CancelRequested.load())
+		{
+			Canceled = true;
+			kill(Pid, SIGTERM);
+			bool Reaped = false;
+			for (int i = 0; i < 50; i++)
+			{
+				if (waitpid(Pid, &Status, WNOHANG) == Pid) { Reaped = true; break; }
+				usleep(10000);
+			}
+			if (!Reaped)
+			{
+				kill(Pid, SIGKILL);
+				waitpid(Pid, &Status, 0);
+			}
+			break;
+		}
+
+		struct stat St;
+		if (stat(PartPath.c_str(), &St) == 0 && S_ISREG(St.st_mode))
+		{
+			AppState->Ui.Download.DownloadedBytes.store(St.st_size);
+		}
+
+		usleep(200000);
+	}
+
+	AppState->Ui.Download.ChildPid.store(0);
+
+	bool Success = !Canceled && WIFEXITED(Status) && WEXITSTATUS(Status) == 0;
+	if (!Success)
+	{
+		remove(PartPath.c_str());
+		AppState->Ui.Download.Failed.store(true);
+	}
+	else
+	{
+		remove(DestPath.c_str());
+		if (rename(PartPath.c_str(), DestPath.c_str()) != 0)
+		{
+			remove(PartPath.c_str());
+			AppState->Ui.Download.Failed.store(true);
+		}
+		else
+		{
+			struct stat St;
+			if (stat(DestPath.c_str(), &St) == 0) AppState->Ui.Download.DownloadedBytes.store(St.st_size);
+			AppState->Ui.Download.Succeeded.store(true);
+		}
+	}
+
+	AppState->Ui.Download.IsRunning.store(false);
+}
+
+inline void
+platform_cancel_model_download(GlobalState *AppState)
+{
+	linux_terminate_child(AppState->Ui.Download.ChildPid.load());
+}
+
+inline bool
+platform_http_get_string(const std::string &Url, std::string *OutBody)
+{
+	std::string Cmd = "curl -sL --fail --max-time 30 -A VoiceTyper \"" + Url + "\" 2>/dev/null";
+
+	FILE *Pipe = popen(Cmd.c_str(), "r");
+	if (!Pipe)
+	{
+		return false;
+	}
+
+	char Buffer[16384];
+	size_t Read = 0;
+	while ((Read = fread(Buffer, 1, sizeof(Buffer), Pipe)) > 0)
+	{
+		OutBody->append(Buffer, Read);
+	}
+
+	int Status = pclose(Pipe);
+	return Status == 0 && !OutBody->empty();
+}
+
+inline void
+platform_update_download_thread(GlobalState *AppState, std::string Url, std::string DestPath)
+{
+	UpdateState *U = &AppState->Ui.Update;
+
+	pid_t Pid = fork();
+	if (Pid == 0)
+	{
+		execlp("curl", "curl", "-L", "-s", "--fail", "-o", DestPath.c_str(), Url.c_str(), (char *)nullptr);
+		execlp("wget", "wget", "-q", "-O", DestPath.c_str(), Url.c_str(), (char *)nullptr);
+		_exit(127);
+	}
+	if (Pid < 0)
+	{
+		U->DownloadFailed.store(true);
+		U->DownloadRunning.store(false);
+		return;
+	}
+
+	U->ChildPid.store((int64_t)Pid);
+
+	int Status = 0;
+	bool Canceled = false;
+
+	for (;;)
+	{
+		pid_t Result = waitpid(Pid, &Status, WNOHANG);
+		if (Result == Pid) break;
+		if (Result == -1)
+		{
+			Status = -1;
+			break;
+		}
+
+		if (U->DownloadCancelRequested.load())
+		{
+			Canceled = true;
+			kill(Pid, SIGTERM);
+			bool Reaped = false;
+			for (int i = 0; i < 50; i++)
+			{
+				if (waitpid(Pid, &Status, WNOHANG) == Pid)
+				{
+					Reaped = true;
+					break;
+				}
+				usleep(10000);
+			}
+			if (!Reaped)
+			{
+				kill(Pid, SIGKILL);
+				waitpid(Pid, &Status, 0);
+			}
+			break;
+		}
+
+		struct stat St;
+		if (stat(DestPath.c_str(), &St) == 0 && S_ISREG(St.st_mode))
+		{
+			U->DownloadedBytes.store(St.st_size);
+		}
+
+		usleep(200000);
+	}
+
+	U->ChildPid.store(0);
+
+	bool Success = !Canceled && WIFEXITED(Status) && WEXITSTATUS(Status) == 0;
+	if (Success)
+	{
+		U->DownloadSucceeded.store(true);
+	}
+	else
+	{
+		remove(DestPath.c_str());
+		U->DownloadFailed.store(true);
+	}
+
+	U->DownloadRunning.store(false);
+}
+
+inline void
+platform_cancel_update_download(GlobalState *AppState)
+{
+	linux_terminate_child(AppState->Ui.Update.ChildPid.load());
+}
+
+static bool
+linux_write_file_bytes(const std::string &Path, const std::string &Content)
+{
+	FILE *File = fopen(Path.c_str(), "wb");
+	if (!File)
+	{
+		return false;
+	}
+
+	bool Ok = fwrite(Content.data(), 1, Content.size(), File) == Content.size();
+	fclose(File);
+	return Ok;
+}
+
+inline bool
+platform_apply_update_package(const std::string &PackagePath)
+{
+	std::string ExeDir = platform_get_data_dir();
+	std::string ScriptPath = platform_join_path(platform_get_temp_dir(), "voicetyper-apply-update.sh");
+
+	char PidStr[32];
+	snprintf(PidStr, sizeof(PidStr), "%d", platform_get_process_id());
+
+	std::string Script;
+	Script += "#!/bin/sh\n";
+	Script += std::string("while kill -0 ") + PidStr + " 2>/dev/null; do sleep 1; done\n";
+	Script += "tar -xzf \"" + PackagePath + "\" -C \"" + ExeDir + "\" --strip-components=1";
+	Script += " && rm -f \"" + PackagePath + "\"\n";
+	Script += "cd \"" + ExeDir + "\" && nohup ./VoiceTyper >/dev/null 2>&1 &\n";
+	Script += "rm -f \"$0\"\n";
+
+	if (!linux_write_file_bytes(ScriptPath, Script))
+	{
+		return false;
+	}
+
+	std::string Cmd = "sh \"" + ScriptPath + "\"";
+	return platform_spawn_detached(Cmd, "", true);
+}
+
+inline const char *
+platform_update_asset_tag()
+{
+	return "-x86_64-linux-";
+}
+
+inline bool
+platform_asset_is_installer(const std::string &AssetName)
+{
+	(void)AssetName;
+	return false;
 }
 
 #ifdef VOICETYPER_HAVE_X11

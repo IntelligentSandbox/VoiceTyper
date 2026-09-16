@@ -8,6 +8,19 @@
 struct GlobalState;
 
 bool platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex);
+std::string platform_path_from_universal(const std::string &Path);
+std::string platform_ggml_backend_library_path(const std::string &SearchDir, const char *BackendName);
+void platform_init_crash_diagnostics();
+void platform_shutdown_crash_diagnostics();
+void platform_open_folder_selecting_file(const std::string &FilePath);
+void platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, int64_t ExpectedSize);
+void platform_cancel_model_download(GlobalState *AppState);
+bool platform_http_get_string(const std::string &Url, std::string *OutBody);
+void platform_update_download_thread(GlobalState *AppState, std::string Url, std::string DestPath);
+void platform_cancel_update_download(GlobalState *AppState);
+bool platform_apply_update_package(const std::string &PackagePath);
+const char *platform_update_asset_tag();
+bool platform_asset_is_installer(const std::string &AssetName);
 std::vector<AudioInputDeviceInfo> platform_query_audio_devices();
 void platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *Utf8, bool CharByChar, HotkeyConfig PasteHotkey, bool PreserveClipboard, int ClipboardRestoreDelayMs);
 void platform_set_clipboard_text(PlatformRuntimeState *Platform, const char *Utf8);
@@ -29,21 +42,6 @@ int platform_get_process_id();
 std::string platform_get_temp_dir();
 void platform_open_url(const char *Url);
 std::vector<PlatformFontInfo> platform_enumerate_fonts();
-
-inline std::string
-platform_path_from_universal(const std::string &Path)
-{
-#ifdef _WIN32
-	std::string Result = Path;
-	for (char &Ch : Result)
-	{
-		if (Ch == '/') Ch = '\\';
-	}
-	return Result;
-#else
-	return Path;
-#endif
-}
 
 inline std::string
 platform_join_path(const std::string &Base, const std::string &Relative)

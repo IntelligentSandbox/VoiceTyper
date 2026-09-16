@@ -6,15 +6,18 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <ctime>
 #include <thread>
 #include <cmath>
 
 #include <windows.h>
+#include <dbghelp.h>
 #include <dwmapi.h>
 #include <mmsystem.h>
 #include <shellapi.h>
 #include <mmdeviceapi.h>
 #include <propkey.h>
+#include <winhttp.h>
 #include <functiondiscoverykeys.h>
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -22,6 +25,8 @@
 #pragma comment(lib, "propsys.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "dbghelp.lib")
+#pragma comment(lib, "winhttp.lib")
 
 // ---------------------------------------------------------------------------
 // Platform interface implementations (declared in platform.h)
@@ -865,4 +870,444 @@ platform_enumerate_fonts()
 
 	RegCloseKey(Key);
 	return Fonts;
+}
+
+inline std::string
+platform_path_from_universal(const std::string &Path)
+{
+	std::string Result = Path;
+	for (char &Ch : Result)
+	{
+		if (Ch == '/') Ch = '\\';
+	}
+	return Result;
+}
+
+inline std::string
+platform_ggml_backend_library_path(const std::string &SearchDir, const char *BackendName)
+{
+	return platform_join_path(SearchDir, std::string("ggml-") + BackendName + ".dll");
+}
+
+// ---------------------------------------------------------------------------
+// Crash dump
+// ---------------------------------------------------------------------------
+
+static LPTOP_LEVEL_EXCEPTION_FILTER g_Win32PreviousExceptionFilter = nullptr;
+
+static std::string
+win32_crash_dump_path_for_now()
+{
+	time_t Now = time(nullptr);
+	tm LocalTm = {};
+	localtime_s(&LocalTm, &Now);
+
+	char TimeBuf[32];
+	strftime(TimeBuf, sizeof(TimeBuf), "%Y%m%d-%H%M%S", &LocalTm);
+
+	std::string Filename = CRASH_DUMP_PREFIX;
+	Filename += TimeBuf;
+	Filename += CRASH_DUMP_SUFFIX;
+
+	return platform_join_path(platform_get_data_dir(), Filename);
+}
+
+static void
+win32_write_minidump(EXCEPTION_POINTERS *ExceptionInfo)
+{
+	std::string DumpPath = win32_crash_dump_path_for_now();
+
+	HANDLE File = CreateFileA(DumpPath.c_str(), GENERIC_WRITE, 0, nullptr,
+		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (File == INVALID_HANDLE_VALUE) return;
+
+	MINIDUMP_EXCEPTION_INFORMATION Mei = {};
+	Mei.ThreadId          = GetCurrentThreadId();
+	Mei.ExceptionPointers = ExceptionInfo;
+	Mei.ClientPointers    = FALSE;
+
+	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), File,
+		MiniDumpNormal, &Mei, nullptr, nullptr);
+
+	CloseHandle(File);
+}
+
+static LONG WINAPI
+win32_unhandled_exception_filter(EXCEPTION_POINTERS *ExceptionInfo)
+{
+	win32_write_minidump(ExceptionInfo);
+
+	if (g_Win32PreviousExceptionFilter)
+		return g_Win32PreviousExceptionFilter(ExceptionInfo);
+
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+
+inline void
+platform_init_crash_diagnostics()
+{
+	g_Win32PreviousExceptionFilter = SetUnhandledExceptionFilter(win32_unhandled_exception_filter);
+}
+
+inline void
+platform_shutdown_crash_diagnostics()
+{
+	SetUnhandledExceptionFilter(g_Win32PreviousExceptionFilter);
+	g_Win32PreviousExceptionFilter = nullptr;
+}
+
+inline void
+platform_open_folder_selecting_file(const std::string &FilePath)
+{
+	if (FilePath.empty()) return;
+
+	int WideLen = MultiByteToWideChar(CP_UTF8, 0, FilePath.c_str(), -1, nullptr, 0);
+	if (WideLen <= 0) return;
+
+	std::wstring Wide(WideLen, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, FilePath.c_str(), -1, &Wide[0], WideLen);
+
+	std::wstring Args = L"/select,\"" + Wide + L"\"";
+
+	SHELLEXECUTEINFOW Sei = {};
+	Sei.cbSize = sizeof(Sei);
+	Sei.lpVerb       = L"open";
+	Sei.lpFile       = L"explorer.exe";
+	Sei.lpParameters = Args.c_str();
+	Sei.nShow        = SW_SHOWNORMAL;
+	ShellExecuteExW(&Sei);
+}
+
+// ---------------------------------------------------------------------------
+// Downloads / updater
+// ---------------------------------------------------------------------------
+
+static void
+win32_http_close(HINTERNET Request, HINTERNET Connect, HINTERNET Session)
+{
+	if (Request) WinHttpCloseHandle(Request);
+	if (Connect) WinHttpCloseHandle(Connect);
+	if (Session) WinHttpCloseHandle(Session);
+}
+
+static bool
+win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
+	std::atomic<int64_t> *Downloaded, std::atomic<int64_t> *Total, std::atomic<bool> *Cancel)
+{
+	std::wstring WideUrl(Url.begin(), Url.end());
+	URL_COMPONENTSW Comp = {};
+	Comp.dwStructSize = sizeof(Comp);
+	wchar_t HostBuf[256] = {};
+	wchar_t PathBuf[2048] = {};
+	Comp.lpszHostName = HostBuf;
+	Comp.dwHostNameLength = sizeof(HostBuf) / sizeof(wchar_t);
+	Comp.lpszUrlPath = PathBuf;
+	Comp.dwUrlPathLength = sizeof(PathBuf) / sizeof(wchar_t);
+
+	if (!WinHttpCrackUrl(WideUrl.c_str(), (DWORD)WideUrl.size(), 0, &Comp))
+	{
+		return false;
+	}
+
+	HINTERNET Session = WinHttpOpen(L"VoiceTyper",
+		WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+		WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+	if (!Session) return false;
+
+	WinHttpSetTimeouts(Session, 30000, 30000, 30000, 5000);
+
+	INTERNET_PORT Port = Comp.nPort ? Comp.nPort : INTERNET_DEFAULT_HTTPS_PORT;
+	HINTERNET Connect = WinHttpConnect(Session, Comp.lpszHostName, Port, 0);
+	if (!Connect)
+	{
+		win32_http_close(nullptr, nullptr, Session);
+		return false;
+	}
+
+	HINTERNET Request = WinHttpOpenRequest(Connect, L"GET", Comp.lpszUrlPath,
+		nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+	if (!Request)
+	{
+		win32_http_close(nullptr, Connect, Session);
+		return false;
+	}
+
+	if (!WinHttpSendRequest(Request,
+		WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+		WINHTTP_NO_REQUEST_DATA, 0,
+		WINHTTP_IGNORE_REQUEST_TOTAL_LENGTH, 0) ||
+		!WinHttpReceiveResponse(Request, nullptr))
+	{
+		win32_http_close(Request, Connect, Session);
+		return false;
+	}
+
+	DWORD StatusCode = 0;
+	DWORD StatusCodeSize = sizeof(StatusCode);
+	if (!WinHttpQueryHeaders(Request,
+		WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+		WINHTTP_HEADER_NAME_BY_INDEX, &StatusCode, &StatusCodeSize, WINHTTP_NO_HEADER_INDEX) ||
+		StatusCode < 200 || StatusCode >= 300)
+	{
+		win32_http_close(Request, Connect, Session);
+		return false;
+	}
+
+	if (Total)
+	{
+		DWORD ContentLength = 0;
+		DWORD ContentLengthSize = sizeof(ContentLength);
+		if (WinHttpQueryHeaders(Request,
+			WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
+			WINHTTP_HEADER_NAME_BY_INDEX, &ContentLength, &ContentLengthSize, WINHTTP_NO_HEADER_INDEX) &&
+			ContentLength > 0)
+		{
+			Total->store((int64_t)ContentLength);
+		}
+	}
+
+	const DWORD BufSize = 64 * 1024;
+	std::vector<char> Buffer(BufSize);
+	int64_t TotalRead = 0;
+
+	for (;;)
+	{
+		if (Cancel && Cancel->load())
+		{
+			win32_http_close(Request, Connect, Session);
+			return false;
+		}
+
+		DWORD BytesRead = 0;
+		if (!WinHttpReadData(Request, Buffer.data(), BufSize, &BytesRead))
+		{
+			win32_http_close(Request, Connect, Session);
+			return false;
+		}
+		if (BytesRead == 0) break;
+
+		if (File)
+		{
+			if (fwrite(Buffer.data(), 1, BytesRead, File) != BytesRead)
+			{
+				win32_http_close(Request, Connect, Session);
+				return false;
+			}
+		}
+		else if (OutBody)
+		{
+			OutBody->append(Buffer.data(), BytesRead);
+		}
+
+		TotalRead += BytesRead;
+		if (Downloaded) Downloaded->store(TotalRead);
+	}
+
+	win32_http_close(Request, Connect, Session);
+	return TotalRead > 0;
+}
+
+inline bool
+platform_http_get_string(const std::string &Url, std::string *OutBody)
+{
+	return win32_http_get(Url, nullptr, OutBody, nullptr, nullptr, nullptr);
+}
+
+inline void
+platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, int64_t ExpectedSize)
+{
+	AppState->Ui.Download.DownloadedBytes.store(0);
+	AppState->Ui.Download.TotalBytes.store(ExpectedSize);
+
+	std::string PartPath = DestPath + ".part";
+
+	// TODO(warren): These are so ugly, what is this, an anonymous fn?
+	auto Fail = [&]()
+	{
+		AppState->Ui.Download.Failed.store(true);
+		AppState->Ui.Download.IsRunning.store(false);
+	};
+
+	// TODO(warren): Bad bad style, we should never have { } for one line if statements, should just be clean
+	// `if (condition) statement;` Seems like even if this is mentioned in AGENTS.md, LLMs will still inevitably
+	// forget when given a lot of stuff in context. Plenty of places in this file where the if statement is not
+	// written in the right style.
+	FILE *File = nullptr;
+	fopen_s(&File, PartPath.c_str(), "wb");
+	if (!File)
+	{
+		Fail();
+		return;
+	}
+
+	bool Ok = win32_http_get(Url, File, nullptr, &AppState->Ui.Download.DownloadedBytes,
+		&AppState->Ui.Download.TotalBytes, &AppState->Ui.Download.CancelRequested);
+
+	fclose(File);
+
+	if (!Ok)
+	{
+		remove(PartPath.c_str());
+		Fail();
+		return;
+	}
+
+	remove(DestPath.c_str());
+	if (rename(PartPath.c_str(), DestPath.c_str()) != 0)
+	{
+		remove(PartPath.c_str());
+		AppState->Ui.Download.Failed.store(true);
+	}
+	else
+	{
+		AppState->Ui.Download.Succeeded.store(true);
+	}
+
+	AppState->Ui.Download.IsRunning.store(false);
+}
+
+inline void
+platform_cancel_model_download(GlobalState *AppState)
+{
+	(void)AppState;
+}
+
+inline void
+platform_update_download_thread(GlobalState *AppState, std::string Url, std::string DestPath)
+{
+	UpdateState *U = &AppState->Ui.Update;
+
+	FILE *File = nullptr;
+	fopen_s(&File, DestPath.c_str(), "wb");
+	if (!File)
+	{
+		U->DownloadFailed.store(true);
+		U->DownloadRunning.store(false);
+		return;
+	}
+
+	bool Ok = win32_http_get(Url, File, nullptr,
+		&U->DownloadedBytes, &U->TotalBytes, &U->DownloadCancelRequested);
+
+	fclose(File);
+
+	if (Ok)
+	{
+		U->DownloadSucceeded.store(true);
+	}
+	else
+	{
+		remove(DestPath.c_str());
+		U->DownloadFailed.store(true);
+	}
+
+	U->DownloadRunning.store(false);
+}
+
+inline void
+platform_cancel_update_download(GlobalState *AppState)
+{
+	(void)AppState;
+}
+
+static bool
+win32_write_file_bytes(const std::string &Path, const std::string &Content)
+{
+	FILE *File = nullptr;
+	fopen_s(&File, Path.c_str(), "wb");
+	if (!File)
+	{
+		return false;
+	}
+
+	bool Ok = fwrite(Content.data(), 1, Content.size(), File) == Content.size();
+	fclose(File);
+	return Ok;
+}
+
+static std::string
+win32_forward_slashes(std::string Path)
+{
+	for (char &Ch : Path)
+	{
+		if (Ch == '\\') Ch = '/';
+	}
+	return Path;
+}
+
+static bool
+win32_string_ends_with(const std::string &Text, const char *Suffix)
+{
+	size_t SuffixLength = strlen(Suffix);
+	if (Text.size() < SuffixLength) return false;
+	for (size_t i = 0; i < SuffixLength; i++)
+	{
+		char Ch = Text[Text.size() - SuffixLength + i];
+		if (Ch >= 'A' && Ch <= 'Z') Ch = (char)(Ch - 'A' + 'a');
+		if (Ch != Suffix[i]) return false;
+	}
+	return true;
+}
+
+static bool
+win32_apply_portable_zip(const std::string &ZipPath)
+{
+	std::string ExeDir = win32_forward_slashes(platform_get_data_dir());
+	std::string BatPath = win32_forward_slashes(
+		platform_join_path(platform_get_temp_dir(), "voicetyper-apply-update.bat"));
+	std::string Zip = win32_forward_slashes(ZipPath);
+
+	char PidStr[32];
+	sprintf_s(PidStr, sizeof(PidStr), "%d", platform_get_process_id());
+
+	std::string Bat;
+	Bat += "@echo off\r\n";
+	Bat += ":waitloop\r\n";
+	Bat += std::string("tasklist /fi \"PID eq ") + PidStr + "\" 2>nul | find /i \"" + PidStr + "\" >nul\r\n";
+	Bat += "if not errorlevel 1 (\r\n";
+	Bat += "ping -n 2 127.0.0.1 >nul\r\n";
+	Bat += "goto waitloop\r\n";
+	Bat += ")\r\n";
+	Bat += "tar -xf \"" + Zip + "\" -C \"" + ExeDir + "\"\r\n";
+	Bat += "if errorlevel 1 exit /b 1\r\n";
+	Bat += "del \"" + Zip + "\"\r\n";
+	Bat += "start \"\" \"" + ExeDir + "/VoiceTyper.exe\"\r\n";
+	Bat += "del \"%~f0\"\r\n";
+
+	if (!win32_write_file_bytes(BatPath, Bat))
+	{
+		return false;
+	}
+
+	std::string Cmd = "cmd.exe /c \"\"" + BatPath + "\"\"";
+	return platform_spawn_detached(Cmd, platform_get_temp_dir(), true);
+}
+
+static bool
+win32_apply_msi(const std::string &MsiPath)
+{
+	std::string Cmd = "msiexec /i \"" + MsiPath + "\"";
+	return platform_spawn_detached(Cmd, "", false);
+}
+
+inline bool
+platform_apply_update_package(const std::string &PackagePath)
+{
+	if (win32_string_ends_with(PackagePath, ".msi"))
+	{
+		return win32_apply_msi(PackagePath);
+	}
+	return win32_apply_portable_zip(PackagePath);
+}
+
+inline const char *
+platform_update_asset_tag()
+{
+	return "-x64_win-";
+}
+
+inline bool
+platform_asset_is_installer(const std::string &AssetName)
+{
+	return win32_string_ends_with(AssetName, ".msi");
 }

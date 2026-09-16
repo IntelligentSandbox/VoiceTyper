@@ -148,12 +148,7 @@ inline void
 load_cpu_backend()
 {
 	std::string ExeDir = platform_get_binary_dir();
-
-#ifdef _WIN32
-	std::string PluginPath = platform_join_path(ExeDir, "ggml-cpu.dll");
-#else
-	std::string PluginPath = platform_join_path(ExeDir, "libggml-cpu.so");
-#endif
+	std::string PluginPath = platform_ggml_backend_library_path(ExeDir, "cpu");
 
 	FILE *F = std::fopen(PluginPath.c_str(), "rb");
 	if (!F) return;
@@ -171,12 +166,7 @@ refresh_inference_devices(GlobalState *AppState)
 	AppState->InferenceDevicesThread = std::thread([AppState]()
 	{
 		std::string ExeDir = platform_get_binary_dir();
-
-#ifdef _WIN32
-		std::string PluginPath = platform_join_path(ExeDir, "ggml-cuda.dll");
-#else
-		std::string PluginPath = platform_join_path(ExeDir, "cuda/libggml-cuda.so");
-#endif
+		std::string PluginPath = platform_ggml_backend_library_path(ExeDir, "cuda");
 
 		FILE *F = std::fopen(PluginPath.c_str(), "rb");
 		if (!F)

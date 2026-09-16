@@ -236,7 +236,13 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(VOICETYPER_BUILD_BENCH)
-	add_executable(VoiceTyperBench src/benchmark_main.cpp)
+	if(WIN32)
+		set(BENCH_PLATFORM_SOURCES src/bench_platform_win32.cpp)
+	else()
+		set(BENCH_PLATFORM_SOURCES src/bench_platform_linux.cpp)
+	endif()
+
+	add_executable(VoiceTyperBench src/benchmark_main.cpp ${BENCH_PLATFORM_SOURCES})
 	apply_voicetyper_output_dirs(VoiceTyperBench
 		RELEASE_DIR "${VOICETYPER_BENCH_OUTPUT_DIR}"
 		DEBUG_DIR "${VOICETYPER_DEBUG_OUTPUT_DIR}")
@@ -253,7 +259,32 @@ if(VOICETYPER_BUILD_BENCH)
 		VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
 	)
 
-	target_link_libraries(VoiceTyperBench PRIVATE whisper)
+	target_link_libraries(VoiceTyperBench PRIVATE
+		whisper
+		$<$<PLATFORM_ID:Windows>:d3d11>
+		$<$<PLATFORM_ID:Windows>:dxgi>
+		$<$<PLATFORM_ID:Windows>:d3dcompiler>
+		$<$<PLATFORM_ID:Windows>:dwmapi>
+		$<$<PLATFORM_ID:Windows>:winmm>
+		$<$<PLATFORM_ID:Windows>:ole32>
+		$<$<PLATFORM_ID:Windows>:propsys>
+		$<$<PLATFORM_ID:Windows>:winhttp>
+		$<$<PLATFORM_ID:Windows>:dbghelp>
+		$<$<PLATFORM_ID:Windows>:gdi32>
+		$<$<PLATFORM_ID:Windows>:imm32>
+		$<$<PLATFORM_ID:Windows>:uiautomationcore>
+	)
+
+	if(UNIX AND NOT APPLE)
+		target_link_libraries(VoiceTyperBench PRIVATE
+			PkgConfig::SDL2
+			${CMAKE_DL_LIBS}
+		)
+		if(X11_FOUND)
+			target_include_directories(VoiceTyperBench PRIVATE ${X11_INCLUDE_DIRS})
+			target_compile_definitions(VoiceTyperBench PRIVATE VOICETYPER_HAVE_X11=1)
+		endif()
+	endif()
 endif()
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)

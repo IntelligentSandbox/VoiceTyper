@@ -46,9 +46,10 @@ struct ModelDownloadState
 	std::atomic<bool> Failed;
 	std::atomic<int64_t> DownloadedBytes;
 	std::atomic<int64_t> TotalBytes;
-#ifndef _WIN32
+	// Nonzero while a platform layer has delegated the download to an external
+	// child process (e.g. curl under Linux); always 0 on platforms that
+	// download in-process.
 	std::atomic<int64_t> ChildPid;
-#endif
 
 	std::string CurrentModelName;
 	bool JustFinished;
@@ -69,9 +70,7 @@ struct ModelDownloadState
 		Failed(false),
 		DownloadedBytes(0),
 		TotalBytes(0),
-#ifndef _WIN32
 		ChildPid(0),
-#endif
 		JustFinished(false),
 		IsModalOpen(false),
 		WantsOverwriteConfirm(false),
@@ -107,9 +106,10 @@ struct UpdateState
 	std::atomic<bool> DownloadFailed;
 	std::atomic<int64_t> DownloadedBytes;
 	std::atomic<int64_t> TotalBytes;
-#ifndef _WIN32
+	// Nonzero while a platform layer has delegated the download to an external
+	// child process (e.g. curl under Linux); always 0 on platforms that
+	// download in-process.
 	std::atomic<int64_t> ChildPid;
-#endif
 
 	std::string LatestVersion;
 	std::string ReleaseUrl;
@@ -144,9 +144,7 @@ struct UpdateState
 		DownloadFailed(false),
 		DownloadedBytes(0),
 		TotalBytes(0),
-#ifndef _WIN32
 		ChildPid(0),
-#endif
 		IsNewerAvailable(false),
 		CheckJustFinished(false),
 		DownloadJustFinished(false),
