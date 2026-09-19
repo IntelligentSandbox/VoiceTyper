@@ -139,7 +139,15 @@ hover_help_mark(const char *HelpText, const HelpMarkStyle &Style = help_mark_def
 	if (Hovered)
 	{
 		ImGui::BeginTooltip();
-		ImGui::PushTextWrapPos(ImGui::GetFontSize() * Style.TooltipWrapEm);
+		// Tooltips are clamped to the viewport work area while the wrap width
+		// is not, so large fonts would push text past the visible edge. Clamp
+		// to the same maximum the tooltip window itself is allowed to reach.
+		ImGuiStyle &ImStyle = ImGui::GetStyle();
+		float MaxWrap = ImGui::GetMainViewport()->WorkSize.x
+			- ImStyle.DisplaySafeAreaPadding.x * 2.0f
+			- ImStyle.WindowPadding.x * 2.0f;
+		float WrapWidth = ImMin(ImGui::GetFontSize() * Style.TooltipWrapEm, MaxWrap);
+		ImGui::PushTextWrapPos(WrapWidth);
 		ImGui::TextUnformatted(HelpText);
 		ImGui::PopTextWrapPos();
 		ImGui::EndTooltip();
@@ -305,8 +313,8 @@ stream_button_idle_label(GlobalState *AppState)
 static std::string
 load_model_button_idle_label(GlobalState *AppState)
 {
-	if (!AppState->LoadModelHotkey.is_valid()) return "Load Selected STT Model";
-	return "Load Selected STT Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
+	if (!AppState->LoadModelHotkey.is_valid()) return "Load Selected Model";
+	return "Load Selected Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
 }
 
 // ---------------------------------------------------------------------------
@@ -523,7 +531,7 @@ render_update_modal(GlobalState *AppState)
 			bool Checking = U->CheckRunning.load();
 			bool Succeeded = U->CheckSucceeded.load();
 			const char *CheckLabel = (Succeeded || U->CheckFailed.load()) ?
-				"Check again" : "Check for updates";
+				"Check Again" : "Check for Updates";
 
 			if (Checking) ImGui::BeginDisabled();
 			if (ImGui::Button(CheckLabel))
@@ -531,7 +539,7 @@ render_update_modal(GlobalState *AppState)
 				start_update_check(AppState);
 			}
 			ImGui::SameLine();
-			if (ImGui::SmallButton("Releases page"))
+			if (ImGui::SmallButton("Releases Page"))
 			{
 				platform_open_url(U->ReleaseUrl.empty() ? UPDATER_RELEASES_URL : U->ReleaseUrl.c_str());
 			}
@@ -572,7 +580,7 @@ render_update_modal(GlobalState *AppState)
 						ImGui::BulletText("%s (%.1f MB)", Asset.Name.c_str(), (double)Asset.Size / 1000000.0);
 
 						const char *ActionLabel = platform_asset_is_installer(Asset.Name) ?
-							"Run installer" : "Update portable";
+							"Run Installer" : "Update Portable";
 
 						ImGui::SameLine();
 						if (ImGui::SmallButton(ActionLabel))
@@ -1519,7 +1527,7 @@ render_left_panel(GlobalState *AppState)
 
 	// Audio Input
 	{
-		ImGui::Text("Audio Input");
+		ImGui::Text("Audio Input Device");
 
 		if (AppState->AudioInputDeviceNames.empty())
 		{
@@ -1542,7 +1550,7 @@ render_left_panel(GlobalState *AppState)
 
 	// STT Model
 	{
-		ImGui::Text("STT Model");
+		ImGui::Text("Model");
 		if (AppState->STTModelNames.empty())
 		{
 			std::vector<std::string> NoModels = { "No Models Found" };
@@ -1564,7 +1572,7 @@ render_left_panel(GlobalState *AppState)
 			if (Busy) ImGui::EndDisabled();
 		}
 
-		if (colored_button("Download Models...", SmallButton, BUTTON_COLOR_GREY))
+		if (colored_button("Download Model", SmallButton, BUTTON_COLOR_GREY))
 		{
 			AppState->Ui.Download.IsModalOpen = true;
 		}
@@ -1582,11 +1590,11 @@ render_left_panel(GlobalState *AppState)
 			Color = BUTTON_COLOR_BLUE;
 			if (AppState->LoadModelHotkey.is_valid())
 			{
-				Label = "Unload STT Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
+				Label = "Unload Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
 			}
 			else
 			{
-				Label = "Unload STT Model";
+				Label = "Unload Model";
 			}
 		}
 		if (IsModelTransitioning)
@@ -1845,9 +1853,9 @@ render_download_modal(GlobalState *AppState)
 
 	if (!D->IsModalOpen) return;
 
-	if (!ImGui::IsPopupOpen("Download Models"))
+	if (!ImGui::IsPopupOpen("Download Model"))
 	{
-		ImGui::OpenPopup("Download Models");
+		ImGui::OpenPopup("Download Model");
 		D->ModalWidth = 0.0f;
 	}
 
@@ -1883,7 +1891,7 @@ render_download_modal(GlobalState *AppState)
 	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
 	bool Open = true;
-	if (ImGui::BeginPopupModal("Download Models", &Open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	if (ImGui::BeginPopupModal("Download Model", &Open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 	{
 		if (!ImGui::IsPopupOpen("Overwrite Model?"))
 			modal_close_on_click_outside(&D->IsModalOpen);
