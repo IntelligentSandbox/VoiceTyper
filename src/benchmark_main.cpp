@@ -1,6 +1,8 @@
 #define NOMINMAX
 
 #include "host_services.h"
+#include "perf.h"
+#include "state.h"
 #include "transcription_core.h"
 #include "whisper_wrapper.h"
 #include "stream_chunker.h"
@@ -30,6 +32,7 @@ struct BenchOptions
 	bool EnableVad = false;
 	std::string VadModelPath = "vad_models/ggml-silero-v5.1.2.bin";
 	std::string Device = "cpu";
+	int AudioDeviceIndex = -1;
 	int WarmupCount = 1;
 	int IterationCount = 5;
 	int ThreadCount = 1;
@@ -39,6 +42,14 @@ struct BenchOptions
 	bool HasNoise = false;
 	double SnrDb = 10.0;
 	bool HasSnr = false;
+};
+
+struct BenchPerfGuard
+{
+	~BenchPerfGuard()
+	{
+		perf_finish();
+	}
 };
 
 static FILE     *g_BenchLogFile  = nullptr;
@@ -98,8 +109,8 @@ print_usage(const char *ExeName)
 {
 	std::cerr << "Usage: " << ExeName
 		<< " --audio <path> [--model <path>] [--expected-text <text>]"
-		<< " [--mode <record|streaming>] [--vad <on|off>] [--vad-model <path>]"
-		<< " [--device <cpu|gpu>] [--warmup <count>] [--iterations <count>]"
+		<< " [--mode <record|streaming|capture-latency>] [--vad <on|off>] [--vad-model <path>]"
+		<< " [--device <cpu|gpu>] [--audio-device <index>] [--warmup <count>] [--iterations <count>]"
 		<< " [--threads <count>] [--log <off|file|verbose>]"
 		<< " [--beam <1-16>] [--noise <wav>] [--snr <db>]\n";
 }
@@ -199,12 +210,18 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 		{
 			const char *Value = require_value("--mode");
 			if (!Value) return false;
-			if (std::string(Value) != "record" && std::string(Value) != "streaming")
+			if (std::string(Value) != "record" && std::string(Value) != "streaming" &&
+				std::string(Value) != "capture-latency")
 			{
-				std::cerr << "--mode must be 'record' or 'streaming'\n";
+				std::cerr << "--mode must be 'record', 'streaming' or 'capture-latency'\n";
 				return false;
 			}
 			Options->Mode = Value;
+		}
+		else if (Arg == "--audio-device")
+		{
+			const char *Value = require_value("--audio-device");
+			if (!Value || !parse_int_arg(Value, 0, &Options->AudioDeviceIndex)) return false;
 		}
 		else if (Arg == "--vad")
 		{
@@ -262,7 +279,7 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 		}
 	}
 
-	if (Options->AudioPath.empty())
+	if (Options->AudioPath.empty() && Options->Mode != "capture-latency")
 	{
 		std::cerr << "--audio is required\n";
 		return false;
@@ -686,6 +703,165 @@ load_cuda_plugin(std::string *Error)
 	return false;
 }
 
+struct CaptureLatencyRun
+{
+	double OpenMs;
+	double StartMs;
+	double FirstAudioMs;
+	double StopMs;
+};
+
+static double
+latency_median(std::vector<double> &Values)
+{
+	size_t N = Values.size();
+	if (N == 0) return 0.0;
+
+	std::sort(Values.begin(), Values.end());
+	return Values[N / 2];
+}
+
+static void
+print_latency_metric(const char *Name, std::vector<double> Values)
+{
+	if (Values.empty()) return;
+
+	double Min = Values[0], Max = Values[0], Sum = 0.0;
+	for (double V : Values)
+	{
+		if (V < Min) Min = V;
+		if (V > Max) Max = V;
+		Sum += V;
+	}
+
+	std::cout << ",\"" << Name << "\":{"
+		<< "\"min\":" << format_ms(Min)
+		<< ",\"med\":" << format_ms(latency_median(Values))
+		<< ",\"avg\":" << format_ms(Sum / (double)Values.size())
+		<< ",\"max\":" << format_ms(Max)
+		<< "}";
+}
+
+static int
+run_capture_latency_bench(const BenchOptions &Options)
+{
+	GlobalState AppState = {};
+	AppState.PipelineRequestNs.store(0);
+	AppState.LastRecordDeviceOpenMs.store(-1.0);
+	AppState.LastRecordCaptureStartMs.store(-1.0);
+	AppState.LastRecordFirstAudioMs.store(-1.0);
+
+	AppState.AudioInputDevices = platform_query_audio_devices();
+	if (AppState.AudioInputDevices.empty())
+	{
+		std::cerr << "no audio capture devices found\n";
+		return 1;
+	}
+
+	int DeviceIndex = Options.AudioDeviceIndex;
+	if (DeviceIndex < 0)
+	{
+		DeviceIndex = 0;
+		for (int i = 0; i < (int)AppState.AudioInputDevices.size(); i++)
+		{
+			if (AppState.AudioInputDevices[i].IsDefault)
+			{
+				DeviceIndex = i;
+				break;
+			}
+		}
+	}
+	if (DeviceIndex >= (int)AppState.AudioInputDevices.size())
+	{
+		std::cerr << "audio device index out of range (found "
+			<< AppState.AudioInputDevices.size() << " devices)\n";
+		return 1;
+	}
+
+	std::vector<CaptureLatencyRun> Runs;
+
+	for (int Iteration = 0; Iteration < Options.IterationCount; Iteration++)
+	{
+		{
+			std::lock_guard<std::mutex> Lock(AppState.AudioBufferMutex);
+			AppState.AudioAccumBuffer.clear();
+		}
+
+		AppState.LastRecordDeviceOpenMs.store(-1.0);
+		AppState.LastRecordCaptureStartMs.store(-1.0);
+		AppState.LastRecordFirstAudioMs.store(-1.0);
+
+		perf_event("capture_latency_request");
+		AppState.PipelineRequestNs.store(perf_now_ns());
+		AppState.CaptureRunning.store(true);
+
+		std::thread CaptureThread(platform_audio_capture, &AppState.Platform, &AppState, DeviceIndex);
+
+		const int64_t FirstAudioTimeoutMs = 4000;
+		int64_t WaitedMs = 0;
+		while (AppState.LastRecordFirstAudioMs.load() < 0.0 && WaitedMs < FirstAudioTimeoutMs)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(2));
+			WaitedMs += 2;
+		}
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+		std::chrono::steady_clock::time_point StopStart = std::chrono::steady_clock::now();
+		AppState.CaptureRunning.store(false);
+		CaptureThread.join();
+		double StopMs = elapsed_ms(StopStart, std::chrono::steady_clock::now());
+
+		CaptureLatencyRun Run = {};
+		Run.OpenMs = AppState.LastRecordDeviceOpenMs.load();
+		Run.StartMs = AppState.LastRecordCaptureStartMs.load();
+		Run.FirstAudioMs = AppState.LastRecordFirstAudioMs.load();
+		Run.StopMs = StopMs;
+		Runs.push_back(Run);
+
+		perf_event("capture_latency_iteration_done");
+
+		if (Iteration + 1 < Options.IterationCount)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(150));
+		}
+	}
+
+	std::vector<double> OpenMs, StartMs, FirstAudioMs, StopMs;
+	for (const CaptureLatencyRun &Run : Runs)
+	{
+		OpenMs.push_back(Run.OpenMs);
+		StartMs.push_back(Run.StartMs);
+		FirstAudioMs.push_back(Run.FirstAudioMs);
+		StopMs.push_back(Run.StopMs);
+	}
+
+	std::cout << "{\"mode\":\"capture-latency\""
+		<< ",\"device_index\":" << DeviceIndex
+		<< ",\"device_name\":\"" << json_escape(AppState.AudioInputDevices[DeviceIndex].Name) << "\""
+		<< ",\"iterations\":" << Options.IterationCount
+		<< ",\"per_iteration\":[";
+
+	for (size_t i = 0; i < Runs.size(); i++)
+	{
+		std::cout << (i > 0 ? "," : "")
+			<< "{\"open_ms\":" << format_ms(Runs[i].OpenMs >= 0 ? Runs[i].OpenMs : -1.0)
+			<< ",\"start_ms\":" << format_ms(Runs[i].StartMs >= 0 ? Runs[i].StartMs : -1.0)
+			<< ",\"first_audio_ms\":" << format_ms(Runs[i].FirstAudioMs >= 0 ? Runs[i].FirstAudioMs : -1.0)
+			<< ",\"stop_ms\":" << format_ms(Runs[i].StopMs)
+			<< "}";
+	}
+
+	std::cout << "]";
+	print_latency_metric("open_ms", OpenMs);
+	print_latency_metric("start_ms", StartMs);
+	print_latency_metric("first_audio_ms", FirstAudioMs);
+	print_latency_metric("stop_ms", StopMs);
+	std::cout << "}\n";
+
+	return 0;
+}
+
 int
 main(int ArgCount, char **Args)
 {
@@ -694,6 +870,17 @@ main(int ArgCount, char **Args)
 	{
 		print_usage(Args[0]);
 		return 2;
+	}
+
+	perf_start(platform_get_binary_dir().c_str(), 10);
+	perf_event("bench_process_start");
+	BenchPerfGuard PerfGuard;
+
+	if (Options.Mode == "capture-latency")
+	{
+		int Ret = run_capture_latency_bench(Options);
+		perf_event("bench_process_end");
+		return Ret;
 	}
 
 	std::vector<float> Samples;
@@ -740,14 +927,29 @@ main(int ArgCount, char **Args)
 		InferenceDeviceIndex = 1;
 	}
 
+	PerfMemorySnapshot MemBeforeLoad = {};
+	perf_read_process_memory(&MemBeforeLoad);
+	PerfCpuSnapshot CpuBeforeLoad = {};
+	perf_read_process_cpu(&CpuBeforeLoad);
+
+	bool Loaded = false;
 	auto LoadStart = std::chrono::steady_clock::now();
-	bool Loaded = load_whisper_model(&ModelState, Options.ModelPath.c_str(), 0, InferenceDeviceIndex);
+	{
+		PerfSpan ModelLoadSpan("bench_model_load");
+		Loaded = load_whisper_model(&ModelState, Options.ModelPath.c_str(), 0, InferenceDeviceIndex);
+	}
 	auto LoadEnd = std::chrono::steady_clock::now();
 	if (!Loaded)
 	{
 		std::cerr << "failed to load Whisper model: " << Options.ModelPath << "\n";
 		return 1;
 	}
+
+	PerfMemorySnapshot MemAfterLoad = {};
+	perf_read_process_memory(&MemAfterLoad);
+	PerfCpuSnapshot CpuAfterLoad = {};
+	perf_read_process_cpu(&CpuAfterLoad);
+	double CpuModelLoadMs = CpuAfterLoad.TotalMs() - CpuBeforeLoad.TotalMs();
 
 	static const int BENCH_SAMPLE_RATE = 16000;
 	bool IsStreaming = (Options.Mode == "streaming");
@@ -820,9 +1022,14 @@ main(int ArgCount, char **Args)
 	}
 
 	std::vector<std::vector<double>> PerUnitTimes;
+	std::vector<double> CpuTimes;
 	PerUnitTimes.reserve((size_t)Options.IterationCount);
+	CpuTimes.reserve((size_t)Options.IterationCount);
 	for (int i = 0; i < Options.IterationCount; i++)
 	{
+		PerfCpuSnapshot CpuIterStart = {};
+		perf_read_process_cpu(&CpuIterStart);
+
 		std::vector<double> UnitTimes;
 		int Ret = run_one_pass(&Text, &UnitTimes);
 		if (Ret != 0)
@@ -831,6 +1038,11 @@ main(int ArgCount, char **Args)
 			unload_whisper_model(&ModelState);
 			return 1;
 		}
+
+		PerfCpuSnapshot CpuIterEnd = {};
+		perf_read_process_cpu(&CpuIterEnd);
+		CpuTimes.push_back(CpuIterEnd.TotalMs() - CpuIterStart.TotalMs());
+
 		PerUnitTimes.push_back(std::move(UnitTimes));
 	}
 
@@ -842,6 +1054,22 @@ main(int ArgCount, char **Args)
 		for (double T : UnitTimes) Total += T;
 		TranscribeTimes.push_back(Total);
 	}
+
+	double TotalAudioMs = 0.0;
+	for (int Ms : UnitDurationsMs) TotalAudioMs += (double)Ms;
+
+	double TranscribeWallSum = 0.0;
+	double TranscribeWallMin = TranscribeTimes.empty() ? 0.0 : TranscribeTimes[0];
+	for (double T : TranscribeTimes)
+	{
+		TranscribeWallSum += T;
+		if (T < TranscribeWallMin) TranscribeWallMin = T;
+	}
+	double TranscribeWallAvg = TranscribeTimes.empty() ? 0.0 : TranscribeWallSum / (double)TranscribeTimes.size();
+
+	double CpuTranscribeSum = 0.0;
+	for (double T : CpuTimes) CpuTranscribeSum += T;
+	double CpuTranscribeAvg = CpuTimes.empty() ? 0.0 : CpuTranscribeSum / (double)CpuTimes.size();
 
 	std::string NormalizedText = normalize_expected_text(Text);
 	std::string NormalizedExpected;
@@ -859,6 +1087,17 @@ main(int ArgCount, char **Args)
 			<< ",\"snr_db\":" << std::fixed << std::setprecision(1) << Options.SnrDb;
 	}
 	std::cout << ",\"model_load_ms\":" << format_ms(elapsed_ms(LoadStart, LoadEnd))
+		<< ",\"cpu_model_load_ms\":" << format_ms(CpuModelLoadMs)
+		<< ",\"mem_before_private_mb\":" << format_ms((double)MemBeforeLoad.PrivateBytes / (1024.0 * 1024.0))
+		<< ",\"mem_after_private_mb\":" << format_ms((double)MemAfterLoad.PrivateBytes / (1024.0 * 1024.0))
+		<< ",\"mem_model_private_mb\":" << format_ms(
+			(double)(MemAfterLoad.PrivateBytes - MemBeforeLoad.PrivateBytes) / (1024.0 * 1024.0))
+		<< ",\"mem_model_working_mb\":" << format_ms(
+			(double)(MemAfterLoad.WorkingSetBytes - MemBeforeLoad.WorkingSetBytes) / (1024.0 * 1024.0))
+		<< ",\"peak_private_mb\":" << format_ms((double)perf_peak_private_bytes() / (1024.0 * 1024.0))
+		<< ",\"cpu_transcribe_avg_ms\":" << format_ms(CpuTranscribeAvg)
+		<< ",\"rtf_avg\":" << format_ms(TranscribeWallAvg > 0.0 ? TotalAudioMs / TranscribeWallAvg : 0.0)
+		<< ",\"rtf_best\":" << format_ms(TranscribeWallMin > 0.0 ? TotalAudioMs / TranscribeWallMin : 0.0)
 		<< ",\"unit_count\":" << Units.size()
 		<< ",\"unit_durations_ms\":[";
 	for (size_t i = 0; i < UnitDurationsMs.size(); i++)
@@ -887,6 +1126,13 @@ main(int ArgCount, char **Args)
 		std::cout << "]";
 	}
 
+	std::cout << "],\"cpu_transcribe_ms\":[";
+	for (size_t i = 0; i < CpuTimes.size(); i++)
+	{
+		if (i > 0) std::cout << ",";
+		std::cout << format_ms(CpuTimes[i]);
+	}
+
 	std::cout << "],\"text\":\"" << json_escape(Text) << "\"";
 	if (Options.HasExpectedText)
 	{
@@ -910,6 +1156,7 @@ main(int ArgCount, char **Args)
 	std::cout << "}\n";
 
 	unload_whisper_model(&ModelState);
+	perf_event("bench_process_end");
 	shutdown_bench_logging();
 	return 0;
 }

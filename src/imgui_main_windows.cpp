@@ -5,6 +5,7 @@
 #include <dwmapi.h>
 #include <d3d11.h>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #pragma comment(lib, "dwmapi.lib")
@@ -20,6 +21,7 @@
 #include "app_core.h"
 #include "imgui_ui.h"
 #include "diagnostics.h"
+#include "perf.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -46,6 +48,8 @@ static LONGLONG                g_AppUpdateIntervalTicks  = 0;
 static LONGLONG                g_NextAppTick             = 0;
 static AppFrameState           g_FrameState              = {};
 static bool                    g_HasPresentedFrame       = false;
+static double                  g_LastAppTickPerfMs       = 0.0;
+static bool                    g_HasAppTickPerfSample    = false;
 
 // ---------------------------------------------------------------------------
 // Forward Declarations
@@ -351,6 +355,14 @@ run_due_app_updates(LONGLONG Now)
 	int AppTicksRun = 0;
 	while (Now >= g_NextAppTick && AppTicksRun < APP_UPDATE_MAX_CATCH_UP_TICKS)
 	{
+		double TickPerfMs = perf_now_ms();
+		if (g_HasAppTickPerfSample)
+		{
+			perf_note_loop_tick(TickPerfMs - g_LastAppTickPerfMs);
+		}
+		g_LastAppTickPerfMs = TickPerfMs;
+		g_HasAppTickPerfSample = true;
+
 		AppFrameResult FrameResult = app_update_runtime_frame(
 			g_AppState,
 			&g_FrameState,
@@ -860,6 +872,23 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /*ShowCmd*/)
 {
+	perf_event("process_start");
+
+	char PerfEnv[16] = {};
+	char PerfHzEnv[16] = {};
+	bool PerfEnabled = false;
+	if (GetEnvironmentVariableA("VOICETYPER_PERF", PerfEnv, sizeof(PerfEnv)) > 0)
+	{
+		PerfEnabled = (PerfEnv[0] != '\0') && (strcmp(PerfEnv, "0") != 0);
+	}
+	int PerfHz = 4;
+	if (GetEnvironmentVariableA("VOICETYPER_PERF_HZ", PerfHzEnv, sizeof(PerfHzEnv)) > 0)
+	{
+		int Parsed = atoi(PerfHzEnv);
+		if (Parsed > 0) PerfHz = Parsed;
+	}
+	if (PerfEnabled) perf_start(platform_get_data_dir().c_str(), PerfHz);
+
 	init_diagnostics();
 
 	ImGui_ImplWin32_EnableDpiAwareness();
@@ -924,12 +953,16 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		UnregisterClassW(Wc.lpszClassName, Instance);
 		return 1;
 	}
+	perf_event("window_d3d_init_done");
 
 	GlobalState AppStateStorage = {};
 	GlobalState *AppState = &AppStateStorage;
 	g_AppState = AppState;
 
-	app_initialize_runtime(AppState, Hwnd);
+	{
+		PerfSpan AppInitSpan("app_init");
+		app_initialize_runtime(AppState, Hwnd);
+	}
 
 	check_for_previous_crash_dumps(&AppState->Ui.PendingCrashDumps);
 	if (!AppState->Ui.PendingCrashDumps.empty())
@@ -952,6 +985,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	ImGui_ImplWin32_Init(Hwnd);
 	ImGui_ImplDX11_Init(g_Device, g_DeviceContext);
 	g_ImGuiReady = true;
+	perf_event("ui_backends_init_done");
 
 	refresh_render_cadence(Hwnd);
 	g_AppUpdateIntervalTicks = performance_interval_for_hz(APP_UPDATE_HZ);
@@ -971,10 +1005,12 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	ShowWindow(Hwnd, Maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
 	UpdateWindow(Hwnd);
 	render_frame();
+	perf_event("first_frame_presented");
 
 	// Kick the CUDA/GPU probe last: loading the CUDA plugin DLLs holds the
 	// loader lock, so it must not overlap the UI thread's init work above.
 	refresh_inference_devices(AppState);
+	perf_event("gpu_probe_started");
 
 	bool Running = true;
 	while (Running)
@@ -1040,17 +1076,24 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	record_indicator_shutdown();
 
-	app_shutdown_runtime(AppState);
+	perf_event("shutdown_begin");
+	{
+		PerfSpan ShutdownSpan("app_shutdown");
+		app_shutdown_runtime(AppState);
 
-	ImGui_ImplDX11_Shutdown();
-	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext();
+		ImGui_ImplDX11_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
 
-	cleanup_device_d3d();
-	DestroyWindow(Hwnd);
-	UnregisterClassW(Wc.lpszClassName, Instance);
+		cleanup_device_d3d();
+		DestroyWindow(Hwnd);
+		UnregisterClassW(Wc.lpszClassName, Instance);
+	}
+	perf_event("process_end");
 
 	shutdown_diagnostics();
+
+	perf_finish();
 
 	return 0;
 }

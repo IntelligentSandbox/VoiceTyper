@@ -2,6 +2,7 @@
 
 #include "host_services.h"
 #include "state.h"
+#include "perf.h"
 
 #include <vector>
 #include <string>
@@ -590,6 +591,9 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 	(void)Platform;
 	const int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
 
+	const int64_t RequestNs = AppState->PipelineRequestNs.load();
+	bool GotFirstSamples = false;
+
 	AudioPipelineContext PipeCtx = {};
 	PipeCtx.Running = &AppState->CaptureRunning;
 
@@ -624,6 +628,9 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 		return false;
 	}
 
+	AppState->LastRecordDeviceOpenMs.store((double)(perf_now_ns() - RequestNs) / 1000000.0);
+	perf_event("audio_device_open");
+
 	PipeCtx.Buffers.resize(AUDIO_CAPTURE_BUFFER_COUNT);
 	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
 	{
@@ -639,6 +646,9 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 
 	waveInStart(PipeCtx.WaveInHandle);
 
+	AppState->LastRecordCaptureStartMs.store((double)(perf_now_ns() - RequestNs) / 1000000.0);
+	perf_event("audio_capture_started");
+
 	while (AppState->CaptureRunning.load())
 	{
 		DWORD WaitResult = WaitForSingleObject(PipeCtx.ReadyEvent, 50);
@@ -649,18 +659,25 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 			WAVEHDR &Hdr = PipeCtx.Buffers[i].Header;
 			if (!(Hdr.dwFlags & WHDR_DONE)) continue;
 
-			int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(int16_t));
-			if (SamplesGot > 0)
+		int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(int16_t));
+		if (SamplesGot > 0)
+		{
+			const int16_t *Src = PipeCtx.Buffers[i].Data.data();
+			std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
+			size_t OldSize = AppState->AudioAccumBuffer.size();
+			AppState->AudioAccumBuffer.resize(OldSize + SamplesGot);
+			for (int j = 0; j < SamplesGot; j++)
 			{
-				const int16_t *Src = PipeCtx.Buffers[i].Data.data();
-				std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-				size_t OldSize = AppState->AudioAccumBuffer.size();
-				AppState->AudioAccumBuffer.resize(OldSize + SamplesGot);
-				for (int j = 0; j < SamplesGot; j++)
-				{
-					AppState->AudioAccumBuffer[OldSize + j] = Src[j] / 32768.0f;
-				}
+				AppState->AudioAccumBuffer[OldSize + j] = Src[j] / 32768.0f;
 			}
+
+			if (!GotFirstSamples)
+			{
+				GotFirstSamples = true;
+				AppState->LastRecordFirstAudioMs.store((double)(perf_now_ns() - RequestNs) / 1000000.0);
+				perf_event("audio_first_samples");
+			}
+		}
 
 			Hdr.dwFlags         = 0;
 			Hdr.dwBytesRecorded = 0;
@@ -668,6 +685,8 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 			waveInAddBuffer(PipeCtx.WaveInHandle, &Hdr, sizeof(WAVEHDR));
 		}
 	}
+
+	PerfSpan DeviceCloseSpan("audio_device_close");
 
 	waveInStop(PipeCtx.WaveInHandle);
 	waveInReset(PipeCtx.WaveInHandle);

@@ -49,6 +49,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---------------------------------------------------------------------------
 option(VOICETYPER_BUILD_CUDA_PLUGIN "Build the ggml-cuda dynamic-load plugin MODULE (requires CUDA toolkit). When OFF (default) the exe has zero CUDA awareness and CUDA is discovered at runtime by loading the plugin from the cuda/ folder shipped next to the exe." OFF)
 option(VOICETYPER_BUILD_BENCH "Build the standalone VoiceTyperBench dev tool (CPU-only). OFF by default; the bench is no longer part of the normal application build or releases." OFF)
+option(VOICETYPER_PERF "Compile the perf instrumentation (src/perf.h event/sampler/report machinery) into the application. OFF by default: uninstrumented builds compile every probe to a no-op." OFF)
 option(VOICETYPER_APP_IPO "Enable IPO for VoiceTyper application targets" ON)
 set(GGML_LTO OFF CACHE BOOL "Enable GGML link time optimization")
 set(VOICETYPER_OUTPUT_BASE_DIR "${CMAKE_SOURCE_DIR}/build" CACHE PATH "Base directory for application outputs")
@@ -202,6 +203,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE
 	$<$<CONFIG:Debug>:DEBUG>
 	VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
+	$<$<BOOL:${VOICETYPER_PERF}>:VOICETYPER_PERF=1>
 )
 
 # The Windows sources link extra system libs via MSVC-only #pragma comment(lib)
@@ -257,6 +259,7 @@ if(VOICETYPER_BUILD_BENCH)
 	target_compile_definitions(VoiceTyperBench PRIVATE
 		$<$<CONFIG:Debug>:DEBUG>
 		VOICETYPER_VERSION_FULL="${VOICETYPER_VERSION_FULL}"
+		VOICETYPER_PERF=1
 	)
 
 	target_link_libraries(VoiceTyperBench PRIVATE

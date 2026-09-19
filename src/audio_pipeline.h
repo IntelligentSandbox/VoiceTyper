@@ -4,6 +4,7 @@
 #include "transcription_core.h"
 
 #include "host_services.h"
+#include "perf.h"
 #include "stream_chunker.h"
 
 #include <cstdio>
@@ -89,11 +90,16 @@ static void
 run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::vector<float> &Chunk)
 {
 	float Rms = compute_rms(Chunk.data(), (int)Chunk.size());
-	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD) return;
+	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD)
+	{
+		perf_event("transcribe_skipped_silence");
+		return;
+	}
 
 	std::string Transcription;
 	std::vector<TranscribedWord> TranscribedWords;
 	std::chrono::steady_clock::time_point TxStart = std::chrono::steady_clock::now();
+	PerfSpan TranscribeSpan("transcribe");
 	int Ret = transcribe_pcm_to_string(
 		AppState->WhisperState.Context, Params, Chunk.data(), (int)Chunk.size(),
 		&Transcription, &TranscribedWords);
@@ -119,6 +125,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 		}
 		std::chrono::steady_clock::time_point PasteStart = std::chrono::steady_clock::now();
 		HotkeyConfig PasteHotkey = resolve_paste_hotkey(AppState, TargetWindow);
+		PerfSpan PasteSpan("paste");
 		platform_inject_text(
 			&AppState->Platform,
 			TargetWindow,
@@ -296,6 +303,7 @@ streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 	SegmentThread.join();
 	stream_close_completed_chunks(&ChunkQueue);
 	InferThread.join();
+	perf_event("stream_pipeline_done");
 	AppState->PipelineActive.store(false);
 	AppState->StreamingFinalizeOnStop.store(false);
 }
@@ -345,6 +353,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		run_whisper_on_chunk(AppState, Params, Chunk);
 	}
 
+	perf_event("record_pipeline_done");
 	AppState->PipelineActive.store(false);
 }
 
@@ -366,6 +375,9 @@ pipeline_preflight(GlobalState *AppState)
 inline bool
 start_record_pipeline(GlobalState *AppState)
 {
+	AppState->PipelineRequestNs.store(perf_now_ns());
+	perf_event("record_start_requested");
+
 	if (!pipeline_preflight(AppState)) return false;
 
 	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
@@ -396,6 +408,9 @@ signal_record_stop(GlobalState *AppState)
 inline bool
 start_streaming_pipeline(GlobalState *AppState)
 {
+	AppState->PipelineRequestNs.store(perf_now_ns());
+	perf_event("stream_start_requested");
+
 	if (!pipeline_preflight(AppState)) return false;
 
 	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();

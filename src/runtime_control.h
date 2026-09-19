@@ -3,6 +3,7 @@
 #include "state.h"
 #include "audio_pipeline.h"
 #include "input.h"
+#include "perf.h"
 #include "settings.h"
 #include "sounds.h"
 
@@ -26,11 +27,16 @@ runtime_model_transition_thread(GlobalState *AppState, int ModelIndex,
 {
 	bool Success = true;
 
-	if (UnloadCurrentModel) unload_whisper_model(&AppState->WhisperState);
+	if (UnloadCurrentModel)
+	{
+		PerfSpan ModelUnloadSpan("model_unload");
+		unload_whisper_model(&AppState->WhisperState);
+	}
 
 	if (ModelIndex >= 0)
 	{
 		std::chrono::steady_clock::time_point Start = std::chrono::steady_clock::now();
+		PerfSpan ModelLoadSpan("model_load");
 		Success = load_whisper_model(
 			&AppState->WhisperState,
 			AppState->STTModelPaths[ModelIndex].c_str(),

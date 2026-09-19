@@ -251,6 +251,16 @@ struct CoreRuntimeState
 	std::atomic<double> LastModelLoadMs;
 	std::atomic<double> LastTranscriptionMs;
 	std::atomic<double> LastPasteMs;
+
+	// Record/stream pipeline start latency breakdown. PipelineRequestNs is the
+	// perf-timeline (see perf.h) instant the UI thread requested the pipeline;
+	// the capture thread fills the Last* values (ms, -1.0 = no measurement yet)
+	// relative to it: device opened -> capture actually started -> first audio
+	// samples appended to the accumulator.
+	std::atomic<int64_t> PipelineRequestNs;
+	std::atomic<double> LastRecordDeviceOpenMs;
+	std::atomic<double> LastRecordCaptureStartMs;
+	std::atomic<double> LastRecordFirstAudioMs;
 };
 
 struct UiRuntimeState

@@ -4,6 +4,7 @@
 #include "imgui_internal.h"
 #include "state.h"
 #include "input.h"
+#include "perf.h"
 #include "settings.h"
 #include "control.h"
 #include "diagnostics.h"
@@ -1477,6 +1478,14 @@ format_timing_ms(double Ms)
 	return std::string(Buf);
 }
 
+static std::string
+format_memory_mb(uint64_t Bytes)
+{
+	char Buf[64];
+	snprintf(Buf, sizeof(Buf), "%.1f MB", (double)Bytes / (1024.0 * 1024.0));
+	return std::string(Buf);
+}
+
 static void
 render_left_panel(GlobalState *AppState)
 {
@@ -1794,7 +1803,12 @@ render_transcribed_text_box(GlobalState *AppState)
 	std::string TimingsTooltip =
 		"Model load: " + format_timing_ms(AppState->LastModelLoadMs.load()) + "\n" +
 		"Transcription: " + format_timing_ms(AppState->LastTranscriptionMs.load()) + "\n" +
-		"Paste: " + format_timing_ms(AppState->LastPasteMs.load());
+		"Paste: " + format_timing_ms(AppState->LastPasteMs.load()) + "\n" +
+		"Record start: " + format_timing_ms(AppState->LastRecordCaptureStartMs.load()) + "\n" +
+		"First audio: " + format_timing_ms(AppState->LastRecordFirstAudioMs.load());
+#ifdef VOICETYPER_PERF
+	TimingsTooltip += "\nMemory (peak private): " + format_memory_mb(perf_peak_private_bytes());
+#endif
 	hover_help_mark(TimingsTooltip.c_str(), TimingsMarkStyle);
 
 	const float BoxHeight = ImGui::GetTextLineHeightWithSpacing() * 6.0f +

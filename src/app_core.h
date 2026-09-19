@@ -67,7 +67,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->InferenceDevicePrefersCpu = false;
 	AppState->PlayRecordSound = false;
 	AppState->ShowRecordIndicator = true;
-	AppState->RecordIndicatorDelayMs = 200;
+	AppState->RecordIndicatorDelayMs = RECORD_INDICATOR_DEFAULT_DELAY_MS;
 	AppState->StartSoundFreq = SOUND_DEFAULT_START_FREQ;
 	AppState->StopSoundFreq = SOUND_DEFAULT_STOP_FREQ;
 	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;
@@ -84,6 +84,11 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->LastModelLoadMs.store(-1.0);
 	AppState->LastTranscriptionMs.store(-1.0);
 	AppState->LastPasteMs.store(-1.0);
+
+	AppState->PipelineRequestNs.store(0);
+	AppState->LastRecordDeviceOpenMs.store(-1.0);
+	AppState->LastRecordCaptureStartMs.store(-1.0);
+	AppState->LastRecordFirstAudioMs.store(-1.0);
 
 	init_whisper_state(&AppState->WhisperState);
 
