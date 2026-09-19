@@ -330,6 +330,8 @@ settings_action_hotkey_ptr(GlobalState *AppState, int Action)
 	case 2:  return &AppState->StreamHotkey;
 	case 3:  return &AppState->LoadModelHotkey;
 	case 4:  return &AppState->PasteHotkey;
+	case 5:  return &AppState->FontSizeUpHotkey;
+	case 6:  return &AppState->FontSizeDownHotkey;
 	default: return nullptr;
 	}
 }
@@ -344,6 +346,8 @@ settings_action_setting_name(int Action)
 	case 2:  return "stream_hotkey";
 	case 3:  return "load_model_hotkey";
 	case 4:  return "paste_hotkey";
+	case 5:  return "font_size_up_hotkey";
+	case 6:  return "font_size_down_hotkey";
 	default: return "";
 	}
 }
@@ -1231,6 +1235,15 @@ render_hotkeys_modal(GlobalState *AppState)
 			if (i > 0) ImGui::SameLine();
 			ImVec4 Color = (S->SelectedAction == i) ? BUTTON_COLOR_BLUE : BUTTON_COLOR_GREY;
 			if (colored_button(ActionLabels[i], ActionSize, Color)) settings_select_action(AppState, i);
+		}
+
+		const char *FontActionLabels[] = { "Bigger Font", "Smaller Font" };
+		for (int i = 0; i < 2; i++)
+		{
+			int Action = 5 + i;
+			if (i > 0) ImGui::SameLine();
+			ImVec4 Color = (S->SelectedAction == Action) ? BUTTON_COLOR_BLUE : BUTTON_COLOR_GREY;
+			if (colored_button(FontActionLabels[i], ActionSize, Color)) settings_select_action(AppState, Action);
 		}
 
 		HotkeyConfig *CurrentHotkey = settings_action_hotkey_ptr(AppState, S->SelectedAction);

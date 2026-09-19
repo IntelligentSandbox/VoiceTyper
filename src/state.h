@@ -170,6 +170,8 @@ struct CoreRuntimeState
 	HotkeyConfig StreamHotkey;
 	HotkeyConfig LoadModelHotkey;
 	HotkeyConfig PasteHotkey;
+	HotkeyConfig FontSizeUpHotkey;
+	HotkeyConfig FontSizeDownHotkey;
 	RecordingHotkeyMode RecordHotkeyMode;
 
 	// Per-program paste hotkey overrides, matched against the target window's

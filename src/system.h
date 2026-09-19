@@ -277,6 +277,8 @@ query_hotkey_settings(GlobalState *AppState)
 	AppState->StreamHotkey       = default_stream_hotkey();
 	AppState->LoadModelHotkey    = default_load_model_hotkey();
 	AppState->PasteHotkey        = default_paste_hotkey();
+	AppState->FontSizeUpHotkey   = {};
+	AppState->FontSizeDownHotkey = {};
 	AppState->RecordHotkeyMode   = default_recording_hotkey_mode();
 
 	int Modifiers = 0, Key = 0;
@@ -309,6 +311,18 @@ query_hotkey_settings(GlobalState *AppState)
 	{
 		AppState->PasteHotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
 		AppState->PasteHotkey.VirtualKey = (AppKeyCode)Key;
+	}
+
+	if (load_hotkey_setting("font_size_up_hotkey", &Modifiers, &Key))
+	{
+		AppState->FontSizeUpHotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
+		AppState->FontSizeUpHotkey.VirtualKey = (AppKeyCode)Key;
+	}
+
+	if (load_hotkey_setting("font_size_down_hotkey", &Modifiers, &Key))
+	{
+		AppState->FontSizeDownHotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
+		AppState->FontSizeDownHotkey.VirtualKey = (AppKeyCode)Key;
 	}
 
 	int RecordHotkeyMode = 0;

@@ -15,6 +15,8 @@ struct AppFrameState
 	bool CancelRecordKeyWasDown;
 	bool StreamKeyWasDown;
 	bool LoadModelKeyWasDown;
+	bool FontSizeUpKeyWasDown;
+	bool FontSizeDownKeyWasDown;
 };
 
 struct AppFrameResult
@@ -126,11 +128,32 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	load_cpu_backend();
 }
 
+inline void
+app_adjust_ui_font_size(GlobalState *AppState, int Delta)
+{
+	AppState->UiFontSize += Delta;
+	if (AppState->UiFontSize < 8) AppState->UiFontSize = 8;
+	if (AppState->UiFontSize > 72) AppState->UiFontSize = 72;
+	save_int_setting("ui_font_size", AppState->UiFontSize);
+}
+
 inline AppFrameResult
 app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool HotkeysEnabled)
 {
 	AppFrameResult Result = {};
 	Result.ModelFailure = runtime_finish_model_transition(AppState);
+
+	bool FontSizeUpKeyIsDown   = is_hotkey_down(AppState->FontSizeUpHotkey);
+	bool FontSizeDownKeyIsDown = is_hotkey_down(AppState->FontSizeDownHotkey);
+
+	if (HotkeysEnabled)
+	{
+		if (FontSizeUpKeyIsDown && !FrameState->FontSizeUpKeyWasDown) app_adjust_ui_font_size(AppState, +1);
+		if (FontSizeDownKeyIsDown && !FrameState->FontSizeDownKeyWasDown) app_adjust_ui_font_size(AppState, -1);
+	}
+
+	FrameState->FontSizeUpKeyWasDown   = FontSizeUpKeyIsDown;
+	FrameState->FontSizeDownKeyWasDown = FontSizeDownKeyIsDown;
 
 	if (!HotkeysEnabled || AppState->IsModelTransitioning.load()) return Result;
 
