@@ -198,7 +198,7 @@ clip_release(AudioBlockPool *Pool, AudioClip *Clip)
 static int
 clip_duration_ms(const AudioClip *Clip)
 {
-	return Clip->TotalSamples * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
+	return (int)((int64_t)Clip->TotalSamples * 1000 / AUDIO_CAPTURE_SAMPLE_RATE);
 }
 
 // Gather a clip into one contiguous buffer for whisper input. Staging is a

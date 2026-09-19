@@ -247,7 +247,7 @@ stream_segment_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 			}
 			else
 			{
-				int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
+				int BufferDurationMs = (int)((int64_t)BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE);
 				ShouldCut = Detector.HasSpeech &&
 					Detector.SilenceMs >= STREAM_SILENCE_DURATION_MS &&
 					BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS;
