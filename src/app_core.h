@@ -66,6 +66,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->Ui.PendingCrashDumps.clear();
 	AppState->InferenceDevicePrefersCpu = false;
 	AppState->PlayRecordSound = false;
+	AppState->ShowRecordIndicator = true;
 	AppState->StartSoundFreq = SOUND_DEFAULT_START_FREQ;
 	AppState->StopSoundFreq = SOUND_DEFAULT_STOP_FREQ;
 	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;

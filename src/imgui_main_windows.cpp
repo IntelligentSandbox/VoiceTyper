@@ -33,6 +33,7 @@ static IDXGISwapChain         *g_SwapChain         = nullptr;
 static ID3D11RenderTargetView *g_RenderTargetView  = nullptr;
 static bool                    g_SwapChainOccluded = false;
 static GlobalState            *g_AppState          = nullptr;
+static HWND                    g_MainHwnd          = nullptr;
 static bool                    g_ImGuiReady        = false;
 static bool                    g_RenderDueNow      = true;
 static int                     g_RenderRefreshHz   = 60;
@@ -366,6 +367,385 @@ run_due_app_updates(LONGLONG Now)
 }
 
 // ---------------------------------------------------------------------------
+// Record Indicator Overlay
+// ---------------------------------------------------------------------------
+// Borderless layered topmost window floating a couple hundred pixels above the
+// taskbar while a recording/streaming session is active, so the user has
+// visual confidence that a held record key is actually capturing. It is not
+// part of the ImGui/D3D pipeline: plain GDI draws the pill (supersampled and
+// box-filtered for smooth edges) into a 32bpp premultiplied DIB that is
+// composited via UpdateLayeredWindow. The window only appears once a session
+// has been active for RECORD_INDICATOR_DELAY_MS, so brief hold-mode presses
+// never flash it. Click-through (WS_EX_TRANSPARENT) and non-activating
+// (WS_EX_NOACTIVATE), so it never steals input while the user holds keys.
+// ---------------------------------------------------------------------------
+#define RECORD_INDICATOR_DELAY_MS       750
+#define RECORD_INDICATOR_FADE_MS        160
+#define RECORD_INDICATOR_UPDATE_HZ      60
+#define RECORD_INDICATOR_REFRESH_HZ     1
+#define RECORD_INDICATOR_BOTTOM_GAP_PX  200
+#define RECORD_INDICATOR_SS             3
+#define RECORD_INDICATOR_MAX_ALPHA      242
+
+struct RecordIndicatorState
+{
+	HWND Hwnd;
+	HDC ScreenDc;
+	HDC MemDc;
+	HBITMAP Bitmap;
+	void *Bits;
+	int Width;
+	int Height;
+	std::vector<unsigned char> Base;
+	bool BaseIsStreaming;
+	UINT BaseDpi;
+	bool WasActive;
+	LONGLONG ActiveSinceTicks;
+	LONGLONG LastFrameTicks;
+	float Alpha;
+	bool Visible;
+};
+
+static RecordIndicatorState g_RecordIndicator = {};
+
+static LRESULT WINAPI
+record_indicator_wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
+{
+	return DefWindowProcW(Hwnd, Msg, WParam, LParam);
+}
+
+static bool
+record_indicator_create()
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+	if (Ri->Hwnd) return true;
+
+	HINSTANCE Instance = GetModuleHandleW(nullptr);
+
+	static bool ClassRegistered = false;
+	if (!ClassRegistered)
+	{
+		WNDCLASSEXW Wc = {};
+		Wc.cbSize = sizeof(Wc);
+		Wc.lpfnWndProc = record_indicator_wnd_proc;
+		Wc.hInstance = Instance;
+		Wc.lpszClassName = L"VoiceTyperIndicatorClass";
+		ClassRegistered = RegisterClassExW(&Wc) != 0;
+	}
+	if (!ClassRegistered) return false;
+
+	Ri->Hwnd = CreateWindowExW(
+		WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+		L"VoiceTyperIndicatorClass", L"VoiceTyper Record Indicator", WS_POPUP,
+		0, 0, 1, 1, g_MainHwnd, nullptr, Instance, nullptr);
+
+	return Ri->Hwnd != nullptr;
+}
+
+static void
+record_indicator_free_buffers()
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+	if (Ri->MemDc) { DeleteDC(Ri->MemDc); Ri->MemDc = nullptr; }
+	if (Ri->Bitmap) { DeleteObject(Ri->Bitmap); Ri->Bitmap = nullptr; }
+	if (Ri->ScreenDc) { ReleaseDC(nullptr, Ri->ScreenDc); Ri->ScreenDc = nullptr; }
+	Ri->Bits = nullptr;
+	Ri->Width = 0;
+	Ri->Height = 0;
+}
+
+static bool
+record_indicator_alloc_frame(int Width, int Height)
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+	if (Ri->Bitmap && Ri->Width == Width && Ri->Height == Height) return true;
+
+	record_indicator_free_buffers();
+
+	BITMAPINFO Bi = {};
+	Bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	Bi.bmiHeader.biWidth = Width;
+	Bi.bmiHeader.biHeight = -Height;
+	Bi.bmiHeader.biPlanes = 1;
+	Bi.bmiHeader.biBitCount = 32;
+	Bi.bmiHeader.biCompression = BI_RGB;
+
+	Ri->ScreenDc = GetDC(nullptr);
+	Ri->MemDc = CreateCompatibleDC(Ri->ScreenDc);
+	Ri->Bitmap = CreateDIBSection(Ri->ScreenDc, &Bi, DIB_RGB_COLORS, &Ri->Bits, nullptr, 0);
+	if (!Ri->Bitmap)
+	{
+		record_indicator_free_buffers();
+		return false;
+	}
+
+	SelectObject(Ri->MemDc, Ri->Bitmap);
+	Ri->Width = Width;
+	Ri->Height = Height;
+	return true;
+}
+
+// Draw the indicator at RECORD_INDICATOR_SS x supersampling, then box-filter
+// down into Base as a full-opacity premultiplied ARGB image. Magenta is the
+// coverage key: any subpixel still exactly magenta is background. Text is
+// drawn with an opaque background equal to the pill fill so GDI's font
+// antialiasing blends against the pill, not against the key color.
+static void
+record_indicator_render_base(bool IsStreaming, UINT Dpi)
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+
+	const int SS = RECORD_INDICATOR_SS;
+	const float Scale = (float)Dpi / 96.0f;
+	const int FontPx = (int)(19.0f * Scale + 0.5f);
+	const int DotD = (int)(16.0f * Scale + 0.5f);
+	const int Gap = (int)(10.0f * Scale + 0.5f);
+	const int PadX = (int)(26.0f * Scale + 0.5f);
+	const int Height = (int)(54.0f * Scale + 0.5f);
+	const int BorderPx = (int)(1.0f * Scale + 0.5f);
+
+	const wchar_t *Label = IsStreaming ? L"Streaming..." : L"Recording...";
+	const int LabelLen = lstrlenW(Label);
+
+	HDC ScreenDc = GetDC(nullptr);
+	HDC Dc = CreateCompatibleDC(ScreenDc);
+
+	HFONT Font = CreateFontW(
+		FontPx * SS, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+		DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+		CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+	HGDIOBJ FontPrev = SelectObject(Dc, Font);
+
+	SIZE TextSize = {};
+	GetTextExtentPoint32W(Dc, Label, LabelLen, &TextSize);
+
+	int W_ss = ((TextSize.cx + SS - 1) / SS) * SS + (PadX * 2 + DotD + Gap) * SS;
+	int H_ss = Height * SS;
+
+	BITMAPINFO Bi = {};
+	Bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	Bi.bmiHeader.biWidth = W_ss;
+	Bi.bmiHeader.biHeight = -H_ss;
+	Bi.bmiHeader.biPlanes = 1;
+	Bi.bmiHeader.biBitCount = 32;
+	Bi.bmiHeader.biCompression = BI_RGB;
+
+	void *SsBits = nullptr;
+	HBITMAP SsBitmap = CreateDIBSection(ScreenDc, &Bi, DIB_RGB_COLORS, &SsBits, nullptr, 0);
+	HGDIOBJ SsPrev = SelectObject(Dc, SsBitmap);
+	if (SsBitmap && SsBits)
+	{
+		const COLORREF PillColor = RGB(26, 27, 32);
+		HBRUSH KeyBrush = CreateSolidBrush(RGB(255, 0, 255));
+		HBRUSH PillBrush = CreateSolidBrush(PillColor);
+		HBRUSH DotBrush = CreateSolidBrush(RGB(230, 72, 78));
+		HPEN BorderPen = CreatePen(PS_SOLID, BorderPx * SS, RGB(96, 98, 112));
+
+		RECT Full = {0, 0, W_ss, H_ss};
+		FillRect(Dc, &Full, KeyBrush);
+
+		int Inset = (BorderPx * SS + 1) / 2;
+		int CornerRadius = (Height / 2 - BorderPx * 2) * SS;
+		HGDIOBJ PenPrev = SelectObject(Dc, BorderPen);
+		HGDIOBJ BrushPrev = SelectObject(Dc, PillBrush);
+		RoundRect(Dc, Inset, Inset, W_ss - Inset, H_ss - Inset, CornerRadius, CornerRadius);
+
+		SetBkMode(Dc, OPAQUE);
+		SetBkColor(Dc, PillColor);
+		SetTextColor(Dc, RGB(244, 244, 248));
+		int TextX = (PadX + DotD + Gap) * SS;
+		int TextY = (H_ss - TextSize.cy) / 2;
+		TextOutW(Dc, TextX, TextY, Label, LabelLen);
+
+		SelectObject(Dc, GetStockObject(NULL_PEN));
+		SelectObject(Dc, DotBrush);
+		int DotY = (H_ss - DotD * SS) / 2;
+		Ellipse(Dc, PadX * SS, DotY, PadX * SS + DotD * SS, DotY + DotD * SS);
+
+		SelectObject(Dc, PenPrev);
+		SelectObject(Dc, BrushPrev);
+		DeleteObject(KeyBrush);
+		DeleteObject(PillBrush);
+		DeleteObject(DotBrush);
+		DeleteObject(BorderPen);
+	}
+
+	int Width = W_ss / SS;
+	int FiltHeight = H_ss / SS;
+	Ri->Base.assign((size_t)Width * FiltHeight * 4, 0);
+
+	if (SsBitmap && SsBits)
+	{
+		for (int Y = 0; Y < FiltHeight; Y++)
+		{
+			for (int X = 0; X < Width; X++)
+			{
+				int RS = 0, GS = 0, BS = 0, Cnt = 0;
+				for (int SY = 0; SY < SS; SY++)
+				{
+					const unsigned char *Row = (unsigned char *)SsBits +
+						((size_t)(Y * SS + SY) * W_ss + (X * SS)) * 4;
+					for (int SX = 0; SX < SS; SX++)
+					{
+						const unsigned char *P = Row + SX * 4;
+						if (P[0] == 255 && P[1] == 0 && P[2] == 255) continue;
+						BS += P[0];
+						GS += P[1];
+						RS += P[2];
+						Cnt++;
+					}
+				}
+
+				unsigned char *O = Ri->Base.data() + ((size_t)Y * Width + X) * 4;
+				if (Cnt == 0) continue;
+
+				int A = Cnt * 255 / (SS * SS);
+				O[0] = (unsigned char)((BS / Cnt) * A / 255);
+				O[1] = (unsigned char)((GS / Cnt) * A / 255);
+				O[2] = (unsigned char)((RS / Cnt) * A / 255);
+				O[3] = (unsigned char)A;
+			}
+		}
+	}
+
+	Ri->Width = Width;
+	Ri->Height = FiltHeight;
+	Ri->BaseIsStreaming = IsStreaming;
+	Ri->BaseDpi = Dpi;
+
+	SelectObject(Dc, SsPrev);
+	SelectObject(Dc, FontPrev);
+	if (SsBitmap) DeleteObject(SsBitmap);
+	DeleteObject(Font);
+	DeleteDC(Dc);
+	ReleaseDC(nullptr, ScreenDc);
+}
+
+static void
+record_indicator_push_frame(float AlphaFrac)
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+	if (!Ri->Hwnd || !Ri->Bitmap) return;
+
+	int A = (int)(RECORD_INDICATOR_MAX_ALPHA * AlphaFrac);
+	size_t Pixels = (size_t)Ri->Width * Ri->Height;
+	const unsigned char *Src = Ri->Base.data();
+	unsigned char *Dst = (unsigned char *)Ri->Bits;
+	for (size_t I = 0; I < Pixels; I++)
+	{
+		Dst[0] = (unsigned char)(Src[0] * A / 255);
+		Dst[1] = (unsigned char)(Src[1] * A / 255);
+		Dst[2] = (unsigned char)(Src[2] * A / 255);
+		Dst[3] = (unsigned char)(Src[3] * A / 255);
+		Src += 4;
+		Dst += 4;
+	}
+
+	RECT WorkArea = {};
+	SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0);
+
+	POINT DstPos;
+	DstPos.x = WorkArea.left + ((WorkArea.right - WorkArea.left) - Ri->Width) / 2;
+	DstPos.y = WorkArea.bottom - RECORD_INDICATOR_BOTTOM_GAP_PX - Ri->Height;
+
+	POINT SrcPos = {0, 0};
+	SIZE Size = {Ri->Width, Ri->Height};
+	BLENDFUNCTION Blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+	UpdateLayeredWindow(Ri->Hwnd, Ri->ScreenDc, &DstPos, &Size, Ri->MemDc, &SrcPos, 0, &Blend, ULW_ALPHA);
+}
+
+// Advance the indicator state machine for this instant. Returns the counter
+// deadline when the overlay needs the loop to wake up again (animating or
+// refreshing), or a far-future value when idle.
+static LONGLONG
+record_indicator_update(GlobalState *AppState, LONGLONG Now)
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+	const LONGLONG Idle = 0x7fffffffffffffffLL;
+
+	bool Active = AppState->ShowRecordIndicator && (AppState->IsRecording || AppState->IsStreaming);
+	if (Active && !Ri->WasActive) Ri->ActiveSinceTicks = Now;
+	Ri->WasActive = Active;
+
+	LONGLONG Frequency = performance_counter_frequency();
+	LONGLONG DelayTicks = Frequency * RECORD_INDICATOR_DELAY_MS / 1000;
+	float TargetAlpha = (Active && Now - Ri->ActiveSinceTicks >= DelayTicks) ? 1.0f : 0.0f;
+
+	if (Ri->Alpha <= 0.0f && TargetAlpha <= 0.0f)
+	{
+		Ri->LastFrameTicks = 0;
+		if (Ri->Visible)
+		{
+			ShowWindow(Ri->Hwnd, SW_HIDE);
+			Ri->Visible = false;
+		}
+		return Idle;
+	}
+
+	float Dt = Ri->LastFrameTicks ? (float)(Now - Ri->LastFrameTicks) / (float)Frequency : 1.0f / 60.0f;
+	Ri->LastFrameTicks = Now;
+
+	float Step = Dt * (1000.0f / RECORD_INDICATOR_FADE_MS);
+	if (Step > 1.0f) Step = 1.0f;
+	if (Ri->Alpha < TargetAlpha) Ri->Alpha += Step; else Ri->Alpha -= Step;
+	if (Ri->Alpha > 1.0f) Ri->Alpha = 1.0f;
+	if (Ri->Alpha < 0.0f) Ri->Alpha = 0.0f;
+
+	if (Ri->Alpha <= 0.0f)
+	{
+		Ri->LastFrameTicks = 0;
+		if (Ri->Visible)
+		{
+			ShowWindow(Ri->Hwnd, SW_HIDE);
+			Ri->Visible = false;
+		}
+		return Idle;
+	}
+
+	UINT Dpi = 96;
+	HDC DpiDc = GetDC(g_MainHwnd);
+	if (DpiDc)
+	{
+		int Caps = GetDeviceCaps(DpiDc, LOGPIXELSX);
+		ReleaseDC(g_MainHwnd, DpiDc);
+		if (Caps >= 96) Dpi = (UINT)Caps;
+	}
+
+	bool IsStreaming = AppState->IsStreaming;
+	if (Ri->Base.empty() || Ri->BaseIsStreaming != IsStreaming || Ri->BaseDpi != Dpi)
+	{
+		record_indicator_render_base(IsStreaming, Dpi);
+	}
+
+	if (!record_indicator_alloc_frame(Ri->Width, Ri->Height)) return Idle;
+	if (!record_indicator_create()) return Idle;
+
+	record_indicator_push_frame(Ri->Alpha);
+	if (!Ri->Visible)
+	{
+		SetWindowPos(Ri->Hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+			SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+		Ri->Visible = true;
+	}
+
+	if (Ri->Alpha != TargetAlpha) return Now + Frequency / RECORD_INDICATOR_UPDATE_HZ;
+	return Now + Frequency / RECORD_INDICATOR_REFRESH_HZ;
+}
+
+static void
+record_indicator_shutdown()
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+	record_indicator_free_buffers();
+	if (Ri->Hwnd)
+	{
+		DestroyWindow(Ri->Hwnd);
+		Ri->Hwnd = nullptr;
+	}
+	UnregisterClassW(L"VoiceTyperIndicatorClass", GetModuleHandleW(nullptr));
+}
+
+// ---------------------------------------------------------------------------
 // Window Procedure
 // ---------------------------------------------------------------------------
 LRESULT WINAPI
@@ -495,6 +875,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		nullptr, nullptr, Instance, nullptr);
 
 	if (!Hwnd) return 1;
+	g_MainHwnd = Hwnd;
 
 	bool LightMode = false;
 	load_bool_setting("ui_light_mode", &LightMode);
@@ -598,6 +979,10 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 		Now = performance_counter_now();
 		LONGLONG NextDeadline = g_NextAppTick;
+
+		LONGLONG NextIndicatorTick = record_indicator_update(AppState, Now);
+		if (NextIndicatorTick < NextDeadline) NextDeadline = NextIndicatorTick;
+
 		if (window_can_render(Hwnd))
 		{
 			if (g_RenderDueNow)
@@ -615,6 +1000,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	}
 
 	g_ImGuiReady = false;
+
+	record_indicator_shutdown();
 
 	app_shutdown_runtime(AppState);
 

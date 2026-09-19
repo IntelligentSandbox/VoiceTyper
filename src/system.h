@@ -335,6 +335,9 @@ query_hotkey_settings(GlobalState *AppState)
 	bool SoundEnabled = false;
 	if (load_bool_setting("play_record_sound", &SoundEnabled)) AppState->PlayRecordSound = SoundEnabled;
 
+	bool ShowIndicator = true;
+	if (load_bool_setting("show_record_indicator", &ShowIndicator)) AppState->ShowRecordIndicator = ShowIndicator;
+
 	int IntVal = 0;
 	if (load_int_setting("start_sound_freq", &IntVal)) AppState->StartSoundFreq = IntVal;
 	if (load_int_setting("stop_sound_freq", &IntVal)) AppState->StopSoundFreq = IntVal;

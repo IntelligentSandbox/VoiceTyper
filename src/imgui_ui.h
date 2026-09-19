@@ -892,6 +892,12 @@ render_settings_panel(GlobalState *AppState)
 		S->HotkeysModalOpen = true;
 	}
 
+	if (ImGui::Checkbox("Show on-screen indicator while recording/streaming",
+		&AppState->ShowRecordIndicator))
+	{
+		save_bool_setting("show_record_indicator", AppState->ShowRecordIndicator);
+	}
+
 	if (ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
 		&AppState->PlayRecordSound))
 	{

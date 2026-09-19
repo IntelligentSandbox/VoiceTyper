@@ -188,6 +188,7 @@ struct CoreRuntimeState
 	std::atomic<bool> IsModelTransitioning;
 	std::atomic<bool> ExitRequested = false;
 	bool PlayRecordSound;
+	bool ShowRecordIndicator;
 	int StartSoundFreq;
 	int StopSoundFreq;
 	int CancelSoundFreq;
