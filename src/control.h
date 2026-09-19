@@ -32,10 +32,10 @@ show_model_transition_failure(GlobalState *AppState, ModelTransitionFailure Fail
 	switch (FailureCode)
 	{
 	case MODEL_TRANSITION_FAILURE_LOAD:
-		show_toast(AppState, "Failed to load STT model");
+		show_toast(AppState, "Failed to load model");
 		break;
 	case MODEL_TRANSITION_FAILURE_RELOAD:
-		show_toast(AppState, "Failed to reload STT model");
+		show_toast(AppState, "Failed to reload model");
 		break;
 	case MODEL_TRANSITION_FAILURE_TRANSFER:
 		show_toast(AppState, "Failed to reload model on new inference device");
