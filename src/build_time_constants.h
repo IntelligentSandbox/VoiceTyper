@@ -61,6 +61,27 @@ inline constexpr int AUDIO_CAPTURE_BITS_PER_SAMPLE = 16;
 inline constexpr int AUDIO_CAPTURE_BUFFER_MS       = 100;
 inline constexpr int AUDIO_CAPTURE_BUFFER_COUNT    = 8;
 
+// Audio input memory pool. Capture audio is accumulated in fixed-size pooled
+// blocks (a 1-minute block = 960,000 floats = ~3.8MB) chained per clip, so
+// steady-state recording/streaming performs no heap allocations and captured
+// audio is never realloc-copied.
+inline constexpr int AUDIO_POOL_BLOCK_MS            = 60000;
+inline constexpr int AUDIO_POOL_INITIAL_BLOCKS      = 3;
+inline constexpr int AUDIO_POOL_REFILL_BATCH_BLOCKS = 3;
+// Refill trigger: when the free-block count falls to this low-water mark,
+// pool_acquire allocates another refill batch.
+inline constexpr int AUDIO_POOL_REFILL_LOW_WATER    = 0;
+// Contiguous whisper-input staging buffer seed size, reserved once at startup
+// (30s of audio). Grows geometrically afterwards, never shrinks.
+inline constexpr int AUDIO_STAGING_INITIAL_MS       = 30000;
+inline constexpr int AUDIO_POOL_BLOCK_SAMPLES =
+	AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_POOL_BLOCK_MS / 1000;
+static_assert(AUDIO_POOL_BLOCK_MS > 0, "AUDIO_POOL_BLOCK_MS must be positive");
+static_assert(AUDIO_POOL_INITIAL_BLOCKS > 0, "AUDIO_POOL_INITIAL_BLOCKS must be positive");
+static_assert(AUDIO_POOL_REFILL_BATCH_BLOCKS > 0, "AUDIO_POOL_REFILL_BATCH_BLOCKS must be positive");
+static_assert(AUDIO_POOL_REFILL_LOW_WATER >= 0, "AUDIO_POOL_REFILL_LOW_WATER must be non-negative");
+static_assert(AUDIO_POOL_BLOCK_SAMPLES > 0, "AUDIO_POOL_BLOCK_SAMPLES must be positive");
+
 // ---------------------------------------------------------------------------
 // Sound
 // ---------------------------------------------------------------------------
@@ -91,6 +112,7 @@ inline constexpr ColorRgba TOAST_COLOR_SUCCESS = ColorRgba{0.10f, 0.55f, 0.20f, 
 // ---------------------------------------------------------------------------
 inline constexpr int FONT_SUGGESTION_MAX_ROWS = 5;
 inline constexpr double TOAST_DURATION_SECONDS = 2.0;
+inline constexpr int RECORD_INDICATOR_DEFAULT_DELAY_MS = 50;
 
 // ---------------------------------------------------------------------------
 // Streaming segmenter
