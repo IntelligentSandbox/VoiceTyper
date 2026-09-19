@@ -5,6 +5,7 @@
 #include <dwmapi.h>
 #include <d3d11.h>
 #include <cstdio>
+#include <cstring>
 
 #pragma comment(lib, "dwmapi.lib")
 
@@ -378,12 +379,14 @@ run_due_app_updates(LONGLONG Now)
 // has been active for RecordIndicatorDelayMs (user setting), so brief
 // hold-mode presses never flash it. Click-through (WS_EX_TRANSPARENT) and
 // non-activating (WS_EX_NOACTIVATE), so it never steals input while the user
-// holds keys. Frames are pushed to UpdateLayeredWindow only when something
-// actually changed (fade step, label, size, 1Hz position re-check), so a
-// static indicator does zero compositing work and never flickers.
+// holds keys. Frames are pushed to UpdateLayeredWindow only while animating
+// (fade), driven at the monitor's current refresh rate so the fade matches
+// the OS compositor cadence; a static indicator is never redrawn at all - the
+// DWM keeps displaying the last pushed surface. The window is only moved or
+// resized when its frame actually changed, because ULW's move+size path can
+// visibly flash.
 // ---------------------------------------------------------------------------
 #define RECORD_INDICATOR_FADE_MS        160
-#define RECORD_INDICATOR_ANIM_HZ        60
 #define RECORD_INDICATOR_REFRESH_MS     1000
 #define RECORD_INDICATOR_BOTTOM_GAP_PX  200
 #define RECORD_INDICATOR_SS             3
@@ -402,12 +405,17 @@ struct RecordIndicatorState
 	bool BaseIsStreaming;
 	UINT BaseDpi;
 	UINT CachedDpi;
+	bool ContentDirty;
 	bool WasActive;
 	LONGLONG ActiveSinceTicks;
 	LONGLONG LastFrameTicks;
 	LONGLONG NextAnimTicks;
 	LONGLONG NextRefreshTicks;
 	int LastPushedAlpha;
+	int LastPushedX;
+	int LastPushedY;
+	int LastPushedWidth;
+	int LastPushedHeight;
 	float Alpha;
 	bool Visible;
 };
@@ -488,6 +496,7 @@ record_indicator_alloc_frame(int Width, int Height)
 	SelectObject(Ri->MemDc, Ri->Bitmap);
 	Ri->Width = Width;
 	Ri->Height = Height;
+	Ri->ContentDirty = true;
 	return true;
 }
 
@@ -627,36 +636,54 @@ record_indicator_render_base(bool IsStreaming, UINT Dpi)
 	ReleaseDC(nullptr, ScreenDc);
 }
 
+// Compute the on-screen frame for the indicator. Returns true when it differs
+// from the last pushed one (work area or size changed).
+static bool
+record_indicator_frame_changed(RecordIndicatorState *Ri, POINT *OutPos)
+{
+	RECT WorkArea = {};
+	SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0);
+
+	OutPos->x = WorkArea.left + ((WorkArea.right - WorkArea.left) - Ri->Width) / 2;
+	OutPos->y = WorkArea.bottom - RECORD_INDICATOR_BOTTOM_GAP_PX - Ri->Height;
+
+	if (Ri->LastPushedWidth != Ri->Width || Ri->LastPushedHeight != Ri->Height) return true;
+	return Ri->LastPushedX != OutPos->x || Ri->LastPushedY != OutPos->y;
+}
+
+// Composite the current frame. The DIB always holds the fully-opaque image;
+// the fade is applied through BLENDFUNCTION.SourceConstantAlpha so animation
+// frames never touch pixels. pptDst/psize are passed only when the window
+// frame actually changed - UpdateLayeredWindow's move+size path can visibly
+// flash, so animation frames must update content and blend only.
 static void
 record_indicator_push_frame(int AlphaByte)
 {
 	RecordIndicatorState *Ri = &g_RecordIndicator;
 	if (!Ri->Hwnd || !Ri->Bitmap) return;
 
-	size_t Pixels = (size_t)Ri->Width * Ri->Height;
-	const unsigned char *Src = Ri->Base.data();
-	unsigned char *Dst = (unsigned char *)Ri->Bits;
-	for (size_t I = 0; I < Pixels; I++)
-	{
-		Dst[0] = (unsigned char)(Src[0] * AlphaByte / 255);
-		Dst[1] = (unsigned char)(Src[1] * AlphaByte / 255);
-		Dst[2] = (unsigned char)(Src[2] * AlphaByte / 255);
-		Dst[3] = (unsigned char)(Src[3] * AlphaByte / 255);
-		Src += 4;
-		Dst += 4;
-	}
+	POINT Pos = {0, 0};
+	bool FrameChanged = record_indicator_frame_changed(Ri, &Pos);
+	bool SizeChanged = Ri->LastPushedWidth != Ri->Width || Ri->LastPushedHeight != Ri->Height;
 
-	RECT WorkArea = {};
-	SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0);
-
-	POINT DstPos;
-	DstPos.x = WorkArea.left + ((WorkArea.right - WorkArea.left) - Ri->Width) / 2;
-	DstPos.y = WorkArea.bottom - RECORD_INDICATOR_BOTTOM_GAP_PX - Ri->Height;
-
-	POINT SrcPos = {0, 0};
 	SIZE Size = {Ri->Width, Ri->Height};
-	BLENDFUNCTION Blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-	UpdateLayeredWindow(Ri->Hwnd, Ri->ScreenDc, &DstPos, &Size, Ri->MemDc, &SrcPos, 0, &Blend, ULW_ALPHA);
+	POINT SrcPos = {0, 0};
+	BLENDFUNCTION Blend = {AC_SRC_OVER, 0, (BYTE)AlphaByte, AC_SRC_ALPHA};
+
+	BOOL Ok = UpdateLayeredWindow(
+		Ri->Hwnd, Ri->ScreenDc,
+		FrameChanged ? &Pos : nullptr,
+		SizeChanged ? &Size : nullptr,
+		Ri->MemDc, &SrcPos, 0, &Blend, ULW_ALPHA);
+
+	if (Ok)
+	{
+		Ri->LastPushedX = Pos.x;
+		Ri->LastPushedY = Pos.y;
+		Ri->LastPushedWidth = Ri->Width;
+		Ri->LastPushedHeight = Ri->Height;
+		Ri->LastPushedAlpha = AlphaByte;
+	}
 }
 
 // Advance the indicator state machine for this instant. Runs every main loop
@@ -689,6 +716,7 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 			ShowWindow(Ri->Hwnd, SW_HIDE);
 			Ri->Visible = false;
 			Ri->LastPushedAlpha = -1;
+			Ri->LastPushedWidth = -1;
 		}
 		return Idle;
 	}
@@ -710,12 +738,13 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 			ShowWindow(Ri->Hwnd, SW_HIDE);
 			Ri->Visible = false;
 			Ri->LastPushedAlpha = -1;
+			Ri->LastPushedWidth = -1;
 		}
 		return Idle;
 	}
 
-	// The DPI query touches the window manager, so only run it when a frame
-	// may be pushed: on first use and on the periodic refresh tick.
+	// The DPI query touches the window manager, so only run it once up front
+	// and on the periodic refresh tick.
 	bool DoRefresh = Ri->CachedDpi == 0 || Now >= Ri->NextRefreshTicks;
 	if (DoRefresh)
 	{
@@ -728,6 +757,7 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 			if (Caps >= 96) Queried = (UINT)Caps;
 		}
 		Ri->CachedDpi = Queried;
+		Ri->NextRefreshTicks = Now + Frequency * RECORD_INDICATOR_REFRESH_MS / 1000;
 	}
 
 	bool IsStreaming = AppState->IsStreaming;
@@ -740,16 +770,35 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 	if (!record_indicator_alloc_frame(Ri->Width, Ri->Height)) return Idle;
 	if (!record_indicator_create()) return Idle;
 
+	// Pixels only change when the rendered content does; fades ride on the
+	// blend factor instead.
+	if (ContentChanged || Ri->ContentDirty)
+	{
+		size_t Bytes = (size_t)Ri->Width * Ri->Height * 4;
+		if (Ri->Base.size() == Bytes) memcpy(Ri->Bits, Ri->Base.data(), Bytes);
+		Ri->ContentDirty = false;
+	}
+
+	// Animation frames are pushed at the monitor's current refresh rate, the
+	// same cadence the OS compositor runs at.
+	LONGLONG AnimInterval = performance_interval_for_hz(g_RenderRefreshHz);
+
 	int AlphaByte = (int)(RECORD_INDICATOR_MAX_ALPHA * Ri->Alpha + 0.5f);
 	bool FadeStep = AlphaByte != Ri->LastPushedAlpha;
-	bool NeedPush = ContentChanged || DoRefresh || (FadeStep && Now >= Ri->NextAnimTicks);
+	bool NeedPush = ContentChanged || (FadeStep && Now >= Ri->NextAnimTicks);
+
+	// The periodic re-check only recomposites when the window frame actually
+	// moved (taskbar/resolution change); identical frames are never redrawn.
+	if (!NeedPush && DoRefresh)
+	{
+		POINT Pos;
+		NeedPush = record_indicator_frame_changed(Ri, &Pos);
+	}
 
 	if (NeedPush)
 	{
 		record_indicator_push_frame(AlphaByte);
-		Ri->LastPushedAlpha = AlphaByte;
-		Ri->NextAnimTicks = Now + Frequency / RECORD_INDICATOR_ANIM_HZ;
-		Ri->NextRefreshTicks = Now + Frequency * RECORD_INDICATOR_REFRESH_MS / 1000;
+		Ri->NextAnimTicks = Now + AnimInterval;
 		if (!Ri->Visible)
 		{
 			SetWindowPos(Ri->Hwnd, HWND_TOPMOST, 0, 0, 0, 0,
@@ -758,7 +807,7 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 		}
 	}
 
-	if (Ri->Alpha != TargetAlpha) return Now + Frequency / RECORD_INDICATOR_ANIM_HZ;
+	if (Ri->Alpha != TargetAlpha) return Now + AnimInterval;
 	return Ri->Visible ? Ri->NextRefreshTicks : Idle;
 }
 
