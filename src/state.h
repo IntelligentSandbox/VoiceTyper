@@ -1,5 +1,6 @@
 #pragma once
 
+#include "audio_pool.h"
 #include "build_time_constants.h"
 #include "runtime_types.h"
 #include "whisper_wrapper.h"
@@ -230,7 +231,11 @@ struct CoreRuntimeState
 	std::thread CaptureThread;
 	std::thread ModelTransitionThread;
 	std::mutex AudioBufferMutex;
-	std::vector<float> AudioAccumBuffer;
+	AudioBlockPool AudioPool;
+	AudioClip AudioAccum;
+	// Contiguous whisper-input buffer, gathered from AudioAccum blocks by
+	// whichever pipeline thread runs inference (they never overlap).
+	std::vector<float> WhisperStaging;
 
 	// Inference threading
 	int WhisperThreadCount;

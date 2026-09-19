@@ -989,14 +989,26 @@ platform_sdl_capture_callback(void *UserData, Uint8 *Stream, int Len)
 	if (!Context || !Context->AppState || !Stream || Len <= 0) return;
 
 	int SampleCount = Len / (int)sizeof(int16_t);
-	const int16_t *Samples = (const int16_t *)Stream;
+	const int16_t *Cursor = (const int16_t *)Stream;
 
-	std::lock_guard<std::mutex> Lock(Context->AppState->AudioBufferMutex);
-	size_t OldSize = Context->AppState->AudioAccumBuffer.size();
-	Context->AppState->AudioAccumBuffer.resize(OldSize + SampleCount);
-	for (int i = 0; i < SampleCount; i++)
+	float Converted[2048];
+	const int ConvertedCapacity = (int)(sizeof(Converted) / sizeof(Converted[0]));
+	while (SampleCount > 0)
 	{
-		Context->AppState->AudioAccumBuffer[OldSize + i] = Samples[i] / 32768.0f;
+		int BatchCount = SampleCount < ConvertedCapacity ? SampleCount : ConvertedCapacity;
+		for (int i = 0; i < BatchCount; i++)
+		{
+			Converted[i] = Cursor[i] / 32768.0f;
+		}
+
+		{
+			std::lock_guard<std::mutex> Lock(Context->AppState->AudioBufferMutex);
+			clip_append(&Context->AppState->AudioPool, &Context->AppState->AudioAccum,
+				Converted, BatchCount);
+		}
+
+		Cursor += BatchCount;
+		SampleCount -= BatchCount;
 	}
 }
 

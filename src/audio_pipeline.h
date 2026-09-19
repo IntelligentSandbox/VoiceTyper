@@ -25,7 +25,7 @@
 //
 // Platform-specific function that opens the audio capture device at the given
 // index, captures PCM audio, converts to float samples, and appends them to
-// AppState->AudioAccumBuffer (protected by AppState->AudioBufferMutex).
+// AppState->AudioAccum (protected by AppState->AudioBufferMutex).
 // Runs in a loop until AppState->CaptureRunning becomes false.
 // Returns true on success, false if device setup fails.
 //
@@ -87,9 +87,9 @@ resolve_paste_hotkey(GlobalState *AppState, void *TargetWindow)
 }
 
 static void
-run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::vector<float> &Chunk)
+run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, const float *Samples, int SampleCount)
 {
-	float Rms = compute_rms(Chunk.data(), (int)Chunk.size());
+	float Rms = compute_rms(Samples, SampleCount);
 	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD)
 	{
 		perf_event("transcribe_skipped_silence");
@@ -101,7 +101,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, std::ve
 	std::chrono::steady_clock::time_point TxStart = std::chrono::steady_clock::now();
 	PerfSpan TranscribeSpan("transcribe");
 	int Ret = transcribe_pcm_to_string(
-		AppState->WhisperState.Context, Params, Chunk.data(), (int)Chunk.size(),
+		AppState->WhisperState.Context, Params, Samples, SampleCount,
 		&Transcription, &TranscribedWords);
 	std::chrono::steady_clock::time_point TxEnd = std::chrono::steady_clock::now();
 	double TxMs = std::chrono::duration<double, std::milli>(TxEnd - TxStart).count();
@@ -154,25 +154,26 @@ struct StreamingChunkQueue
 {
 	std::mutex Mutex;
 	std::condition_variable Condition;
-	std::deque<std::vector<float>> Chunks;
+	std::deque<AudioClip> Chunks;
 	bool Closed;
 };
 
 static void
-stream_push_completed_chunk(StreamingChunkQueue *Queue, std::vector<float> &Chunk)
+stream_push_completed_chunk(StreamingChunkQueue *Queue, AudioClip *Clip)
 {
-	if (Chunk.empty()) return;
+	if (Clip->TotalSamples <= 0) return;
 
 	{
 		std::lock_guard<std::mutex> Lock(Queue->Mutex);
-		Queue->Chunks.push_back(std::move(Chunk));
+		Queue->Chunks.push_back(*Clip);
 	}
+	*Clip = AudioClip{};
 
 	Queue->Condition.notify_one();
 }
 
 static bool
-stream_pop_completed_chunk(StreamingChunkQueue *Queue, std::vector<float> *Chunk)
+stream_pop_completed_chunk(StreamingChunkQueue *Queue, AudioClip *Clip)
 {
 	std::unique_lock<std::mutex> Lock(Queue->Mutex);
 	Queue->Condition.wait(Lock, [Queue]() {
@@ -181,7 +182,7 @@ stream_pop_completed_chunk(StreamingChunkQueue *Queue, std::vector<float> *Chunk
 
 	if (Queue->Chunks.empty()) return false;
 
-	*Chunk = std::move(Queue->Chunks.front());
+	*Clip = Queue->Chunks.front();
 	Queue->Chunks.pop_front();
 	return true;
 }
@@ -200,68 +201,69 @@ stream_close_completed_chunks(StreamingChunkQueue *Queue)
 static void
 stream_finish_buffer_on_stop(GlobalState *AppState, StreamingChunkQueue *Queue, bool HasSpeech)
 {
-	std::vector<float> Chunk;
+	AudioClip Chunk;
 
 	{
 		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-		int BufferSize = (int)AppState->AudioAccumBuffer.size();
-		int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
-
-		if (AppState->StreamingFinalizeOnStop.load() &&
+		bool Finalize = AppState->StreamingFinalizeOnStop.load() &&
 			HasSpeech &&
-			BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS)
-		{
-			Chunk = std::move(AppState->AudioAccumBuffer);
-		}
-
-		AppState->AudioAccumBuffer.clear();
+			clip_duration_ms(&AppState->AudioAccum) >= STREAM_MIN_CHUNK_DURATION_MS;
+		if (Finalize) Chunk = AppState->AudioAccum;
+		AppState->AudioAccum = AudioClip{};
 	}
 
-	stream_push_completed_chunk(Queue, Chunk);
+	clip_release(&AppState->AudioPool, &AppState->AudioAccum);
+	stream_push_completed_chunk(Queue, &Chunk);
 }
 
 static void
 stream_segment_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 {
 	StreamSpeechDetector Detector;
+	const int PollWindowSamples = AUDIO_CAPTURE_SAMPLE_RATE * STREAM_POLL_INTERVAL_MS / 1000;
 
 	while (AppState->CaptureRunning.load())
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(STREAM_POLL_INTERVAL_MS));
 		if (!AppState->CaptureRunning.load()) break;
 
-		std::vector<float> Chunk;
+		AudioClip Chunk;
+		AudioClip Discard;
+		bool ShouldCut = false;
 		{
 			std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-			int BufferSize = (int)AppState->AudioAccumBuffer.size();
+			int BufferSize = AppState->AudioAccum.TotalSamples;
 			if (BufferSize == 0) continue;
 
-			int RecentCount = AUDIO_CAPTURE_SAMPLE_RATE * STREAM_POLL_INTERVAL_MS / 1000;
-			if (RecentCount > BufferSize) RecentCount = BufferSize;
-			float CurrentRms = compute_rms(
-				AppState->AudioAccumBuffer.data() + BufferSize - RecentCount, RecentCount);
+			float Recent[PollWindowSamples];
+			int RecentCount = clip_read_last_n(&AppState->AudioAccum, Recent, PollWindowSamples);
+			float CurrentRms = compute_rms(Recent, RecentCount);
 
 			bool IsSpeech = stream_speech_detector_poll(&Detector, CurrentRms, STREAM_POLL_INTERVAL_MS);
 			if (!IsSpeech && !Detector.HasSpeech)
 			{
-				AppState->AudioAccumBuffer.clear();
-				continue;
+				Discard = AppState->AudioAccum;
+				AppState->AudioAccum = AudioClip{};
 			}
-
-			int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
-			bool ShouldCut = Detector.HasSpeech &&
-				Detector.SilenceMs >= STREAM_SILENCE_DURATION_MS &&
-				BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS;
-
-			if (!ShouldCut) continue;
-
-			Chunk = std::move(AppState->AudioAccumBuffer);
-			AppState->AudioAccumBuffer.clear();
-			Detector.SilenceMs = 0;
-			Detector.HasSpeech = false;
+			else
+			{
+				int BufferDurationMs = BufferSize * 1000 / AUDIO_CAPTURE_SAMPLE_RATE;
+				ShouldCut = Detector.HasSpeech &&
+					Detector.SilenceMs >= STREAM_SILENCE_DURATION_MS &&
+					BufferDurationMs >= STREAM_MIN_CHUNK_DURATION_MS;
+				if (ShouldCut)
+				{
+					Chunk = AppState->AudioAccum;
+					AppState->AudioAccum = AudioClip{};
+					Detector.SilenceMs = 0;
+					Detector.HasSpeech = false;
+				}
+			}
 		}
 
-		stream_push_completed_chunk(Queue, Chunk);
+		clip_release(&AppState->AudioPool, &Discard);
+
+		if (ShouldCut) stream_push_completed_chunk(Queue, &Chunk);
 	}
 
 	stream_finish_buffer_on_stop(AppState, Queue, Detector.HasSpeech);
@@ -285,10 +287,14 @@ stream_infer_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 
 	for (;;)
 	{
-		std::vector<float> Chunk;
-		if (!stream_pop_completed_chunk(Queue, &Chunk)) break;
+		AudioClip Clip;
+		if (!stream_pop_completed_chunk(Queue, &Clip)) break;
 
-		run_whisper_on_chunk(AppState, Params, Chunk);
+		int SampleCount = staging_gather(&AppState->WhisperStaging, &Clip);
+		clip_release(&AppState->AudioPool, &Clip);
+		if (SampleCount <= 0) continue;
+
+		run_whisper_on_chunk(AppState, Params, AppState->WhisperStaging.data(), SampleCount);
 	}
 }
 
@@ -320,22 +326,24 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 	bool Cancelled = AppState->CancelRequested.load();
 	AppState->CancelRequested.store(false);
 
-	// Capture has stopped — drain whatever is in the buffer and transcribe once.
-	std::vector<float> Chunk;
+	// Capture has stopped — drain whatever is in the accumulator, gather it
+	// into the staging buffer (releasing the blocks first on cancel) and
+	// transcribe once.
+	AudioClip Clip;
 	{
 		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-		if (Cancelled)
-		{
-			AppState->AudioAccumBuffer.clear();
-		}
-		else
-		{
-			Chunk = std::move(AppState->AudioAccumBuffer);
-			AppState->AudioAccumBuffer.clear();
-		}
+		Clip = AppState->AudioAccum;
+		AppState->AudioAccum = AudioClip{};
 	}
 
-	if (!Cancelled && !Chunk.empty())
+	int SampleCount = 0;
+	if (!Cancelled)
+	{
+		SampleCount = staging_gather(&AppState->WhisperStaging, &Clip);
+	}
+	clip_release(&AppState->AudioPool, &Clip);
+
+	if (!Cancelled && SampleCount > 0)
 	{
 		std::string InitialPrompt;
 		{
@@ -350,7 +358,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 		InitialPrompt.empty() ? nullptr : InitialPrompt.c_str());
 		Params.single_segment      = false;
 
-		run_whisper_on_chunk(AppState, Params, Chunk);
+		run_whisper_on_chunk(AppState, Params, AppState->WhisperStaging.data(), SampleCount);
 	}
 
 	perf_event("record_pipeline_done");
@@ -386,7 +394,7 @@ start_record_pipeline(GlobalState *AppState)
 
 	{
 		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-		AppState->AudioAccumBuffer.clear();
+		clip_release(&AppState->AudioPool, &AppState->AudioAccum);
 	}
 
 	AppState->CaptureRunning.store(true);
@@ -419,7 +427,7 @@ start_streaming_pipeline(GlobalState *AppState)
 
 	{
 		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-		AppState->AudioAccumBuffer.clear();
+		clip_release(&AppState->AudioPool, &AppState->AudioAccum);
 	}
 
 	AppState->CaptureRunning.store(true);

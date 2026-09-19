@@ -784,7 +784,7 @@ run_capture_latency_bench(const BenchOptions &Options)
 	{
 		{
 			std::lock_guard<std::mutex> Lock(AppState.AudioBufferMutex);
-			AppState.AudioAccumBuffer.clear();
+			clip_release(&AppState.AudioPool, &AppState.AudioAccum);
 		}
 
 		AppState.LastRecordDeviceOpenMs.store(-1.0);

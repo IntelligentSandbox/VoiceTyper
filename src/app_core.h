@@ -90,6 +90,10 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->LastRecordCaptureStartMs.store(-1.0);
 	AppState->LastRecordFirstAudioMs.store(-1.0);
 
+	pool_init(&AppState->AudioPool);
+	AppState->WhisperStaging.reserve(
+		(size_t)AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_STAGING_INITIAL_MS / 1000);
+
 	init_whisper_state(&AppState->WhisperState);
 
 	cleanup_legacy_settings_json();

@@ -663,12 +663,15 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 		if (SamplesGot > 0)
 		{
 			const int16_t *Src = PipeCtx.Buffers[i].Data.data();
-			std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-			size_t OldSize = AppState->AudioAccumBuffer.size();
-			AppState->AudioAccumBuffer.resize(OldSize + SamplesGot);
+			float Converted[SamplesPerBuffer];
 			for (int j = 0; j < SamplesGot; j++)
 			{
-				AppState->AudioAccumBuffer[OldSize + j] = Src[j] / 32768.0f;
+				Converted[j] = Src[j] / 32768.0f;
+			}
+
+			{
+				std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
+				clip_append(&AppState->AudioPool, &AppState->AudioAccum, Converted, SamplesGot);
 			}
 
 			if (!GotFirstSamples)
