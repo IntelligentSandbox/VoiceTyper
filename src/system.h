@@ -338,6 +338,14 @@ query_hotkey_settings(GlobalState *AppState)
 	bool ShowIndicator = true;
 	if (load_bool_setting("show_record_indicator", &ShowIndicator)) AppState->ShowRecordIndicator = ShowIndicator;
 
+	int IndicatorDelayMs = 0;
+	if (load_int_setting("record_indicator_delay_ms", &IndicatorDelayMs))
+	{
+		if (IndicatorDelayMs < 0) IndicatorDelayMs = 0;
+		if (IndicatorDelayMs > 10000) IndicatorDelayMs = 10000;
+		AppState->RecordIndicatorDelayMs = IndicatorDelayMs;
+	}
+
 	int IntVal = 0;
 	if (load_int_setting("start_sound_freq", &IntVal)) AppState->StartSoundFreq = IntVal;
 	if (load_int_setting("stop_sound_freq", &IntVal)) AppState->StopSoundFreq = IntVal;

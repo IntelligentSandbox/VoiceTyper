@@ -898,6 +898,23 @@ render_settings_panel(GlobalState *AppState)
 		save_bool_setting("show_record_indicator", AppState->ShowRecordIndicator);
 	}
 
+	if (AppState->ShowRecordIndicator)
+	{
+		ImGui::Indent(20.0f);
+
+		ImGui::TextUnformatted("Delay Before Showing (ms)");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
+		if (ImGui::InputInt("##RecordIndicatorDelayMs", &AppState->RecordIndicatorDelayMs, 50, 100))
+		{
+			if (AppState->RecordIndicatorDelayMs < 0) AppState->RecordIndicatorDelayMs = 0;
+			if (AppState->RecordIndicatorDelayMs > 10000) AppState->RecordIndicatorDelayMs = 10000;
+			save_int_setting("record_indicator_delay_ms", AppState->RecordIndicatorDelayMs);
+		}
+
+		ImGui::Unindent(20.0f);
+	}
+
 	if (ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
 		&AppState->PlayRecordSound))
 	{

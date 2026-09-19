@@ -189,6 +189,7 @@ struct CoreRuntimeState
 	std::atomic<bool> ExitRequested = false;
 	bool PlayRecordSound;
 	bool ShowRecordIndicator;
+	int RecordIndicatorDelayMs;
 	int StartSoundFreq;
 	int StopSoundFreq;
 	int CancelSoundFreq;

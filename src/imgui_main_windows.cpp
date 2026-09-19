@@ -375,17 +375,19 @@ run_due_app_updates(LONGLONG Now)
 // part of the ImGui/D3D pipeline: plain GDI draws the pill (supersampled and
 // box-filtered for smooth edges) into a 32bpp premultiplied DIB that is
 // composited via UpdateLayeredWindow. The window only appears once a session
-// has been active for RECORD_INDICATOR_DELAY_MS, so brief hold-mode presses
-// never flash it. Click-through (WS_EX_TRANSPARENT) and non-activating
-// (WS_EX_NOACTIVATE), so it never steals input while the user holds keys.
+// has been active for RecordIndicatorDelayMs (user setting), so brief
+// hold-mode presses never flash it. Click-through (WS_EX_TRANSPARENT) and
+// non-activating (WS_EX_NOACTIVATE), so it never steals input while the user
+// holds keys. Frames are pushed to UpdateLayeredWindow only when something
+// actually changed (fade step, label, size, 1Hz position re-check), so a
+// static indicator does zero compositing work and never flickers.
 // ---------------------------------------------------------------------------
-#define RECORD_INDICATOR_DELAY_MS       750
 #define RECORD_INDICATOR_FADE_MS        160
-#define RECORD_INDICATOR_UPDATE_HZ      60
-#define RECORD_INDICATOR_REFRESH_HZ     1
+#define RECORD_INDICATOR_ANIM_HZ        60
+#define RECORD_INDICATOR_REFRESH_MS     1000
 #define RECORD_INDICATOR_BOTTOM_GAP_PX  200
 #define RECORD_INDICATOR_SS             3
-#define RECORD_INDICATOR_MAX_ALPHA      242
+#define RECORD_INDICATOR_MAX_ALPHA      255
 
 struct RecordIndicatorState
 {
@@ -399,9 +401,13 @@ struct RecordIndicatorState
 	std::vector<unsigned char> Base;
 	bool BaseIsStreaming;
 	UINT BaseDpi;
+	UINT CachedDpi;
 	bool WasActive;
 	LONGLONG ActiveSinceTicks;
 	LONGLONG LastFrameTicks;
+	LONGLONG NextAnimTicks;
+	LONGLONG NextRefreshTicks;
+	int LastPushedAlpha;
 	float Alpha;
 	bool Visible;
 };
@@ -622,21 +628,20 @@ record_indicator_render_base(bool IsStreaming, UINT Dpi)
 }
 
 static void
-record_indicator_push_frame(float AlphaFrac)
+record_indicator_push_frame(int AlphaByte)
 {
 	RecordIndicatorState *Ri = &g_RecordIndicator;
 	if (!Ri->Hwnd || !Ri->Bitmap) return;
 
-	int A = (int)(RECORD_INDICATOR_MAX_ALPHA * AlphaFrac);
 	size_t Pixels = (size_t)Ri->Width * Ri->Height;
 	const unsigned char *Src = Ri->Base.data();
 	unsigned char *Dst = (unsigned char *)Ri->Bits;
 	for (size_t I = 0; I < Pixels; I++)
 	{
-		Dst[0] = (unsigned char)(Src[0] * A / 255);
-		Dst[1] = (unsigned char)(Src[1] * A / 255);
-		Dst[2] = (unsigned char)(Src[2] * A / 255);
-		Dst[3] = (unsigned char)(Src[3] * A / 255);
+		Dst[0] = (unsigned char)(Src[0] * AlphaByte / 255);
+		Dst[1] = (unsigned char)(Src[1] * AlphaByte / 255);
+		Dst[2] = (unsigned char)(Src[2] * AlphaByte / 255);
+		Dst[3] = (unsigned char)(Src[3] * AlphaByte / 255);
 		Src += 4;
 		Dst += 4;
 	}
@@ -654,9 +659,12 @@ record_indicator_push_frame(float AlphaFrac)
 	UpdateLayeredWindow(Ri->Hwnd, Ri->ScreenDc, &DstPos, &Size, Ri->MemDc, &SrcPos, 0, &Blend, ULW_ALPHA);
 }
 
-// Advance the indicator state machine for this instant. Returns the counter
+// Advance the indicator state machine for this instant. Runs every main loop
+// iteration (state changes must be noticed promptly) but only pushes a frame
+// when the pixels would actually change; while statically visible that means
+// one 1Hz position re-check, otherwise nothing at all. Returns the counter
 // deadline when the overlay needs the loop to wake up again (animating or
-// refreshing), or a far-future value when idle.
+// due for a refresh), or a far-future value when idle.
 static LONGLONG
 record_indicator_update(GlobalState *AppState, LONGLONG Now)
 {
@@ -668,7 +676,9 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 	Ri->WasActive = Active;
 
 	LONGLONG Frequency = performance_counter_frequency();
-	LONGLONG DelayTicks = Frequency * RECORD_INDICATOR_DELAY_MS / 1000;
+	int DelayMs = AppState->RecordIndicatorDelayMs;
+	if (DelayMs < 0) DelayMs = 0;
+	LONGLONG DelayTicks = Frequency * DelayMs / 1000;
 	float TargetAlpha = (Active && Now - Ri->ActiveSinceTicks >= DelayTicks) ? 1.0f : 0.0f;
 
 	if (Ri->Alpha <= 0.0f && TargetAlpha <= 0.0f)
@@ -678,6 +688,7 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 		{
 			ShowWindow(Ri->Hwnd, SW_HIDE);
 			Ri->Visible = false;
+			Ri->LastPushedAlpha = -1;
 		}
 		return Idle;
 	}
@@ -698,38 +709,57 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 		{
 			ShowWindow(Ri->Hwnd, SW_HIDE);
 			Ri->Visible = false;
+			Ri->LastPushedAlpha = -1;
 		}
 		return Idle;
 	}
 
-	UINT Dpi = 96;
-	HDC DpiDc = GetDC(g_MainHwnd);
-	if (DpiDc)
+	// The DPI query touches the window manager, so only run it when a frame
+	// may be pushed: on first use and on the periodic refresh tick.
+	bool DoRefresh = Ri->CachedDpi == 0 || Now >= Ri->NextRefreshTicks;
+	if (DoRefresh)
 	{
-		int Caps = GetDeviceCaps(DpiDc, LOGPIXELSX);
-		ReleaseDC(g_MainHwnd, DpiDc);
-		if (Caps >= 96) Dpi = (UINT)Caps;
+		UINT Queried = 96;
+		HDC DpiDc = GetDC(g_MainHwnd);
+		if (DpiDc)
+		{
+			int Caps = GetDeviceCaps(DpiDc, LOGPIXELSX);
+			ReleaseDC(g_MainHwnd, DpiDc);
+			if (Caps >= 96) Queried = (UINT)Caps;
+		}
+		Ri->CachedDpi = Queried;
 	}
 
 	bool IsStreaming = AppState->IsStreaming;
-	if (Ri->Base.empty() || Ri->BaseIsStreaming != IsStreaming || Ri->BaseDpi != Dpi)
+	bool ContentChanged = Ri->Base.empty() || Ri->BaseIsStreaming != IsStreaming || Ri->BaseDpi != Ri->CachedDpi;
+	if (ContentChanged)
 	{
-		record_indicator_render_base(IsStreaming, Dpi);
+		record_indicator_render_base(IsStreaming, Ri->CachedDpi);
 	}
 
 	if (!record_indicator_alloc_frame(Ri->Width, Ri->Height)) return Idle;
 	if (!record_indicator_create()) return Idle;
 
-	record_indicator_push_frame(Ri->Alpha);
-	if (!Ri->Visible)
+	int AlphaByte = (int)(RECORD_INDICATOR_MAX_ALPHA * Ri->Alpha + 0.5f);
+	bool FadeStep = AlphaByte != Ri->LastPushedAlpha;
+	bool NeedPush = ContentChanged || DoRefresh || (FadeStep && Now >= Ri->NextAnimTicks);
+
+	if (NeedPush)
 	{
-		SetWindowPos(Ri->Hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-			SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-		Ri->Visible = true;
+		record_indicator_push_frame(AlphaByte);
+		Ri->LastPushedAlpha = AlphaByte;
+		Ri->NextAnimTicks = Now + Frequency / RECORD_INDICATOR_ANIM_HZ;
+		Ri->NextRefreshTicks = Now + Frequency * RECORD_INDICATOR_REFRESH_MS / 1000;
+		if (!Ri->Visible)
+		{
+			SetWindowPos(Ri->Hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+				SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+			Ri->Visible = true;
+		}
 	}
 
-	if (Ri->Alpha != TargetAlpha) return Now + Frequency / RECORD_INDICATOR_UPDATE_HZ;
-	return Now + Frequency / RECORD_INDICATOR_REFRESH_HZ;
+	if (Ri->Alpha != TargetAlpha) return Now + Frequency / RECORD_INDICATOR_ANIM_HZ;
+	return Ri->Visible ? Ri->NextRefreshTicks : Idle;
 }
 
 static void

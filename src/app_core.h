@@ -67,6 +67,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->InferenceDevicePrefersCpu = false;
 	AppState->PlayRecordSound = false;
 	AppState->ShowRecordIndicator = true;
+	AppState->RecordIndicatorDelayMs = 200;
 	AppState->StartSoundFreq = SOUND_DEFAULT_START_FREQ;
 	AppState->StopSoundFreq = SOUND_DEFAULT_STOP_FREQ;
 	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;
