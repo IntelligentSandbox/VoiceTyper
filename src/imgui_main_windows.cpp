@@ -379,14 +379,13 @@ run_due_app_updates(LONGLONG Now)
 // has been active for RecordIndicatorDelayMs (user setting), so brief
 // hold-mode presses never flash it. Click-through (WS_EX_TRANSPARENT) and
 // non-activating (WS_EX_NOACTIVATE), so it never steals input while the user
-// holds keys. Frames are pushed to UpdateLayeredWindow only while animating
-// (fade), driven at the monitor's current refresh rate so the fade matches
-// the OS compositor cadence; a static indicator is never redrawn at all - the
-// DWM keeps displaying the last pushed surface. The window is only moved or
-// resized when its frame actually changed, because ULW's move+size path can
-// visibly flash.
+// holds keys. There is no animation: a single frame is pushed once when the
+// session crosses the show-delay threshold and the window instantly pops out
+// of view when the session ends. The DWM keeps displaying the last pushed
+// surface, so a visible indicator is never redrawn; the 1Hz re-check only
+// pushes again if the window frame actually moved (taskbar/resolution change)
+// or the label changed (recording vs streaming).
 // ---------------------------------------------------------------------------
-#define RECORD_INDICATOR_FADE_MS        160
 #define RECORD_INDICATOR_REFRESH_MS     1000
 #define RECORD_INDICATOR_BOTTOM_GAP_PX  200
 #define RECORD_INDICATOR_SS             3
@@ -408,15 +407,11 @@ struct RecordIndicatorState
 	bool ContentDirty;
 	bool WasActive;
 	LONGLONG ActiveSinceTicks;
-	LONGLONG LastFrameTicks;
-	LONGLONG NextAnimTicks;
 	LONGLONG NextRefreshTicks;
-	int LastPushedAlpha;
 	int LastPushedX;
 	int LastPushedY;
 	int LastPushedWidth;
 	int LastPushedHeight;
-	float Alpha;
 	bool Visible;
 };
 
@@ -651,13 +646,11 @@ record_indicator_frame_changed(RecordIndicatorState *Ri, POINT *OutPos)
 	return Ri->LastPushedX != OutPos->x || Ri->LastPushedY != OutPos->y;
 }
 
-// Composite the current frame. The DIB always holds the fully-opaque image;
-// the fade is applied through BLENDFUNCTION.SourceConstantAlpha so animation
-// frames never touch pixels. pptDst/psize are passed only when the window
-// frame actually changed - UpdateLayeredWindow's move+size path can visibly
-// flash, so animation frames must update content and blend only.
+// Composite the single frame at full opacity. pptDst/psize are passed only
+// when the window frame actually changed (first show or a move), so a label
+// swap never goes through UpdateLayeredWindow's move+size path.
 static void
-record_indicator_push_frame(int AlphaByte)
+record_indicator_push_frame()
 {
 	RecordIndicatorState *Ri = &g_RecordIndicator;
 	if (!Ri->Hwnd || !Ri->Bitmap) return;
@@ -668,7 +661,7 @@ record_indicator_push_frame(int AlphaByte)
 
 	SIZE Size = {Ri->Width, Ri->Height};
 	POINT SrcPos = {0, 0};
-	BLENDFUNCTION Blend = {AC_SRC_OVER, 0, (BYTE)AlphaByte, AC_SRC_ALPHA};
+	BLENDFUNCTION Blend = {AC_SRC_OVER, 0, RECORD_INDICATOR_MAX_ALPHA, AC_SRC_ALPHA};
 
 	BOOL Ok = UpdateLayeredWindow(
 		Ri->Hwnd, Ri->ScreenDc,
@@ -682,16 +675,15 @@ record_indicator_push_frame(int AlphaByte)
 		Ri->LastPushedY = Pos.y;
 		Ri->LastPushedWidth = Ri->Width;
 		Ri->LastPushedHeight = Ri->Height;
-		Ri->LastPushedAlpha = AlphaByte;
 	}
 }
 
-// Advance the indicator state machine for this instant. Runs every main loop
-// iteration (state changes must be noticed promptly) but only pushes a frame
-// when the pixels would actually change; while statically visible that means
-// one 1Hz position re-check, otherwise nothing at all. Returns the counter
-// deadline when the overlay needs the loop to wake up again (animating or
-// due for a refresh), or a far-future value when idle.
+// Advance the indicator state for this instant. Runs every main loop
+// iteration so state changes take effect immediately, but the single frame is
+// only pushed when it appears, when its content changes, or when the 1Hz
+// re-check finds the window frame moved. Returns the counter deadline when
+// the overlay needs the loop to wake up again, or a far-future value when
+// idle.
 static LONGLONG
 record_indicator_update(GlobalState *AppState, LONGLONG Now)
 {
@@ -706,38 +698,14 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 	int DelayMs = AppState->RecordIndicatorDelayMs;
 	if (DelayMs < 0) DelayMs = 0;
 	LONGLONG DelayTicks = Frequency * DelayMs / 1000;
-	float TargetAlpha = (Active && Now - Ri->ActiveSinceTicks >= DelayTicks) ? 1.0f : 0.0f;
+	bool Due = Active && Now - Ri->ActiveSinceTicks >= DelayTicks;
 
-	if (Ri->Alpha <= 0.0f && TargetAlpha <= 0.0f)
+	if (!Due)
 	{
-		Ri->LastFrameTicks = 0;
 		if (Ri->Visible)
 		{
 			ShowWindow(Ri->Hwnd, SW_HIDE);
 			Ri->Visible = false;
-			Ri->LastPushedAlpha = -1;
-			Ri->LastPushedWidth = -1;
-		}
-		return Idle;
-	}
-
-	float Dt = Ri->LastFrameTicks ? (float)(Now - Ri->LastFrameTicks) / (float)Frequency : 1.0f / 60.0f;
-	Ri->LastFrameTicks = Now;
-
-	float Step = Dt * (1000.0f / RECORD_INDICATOR_FADE_MS);
-	if (Step > 1.0f) Step = 1.0f;
-	if (Ri->Alpha < TargetAlpha) Ri->Alpha += Step; else Ri->Alpha -= Step;
-	if (Ri->Alpha > 1.0f) Ri->Alpha = 1.0f;
-	if (Ri->Alpha < 0.0f) Ri->Alpha = 0.0f;
-
-	if (Ri->Alpha <= 0.0f)
-	{
-		Ri->LastFrameTicks = 0;
-		if (Ri->Visible)
-		{
-			ShowWindow(Ri->Hwnd, SW_HIDE);
-			Ri->Visible = false;
-			Ri->LastPushedAlpha = -1;
 			Ri->LastPushedWidth = -1;
 		}
 		return Idle;
@@ -770,8 +738,6 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 	if (!record_indicator_alloc_frame(Ri->Width, Ri->Height)) return Idle;
 	if (!record_indicator_create()) return Idle;
 
-	// Pixels only change when the rendered content does; fades ride on the
-	// blend factor instead.
 	if (ContentChanged || Ri->ContentDirty)
 	{
 		size_t Bytes = (size_t)Ri->Width * Ri->Height * 4;
@@ -779,13 +745,7 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 		Ri->ContentDirty = false;
 	}
 
-	// Animation frames are pushed at the monitor's current refresh rate, the
-	// same cadence the OS compositor runs at.
-	LONGLONG AnimInterval = performance_interval_for_hz(g_RenderRefreshHz);
-
-	int AlphaByte = (int)(RECORD_INDICATOR_MAX_ALPHA * Ri->Alpha + 0.5f);
-	bool FadeStep = AlphaByte != Ri->LastPushedAlpha;
-	bool NeedPush = ContentChanged || (FadeStep && Now >= Ri->NextAnimTicks);
+	bool NeedPush = ContentChanged || !Ri->Visible;
 
 	// The periodic re-check only recomposites when the window frame actually
 	// moved (taskbar/resolution change); identical frames are never redrawn.
@@ -797,8 +757,7 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 
 	if (NeedPush)
 	{
-		record_indicator_push_frame(AlphaByte);
-		Ri->NextAnimTicks = Now + AnimInterval;
+		record_indicator_push_frame();
 		if (!Ri->Visible)
 		{
 			SetWindowPos(Ri->Hwnd, HWND_TOPMOST, 0, 0, 0, 0,
@@ -807,7 +766,6 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 		}
 	}
 
-	if (Ri->Alpha != TargetAlpha) return Now + AnimInterval;
 	return Ri->Visible ? Ri->NextRefreshTicks : Idle;
 }
 
