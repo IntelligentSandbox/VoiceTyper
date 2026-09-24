@@ -74,6 +74,19 @@ transcribe_pcm_to_string(
 	OutText->clear();
 	if (OutWords) OutWords->clear();
 
+	// Cap the encoder context to the actual audio length. The conv/encoder
+	// graphs are rebuilt per whisper_full call and size off this value, so
+	// short utterances skip the worst-case 30s worth of encoder compute while
+	// the init-time compute buffers stay valid (they only shrink their use).
+	{
+		int AudioFrames    = (SampleCount + 159) / 160;
+		int NeededAudioCtx = (AudioFrames + 1) / 2 + 8;
+		if (NeededAudioCtx < 64) NeededAudioCtx = 64;
+		int ModelMaxAudioCtx = whisper_n_audio_ctx(Context);
+		if (NeededAudioCtx < ModelMaxAudioCtx) Params.audio_ctx = NeededAudioCtx;
+		else Params.audio_ctx = ModelMaxAudioCtx;
+	}
+
 	int Ret = whisper_full(Context, Params, Samples, SampleCount);
 	if (Ret != 0) return Ret;
 
