@@ -567,9 +567,24 @@ struct AudioPipelineContext
 {
 	HWAVEIN WaveInHandle;
 	HANDLE  ReadyEvent;
-	std::vector<WaveInBuffer> Buffers;
+	std::vector<WaveInBuffer> *Buffers;
 	std::atomic<bool> *Running;
 };
+
+// The capture device is kept open between record takes ("pre-warmed"): the
+// ~15-25ms waveInOpen cost is paid once per device (and after device changes),
+// not once per take. The device is idle-but-open between takes (waveInStop'd),
+// and closed on shutdown, device switch, or start failure.
+struct Win32WarmCaptureDevice
+{
+	HWAVEIN                   WaveInHandle;
+	HANDLE                    ReadyEvent;
+	std::vector<WaveInBuffer> Buffers;
+	int                       DeviceIndex;
+};
+
+static Win32WarmCaptureDevice g_WarmCapture = {};
+static std::mutex             g_WarmCaptureMutex;
 
 static void CALLBACK
 wavein_proc(
@@ -581,8 +596,71 @@ wavein_proc(
 {
 	if (uMsg != WIM_DATA) return;
 
-	AudioPipelineContext *Ctx = reinterpret_cast<AudioPipelineContext*>(dwInstance);
-	SetEvent(Ctx->ReadyEvent);
+	Win32WarmCaptureDevice *Warm = reinterpret_cast<Win32WarmCaptureDevice*>(dwInstance);
+	SetEvent(Warm->ReadyEvent);
+}
+
+static void
+win32_close_warm_capture_locked()
+{
+	if (!g_WarmCapture.WaveInHandle) return;
+
+	for (size_t i = 0; i < g_WarmCapture.Buffers.size(); i++)
+	{
+		waveInUnprepareHeader(g_WarmCapture.WaveInHandle, &g_WarmCapture.Buffers[i].Header, sizeof(WAVEHDR));
+	}
+	waveInClose(g_WarmCapture.WaveInHandle);
+	CloseHandle(g_WarmCapture.ReadyEvent);
+	g_WarmCapture = {};
+}
+
+static bool
+win32_open_warm_capture_locked(int DeviceIndex)
+{
+	const int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
+
+	g_WarmCapture.ReadyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+	if (!g_WarmCapture.ReadyEvent) return false;
+
+	WAVEFORMATEX Format       = {};
+	Format.wFormatTag         = WAVE_FORMAT_PCM;
+	Format.nChannels          = AUDIO_CAPTURE_CHANNELS;
+	Format.nSamplesPerSec     = AUDIO_CAPTURE_SAMPLE_RATE;
+	Format.wBitsPerSample     = AUDIO_CAPTURE_BITS_PER_SAMPLE;
+	Format.nBlockAlign        = (Format.nChannels * Format.wBitsPerSample) / 8;
+	Format.nAvgBytesPerSec    = Format.nSamplesPerSec * Format.nBlockAlign;
+	Format.cbSize             = 0;
+
+	MMRESULT Res = waveInOpen(
+		&g_WarmCapture.WaveInHandle,
+		(UINT)DeviceIndex,
+		&Format,
+		(DWORD_PTR)wavein_proc,
+		(DWORD_PTR)&g_WarmCapture,
+		CALLBACK_FUNCTION);
+
+	if (Res != MMSYSERR_NOERROR)
+	{
+		printf("[audio_pipeline] ERROR: waveInOpen failed (mmresult=%u)\n", Res);
+		CloseHandle(g_WarmCapture.ReadyEvent);
+		g_WarmCapture = {};
+		return false;
+	}
+
+	g_WarmCapture.DeviceIndex = DeviceIndex;
+	g_WarmCapture.Buffers.resize(AUDIO_CAPTURE_BUFFER_COUNT);
+	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
+	{
+		WaveInBuffer &Buf         = g_WarmCapture.Buffers[i];
+		Buf.Data.resize(SamplesPerBuffer);
+		memset(&Buf.Header, 0, sizeof(WAVEHDR));
+		Buf.Header.lpData         = reinterpret_cast<LPSTR>(Buf.Data.data());
+		Buf.Header.dwBufferLength = (DWORD)(SamplesPerBuffer * sizeof(int16_t));
+
+		waveInPrepareHeader(g_WarmCapture.WaveInHandle, &Buf.Header, sizeof(WAVEHDR));
+	}
+
+	return true;
 }
 
 static void
@@ -597,13 +675,13 @@ win32_harvest_wavein_buffers(
 
 	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
 	{
-		WAVEHDR &Hdr = PipeCtx->Buffers[i].Header;
+		WAVEHDR &Hdr = (*PipeCtx->Buffers)[i].Header;
 		if (!(Hdr.dwFlags & WHDR_DONE)) continue;
 
 		int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(int16_t));
 		if (SamplesGot > 0)
 		{
-			const int16_t *Src = PipeCtx->Buffers[i].Data.data();
+			const int16_t *Src = (*PipeCtx->Buffers)[i].Data.data();
 			float Converted[SamplesPerBuffer];
 			for (int j = 0; j < SamplesGot; j++)
 			{
@@ -632,11 +710,23 @@ win32_harvest_wavein_buffers(
 	}
 }
 
+static void
+win32_queue_all_capture_buffers(AudioPipelineContext *PipeCtx)
+{
+	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
+	{
+		WAVEHDR &Hdr         = (*PipeCtx->Buffers)[i].Header;
+		Hdr.dwFlags         = 0;
+		Hdr.dwBytesRecorded = 0;
+		waveInPrepareHeader(PipeCtx->WaveInHandle, &Hdr, sizeof(WAVEHDR));
+		waveInAddBuffer(PipeCtx->WaveInHandle, &Hdr, sizeof(WAVEHDR));
+	}
+}
+
 inline bool
 platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex)
 {
 	(void)Platform;
-	const int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
 
 	const int64_t RequestNs = AppState->PipelineRequestNs.load();
 	bool GotFirstSamples = false;
@@ -644,54 +734,47 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 	AudioPipelineContext PipeCtx = {};
 	PipeCtx.Running = &AppState->CaptureRunning;
 
-	PipeCtx.ReadyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-	if (!PipeCtx.ReadyEvent)
+	std::lock_guard<std::mutex> WarmLock(g_WarmCaptureMutex);
+
+	if (g_WarmCapture.WaveInHandle && g_WarmCapture.DeviceIndex != DeviceIndex)
 	{
-		printf("[audio_pipeline] ERROR: Failed to create ready event\n");
+		win32_close_warm_capture_locked();
+	}
+
+	if (!g_WarmCapture.WaveInHandle && !win32_open_warm_capture_locked(DeviceIndex))
+	{
 		return false;
 	}
 
-	WAVEFORMATEX Format       = {};
-	Format.wFormatTag         = WAVE_FORMAT_PCM;
-	Format.nChannels          = AUDIO_CAPTURE_CHANNELS;
-	Format.nSamplesPerSec     = AUDIO_CAPTURE_SAMPLE_RATE;
-	Format.wBitsPerSample     = AUDIO_CAPTURE_BITS_PER_SAMPLE;
-	Format.nBlockAlign        = (Format.nChannels * Format.wBitsPerSample) / 8;
-	Format.nAvgBytesPerSec    = Format.nSamplesPerSec * Format.nBlockAlign;
-	Format.cbSize             = 0;
-
-	MMRESULT Res = waveInOpen(
-		&PipeCtx.WaveInHandle,
-		(UINT)DeviceIndex,
-		&Format,
-		(DWORD_PTR)wavein_proc,
-		(DWORD_PTR)&PipeCtx,
-		CALLBACK_FUNCTION);
-
-	if (Res != MMSYSERR_NOERROR)
-	{
-		printf("[audio_pipeline] ERROR: waveInOpen failed (mmresult=%u)\n", Res);
-		CloseHandle(PipeCtx.ReadyEvent);
-		return false;
-	}
+	PipeCtx.WaveInHandle = g_WarmCapture.WaveInHandle;
+	PipeCtx.ReadyEvent   = g_WarmCapture.ReadyEvent;
+	PipeCtx.Buffers      = &g_WarmCapture.Buffers;
 
 	AppState->LastRecordDeviceOpenMs.store((double)(perf_now_ns() - RequestNs) / 1000000.0);
 	perf_event("audio_device_open");
 
-	PipeCtx.Buffers.resize(AUDIO_CAPTURE_BUFFER_COUNT);
-	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
+	win32_queue_all_capture_buffers(&PipeCtx);
+
+	MMRESULT StartRes = waveInStart(PipeCtx.WaveInHandle);
+	if (StartRes != MMSYSERR_NOERROR)
 	{
-		WaveInBuffer &Buf         = PipeCtx.Buffers[i];
-		Buf.Data.resize(SamplesPerBuffer);
-		memset(&Buf.Header, 0, sizeof(WAVEHDR));
-		Buf.Header.lpData         = reinterpret_cast<LPSTR>(Buf.Data.data());
-		Buf.Header.dwBufferLength = (DWORD)(SamplesPerBuffer * sizeof(int16_t));
+		// The warm device died underneath us (unplug, driver reset). Drop it and
+		// retry once with a cold open.
+		printf("[audio_pipeline] waveInStart failed on warm device (mmresult=%u); reopening\n", StartRes);
+		win32_close_warm_capture_locked();
+		if (!win32_open_warm_capture_locked(DeviceIndex)) return false;
 
-		waveInPrepareHeader(PipeCtx.WaveInHandle, &Buf.Header, sizeof(WAVEHDR));
-		waveInAddBuffer(PipeCtx.WaveInHandle, &Buf.Header, sizeof(WAVEHDR));
+		PipeCtx.WaveInHandle = g_WarmCapture.WaveInHandle;
+		PipeCtx.ReadyEvent   = g_WarmCapture.ReadyEvent;
+		PipeCtx.Buffers      = &g_WarmCapture.Buffers;
+
+		win32_queue_all_capture_buffers(&PipeCtx);
+		if (waveInStart(PipeCtx.WaveInHandle) != MMSYSERR_NOERROR)
+		{
+			win32_close_warm_capture_locked();
+			return false;
+		}
 	}
-
-	waveInStart(PipeCtx.WaveInHandle);
 
 	AppState->LastRecordCaptureStartMs.store((double)(perf_now_ns() - RequestNs) / 1000000.0);
 	perf_event("audio_capture_started");
@@ -714,15 +797,17 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 	// (up to one buffer period) is silently dropped.
 	win32_harvest_wavein_buffers(&PipeCtx, AppState, RequestNs, &GotFirstSamples, false);
 
-	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
-	{
-		waveInUnprepareHeader(PipeCtx.WaveInHandle, &PipeCtx.Buffers[i].Header, sizeof(WAVEHDR));
-	}
-
-	waveInClose(PipeCtx.WaveInHandle);
-	CloseHandle(PipeCtx.ReadyEvent);
+	// Device stays open (pre-warmed) for the next take; buffers are all DONE
+	// now and get re-queued by the next session start.
 
 	return true;
+}
+
+inline void
+platform_close_warm_audio_device()
+{
+	std::lock_guard<std::mutex> Lock(g_WarmCaptureMutex);
+	win32_close_warm_capture_locked();
 }
 
 inline bool

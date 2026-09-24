@@ -1012,6 +1012,11 @@ platform_sdl_capture_callback(void *UserData, Uint8 *Stream, int Len)
 	}
 }
 
+inline void
+platform_close_warm_audio_device()
+{
+}
+
 inline bool
 platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex)
 {

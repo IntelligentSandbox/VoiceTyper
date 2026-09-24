@@ -210,4 +210,6 @@ app_shutdown_runtime(GlobalState *AppState)
 	if (AppState->InferenceDevicesThread.joinable()) AppState->InferenceDevicesThread.join();
 
 	if (is_whisper_model_loaded(&AppState->WhisperState)) unload_whisper_model(&AppState->WhisperState);
+
+	platform_close_warm_audio_device();
 }

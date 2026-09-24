@@ -8,6 +8,7 @@
 struct GlobalState;
 
 bool platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex);
+void platform_close_warm_audio_device();
 std::string platform_path_from_universal(const std::string &Path);
 std::string platform_ggml_backend_library_path(const std::string &SearchDir, const char *BackendName);
 void platform_init_crash_diagnostics();
