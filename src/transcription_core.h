@@ -17,6 +17,26 @@ vad_model_file_available(const char *VadModelPath)
 	return F.good();
 }
 
+// whisper occasionally decodes a trailing near-empty audio window into a
+// "[BLANK_AUDIO]" vocab token (a special non-speech marker). It is never real
+// transcription output, so segments consisting solely of it are dropped.
+inline bool
+is_blank_audio_segment_text(const char *Text)
+{
+	while (*Text == ' ') Text++;
+
+	const char *Marker = "[BLANK_AUDIO]";
+	while (*Marker && *Text == *Marker)
+	{
+		Text++;
+		Marker++;
+	}
+
+	while (*Text == ' ') Text++;
+
+	return *Marker == '\0' && *Text == '\0';
+}
+
 inline whisper_full_params
 make_transcription_whisper_params(int ThreadCount, bool EnableVad, const char *VadModelPath,
 	const char *InitialPrompt = nullptr)
@@ -94,7 +114,9 @@ transcribe_pcm_to_string(
 	for (int i = 0; i < NumSegments; i++)
 	{
 		const char *Text = whisper_full_get_segment_text(Context, i);
-		if (Text && Text[0] != '\0') *OutText += Text;
+		if (!Text || Text[0] == '\0') continue;
+		if (is_blank_audio_segment_text(Text)) continue;
+		*OutText += Text;
 	}
 
 	size_t Start = OutText->find_first_not_of(" \t\n\r");
@@ -115,9 +137,10 @@ transcribe_pcm_to_string(
 			int NumTokens = whisper_full_n_tokens(Context, i);
 			for (int j = 0; j < NumTokens; j++)
 			{
-				const char *TokenText = whisper_full_get_token_text(Context, i, j);
-				if (!TokenText || TokenText[0] == '\0') continue;
-				if (whisper_full_get_token_id(Context, i, j) >= whisper_token_eot(Context)) continue;
+			const char *TokenText = whisper_full_get_token_text(Context, i, j);
+			if (!TokenText || TokenText[0] == '\0') continue;
+			if (whisper_full_get_token_id(Context, i, j) >= whisper_token_eot(Context)) continue;
+			if (is_blank_audio_segment_text(TokenText)) continue;
 
 				float P = whisper_full_get_token_p(Context, i, j);
 
