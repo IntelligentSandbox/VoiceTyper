@@ -232,6 +232,11 @@ runtime_start_recording(GlobalState *AppState)
 
 	if (AppState->IsStreaming) return false;
 
+	// A previous take's pipeline is still transcribing: starting now would join
+	// that thread on the UI thread (seconds-long stall). The UI button already
+	// disables for this case; give the hotkey path the same guard.
+	if (AppState->PipelineActive.load() && !AppState->IsRecording) return false;
+
 	if (!runtime_model_matches_selection(AppState))
 	{
 		return runtime_request_model_load_for_hotkey(AppState, true);
@@ -300,6 +305,10 @@ runtime_toggle_streaming(GlobalState *AppState)
 	}
 
 	if (AppState->IsRecording) return;
+
+	// Same guard as the record hotkey path: never join a still-transcribing
+	// pipeline thread on the UI thread.
+	if (AppState->PipelineActive.load() && !AppState->IsStreaming) return;
 
 	if (AppState->IsStreaming)
 	{
