@@ -3455,7 +3455,12 @@ struct whisper_state * whisper_init_state(whisper_context * ctx) {
     }
 #endif
 
-    state->logits.reserve(ctx->vocab.n_vocab * ctx->model.hparams.n_text_ctx);
+    // VoiceTyper: original reserved n_vocab * n_text_ctx (~93MB for base)
+    // up-front and almost never touched (logits resize to n_tokens*n_vocab per
+    // decode step, which stays tiny without a carried context). Reserve a
+    // small working set; the vector grows on demand if a long initial prompt
+    // ever needs more.
+    state->logits.reserve(ctx->vocab.n_vocab * 64);
 
     state->batch = whisper_batch_init(ctx->model.hparams.n_text_ctx, WHISPER_MAX_DECODERS);
 
