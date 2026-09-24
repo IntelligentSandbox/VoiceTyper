@@ -58,8 +58,8 @@ inline constexpr int MAX_AUDIO_DEVICE_NAME_LENGTH  = 512;
 inline constexpr int AUDIO_CAPTURE_SAMPLE_RATE     = 16000;
 inline constexpr int AUDIO_CAPTURE_CHANNELS        = 1;
 inline constexpr int AUDIO_CAPTURE_BITS_PER_SAMPLE = 16;
-inline constexpr int AUDIO_CAPTURE_BUFFER_MS       = 100;
-inline constexpr int AUDIO_CAPTURE_BUFFER_COUNT    = 8;
+inline constexpr int AUDIO_CAPTURE_BUFFER_MS       = 20;
+inline constexpr int AUDIO_CAPTURE_BUFFER_COUNT    = 16;
 
 // Audio input memory pool. Capture audio is accumulated in fixed-size pooled
 // blocks (a 1-minute block = 960,000 floats = ~3.8MB) chained per clip, so

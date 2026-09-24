@@ -585,6 +585,53 @@ wavein_proc(
 	SetEvent(Ctx->ReadyEvent);
 }
 
+static void
+win32_harvest_wavein_buffers(
+	AudioPipelineContext *PipeCtx,
+	GlobalState *AppState,
+	int64_t RequestNs,
+	bool *GotFirstSamples,
+	bool Requeue)
+{
+	constexpr int SamplesPerBuffer = (AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS) / 1000;
+
+	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
+	{
+		WAVEHDR &Hdr = PipeCtx->Buffers[i].Header;
+		if (!(Hdr.dwFlags & WHDR_DONE)) continue;
+
+		int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(int16_t));
+		if (SamplesGot > 0)
+		{
+			const int16_t *Src = PipeCtx->Buffers[i].Data.data();
+			float Converted[SamplesPerBuffer];
+			for (int j = 0; j < SamplesGot; j++)
+			{
+				Converted[j] = Src[j] / 32768.0f;
+			}
+
+			{
+				std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
+				clip_append(&AppState->AudioPool, &AppState->AudioAccum, Converted, SamplesGot);
+			}
+
+			if (!*GotFirstSamples)
+			{
+				*GotFirstSamples = true;
+				AppState->LastRecordFirstAudioMs.store((double)(perf_now_ns() - RequestNs) / 1000000.0);
+				perf_event("audio_first_samples");
+			}
+		}
+
+		if (!Requeue) continue;
+
+		Hdr.dwFlags         = 0;
+		Hdr.dwBytesRecorded = 0;
+		waveInPrepareHeader(PipeCtx->WaveInHandle, &Hdr, sizeof(WAVEHDR));
+		waveInAddBuffer(PipeCtx->WaveInHandle, &Hdr, sizeof(WAVEHDR));
+	}
+}
+
 inline bool
 platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex)
 {
@@ -654,45 +701,18 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 		DWORD WaitResult = WaitForSingleObject(PipeCtx.ReadyEvent, 50);
 		if (WaitResult == WAIT_TIMEOUT) continue;
 
-		for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
-		{
-			WAVEHDR &Hdr = PipeCtx.Buffers[i].Header;
-			if (!(Hdr.dwFlags & WHDR_DONE)) continue;
-
-		int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(int16_t));
-		if (SamplesGot > 0)
-		{
-			const int16_t *Src = PipeCtx.Buffers[i].Data.data();
-			float Converted[SamplesPerBuffer];
-			for (int j = 0; j < SamplesGot; j++)
-			{
-				Converted[j] = Src[j] / 32768.0f;
-			}
-
-			{
-				std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-				clip_append(&AppState->AudioPool, &AppState->AudioAccum, Converted, SamplesGot);
-			}
-
-			if (!GotFirstSamples)
-			{
-				GotFirstSamples = true;
-				AppState->LastRecordFirstAudioMs.store((double)(perf_now_ns() - RequestNs) / 1000000.0);
-				perf_event("audio_first_samples");
-			}
-		}
-
-			Hdr.dwFlags         = 0;
-			Hdr.dwBytesRecorded = 0;
-			waveInPrepareHeader(PipeCtx.WaveInHandle, &Hdr, sizeof(WAVEHDR));
-			waveInAddBuffer(PipeCtx.WaveInHandle, &Hdr, sizeof(WAVEHDR));
-		}
+		win32_harvest_wavein_buffers(&PipeCtx, AppState, RequestNs, &GotFirstSamples, true);
 	}
 
 	PerfSpan DeviceCloseSpan("audio_device_close");
 
 	waveInStop(PipeCtx.WaveInHandle);
 	waveInReset(PipeCtx.WaveInHandle);
+
+	// waveInReset returns every still-queued buffer as WHDR_DONE with whatever
+	// partial samples it holds — harvest them or the tail of the utterance
+	// (up to one buffer period) is silently dropped.
+	win32_harvest_wavein_buffers(&PipeCtx, AppState, RequestNs, &GotFirstSamples, false);
 
 	for (int i = 0; i < AUDIO_CAPTURE_BUFFER_COUNT; i++)
 	{
