@@ -70,22 +70,32 @@ bench binary is always instrumented (dev tool, never shipped). Source:
 
 ## Baseline numbers to compare against
 
-2026-09-19, dev box (Ryzen, 20 hw threads, JLab USB mic, ggml-base CPU):
-- latency: open ~14.4 ms med, start ~14.6 ms med, first_audio ~142 ms med,
-  stop ~45 ms med
-- transcription: load 117 ms / 793 MB committed (198 MB touched, model file
-  is 148 MB), peak 928 MB, 11.6 s CPU per 11 s utterance (~0.63 s wall, RTF ~17)
-- GUI idle (window visible): ~5-8% of one core, 100 Hz tick avg 10 ms
-  (max stalls 20-80 ms), no-model footprint ~65 MB private
+2026-09-24, dev box (Ryzen, 20 hw threads, JLab USB mic, ggml-base CPU), after the
+capture/GUI/inference tuning session:
+- latency: open ~0.2 ms med (warm device; ~25-60 ms once on first take or device
+  switch), start ~0.7 ms med, first_audio ~17 ms med, stop ~16-24 ms med,
+  tail_gap ~0 ms (drain-after-reset; slightly negative = stop-request->reset
+  continuation audio is preserved)
+- transcription: load ~250 ms / ~717 MB committed (198 MB touched, model file
+  is 148 MB), peak ~820 MB, ~4.7-7.3 s CPU per 11 s utterance depending on
+  load (audio_ctx-capped), RTF ~18-40
+- GUI idle (window visible): ~0.5-1.4% of a core (idle render throttle at 10 Hz
+  after 1 s without input); 100 Hz tick avg 10 ms, max ~13-22 ms (bounded by
+  vsync Present on the tick thread); no-model footprint ~65 MB private
+
+Pre-tuning 2026-09-19 numbers, for reference on the changes made that day+next:
+open ~14-24 ms, first_audio ~142 ms, tail loss up to 100 ms race, transcription
+11.6 s CPU / RTF ~16 / 793 MB committed, idle 5-8% of a core, tick max 20-80 ms.
 
 ## Known findings / likely optimizations (as of the baseline above)
 
-- ggml/whisper commits ~5x the model size in private bytes while touching
-  ~1.3x — compute-buffer sizing is the lever.
-- WaveIn 100 ms buffers delay first delivery ~100 ms (feedback latency) and
-  waveInReset discards the trailing partial buffer on stop (up to 100 ms of
-  final audio lost — likely clips the last word).
-- Device open (~14 ms) + hotkey poll (up to tick max, ~20-80 ms stalls) form
-  the lost-audio window for the first word.
-- Idle GUI burns ~5-8% of a core while visible (render loop at monitor
-  refresh).
+- Remaining whisper commit (~717 MB) is dominated by init-time worst-case 30 s
+  conv/encode/cross/decode sched buffers (~520 MB) + weights + F16 kv caches —
+  needs a whisper.cpp patch or upstream bump to shrink further.
+- whisper sometimes decodes a trailing near-empty window into a "[BLANK_AUDIO]"
+  segment (observed on GPU with audio_ctx caps; filtered in transcription_core).
+- Remaining tick-stall bound (~13-22 ms max) is vsync Present(1,0) running on
+  the tick/render thread (TODO at render_frame in imgui_main_windows.cpp).
+- Bench DLL gotcha: VoiceTyperBench.exe loads ggml/whisper DLLs from its own
+  directory first — copy fresh DLLs into build/perf/Bench_cpu after rebuilding,
+  or you measure stale code.
