@@ -709,6 +709,8 @@ struct CaptureLatencyRun
 	double StartMs;
 	double FirstAudioMs;
 	double StopMs;
+	double CapturedMs;
+	double TailGapMs;
 };
 
 static double
@@ -808,6 +810,7 @@ run_capture_latency_bench(const BenchOptions &Options)
 		std::this_thread::sleep_for(std::chrono::milliseconds(150));
 
 		std::chrono::steady_clock::time_point StopStart = std::chrono::steady_clock::now();
+		int64_t StopRequestNs = perf_now_ns();
 		AppState.CaptureRunning.store(false);
 		CaptureThread.join();
 		double StopMs = elapsed_ms(StopStart, std::chrono::steady_clock::now());
@@ -817,6 +820,12 @@ run_capture_latency_bench(const BenchOptions &Options)
 		Run.StartMs = AppState.LastRecordCaptureStartMs.load();
 		Run.FirstAudioMs = AppState.LastRecordFirstAudioMs.load();
 		Run.StopMs = StopMs;
+		{
+			std::lock_guard<std::mutex> Lock(AppState.AudioBufferMutex);
+			Run.CapturedMs = (double)AppState.AudioAccum.TotalSamples * 1000.0 / AUDIO_CAPTURE_SAMPLE_RATE;
+		}
+		double ExpectedMs = (double)(StopRequestNs - AppState.PipelineRequestNs.load()) / 1000000.0 - Run.StartMs;
+		Run.TailGapMs = ExpectedMs - Run.CapturedMs;
 		Runs.push_back(Run);
 
 		perf_event("capture_latency_iteration_done");
@@ -827,13 +836,14 @@ run_capture_latency_bench(const BenchOptions &Options)
 		}
 	}
 
-	std::vector<double> OpenMs, StartMs, FirstAudioMs, StopMs;
+	std::vector<double> OpenMs, StartMs, FirstAudioMs, StopMs, TailGapMs;
 	for (const CaptureLatencyRun &Run : Runs)
 	{
 		OpenMs.push_back(Run.OpenMs);
 		StartMs.push_back(Run.StartMs);
 		FirstAudioMs.push_back(Run.FirstAudioMs);
 		StopMs.push_back(Run.StopMs);
+		TailGapMs.push_back(Run.TailGapMs);
 	}
 
 	std::cout << "{\"mode\":\"capture-latency\""
@@ -849,6 +859,8 @@ run_capture_latency_bench(const BenchOptions &Options)
 			<< ",\"start_ms\":" << format_ms(Runs[i].StartMs >= 0 ? Runs[i].StartMs : -1.0)
 			<< ",\"first_audio_ms\":" << format_ms(Runs[i].FirstAudioMs >= 0 ? Runs[i].FirstAudioMs : -1.0)
 			<< ",\"stop_ms\":" << format_ms(Runs[i].StopMs)
+			<< ",\"captured_ms\":" << format_ms(Runs[i].CapturedMs)
+			<< ",\"tail_gap_ms\":" << format_ms(Runs[i].TailGapMs)
 			<< "}";
 	}
 
@@ -857,6 +869,7 @@ run_capture_latency_bench(const BenchOptions &Options)
 	print_latency_metric("start_ms", StartMs);
 	print_latency_metric("first_audio_ms", FirstAudioMs);
 	print_latency_metric("stop_ms", StopMs);
+	print_latency_metric("tail_gap_ms", TailGapMs);
 	std::cout << "}\n";
 
 	return 0;
