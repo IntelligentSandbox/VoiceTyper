@@ -41,6 +41,9 @@ static bool                    g_ImGuiReady        = false;
 static bool                    g_RenderDueNow      = true;
 static int                     g_RenderRefreshHz   = 60;
 static LONGLONG                g_RenderIntervalTicks = 0;
+static LONGLONG                g_RenderIdleIntervalTicks = 0;
+static LONGLONG                g_LastInputQpc      = 0;
+static HANDLE                  g_WaitableTimer     = nullptr;
 static LONGLONG                g_PerformanceCounterFrequency = 0;
 
 static bool                    g_InSizeMove              = false;
@@ -797,9 +800,54 @@ record_indicator_shutdown()
 // ---------------------------------------------------------------------------
 // Window Procedure
 // ---------------------------------------------------------------------------
+static bool
+is_input_message(UINT Msg)
+{
+	switch (Msg)
+	{
+	case WM_MOUSEMOVE:
+	case WM_NCMOUSEMOVE:
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+	case WM_XBUTTONDOWN:
+	case WM_XBUTTONUP:
+	case WM_MOUSEWHEEL:
+	case WM_MOUSEHWHEEL:
+	case WM_KEYDOWN:
+	case WM_KEYUP:
+	case WM_SYSKEYDOWN:
+	case WM_SYSKEYUP:
+	case WM_CHAR:
+		return true;
+	}
+
+	return false;
+}
+
+static bool
+ui_render_is_active(LONGLONG Now, GlobalState *AppState)
+{
+	LONGLONG IdleDelayTicks = performance_counter_frequency() * RENDER_IDLE_DELAY_MS / 1000;
+	if (g_LastInputQpc != 0 && Now - g_LastInputQpc < IdleDelayTicks) return true;
+	if (AppState && (AppState->IsRecording || AppState->IsStreaming)) return true;
+	if (g_ImGuiReady && ImGui::GetIO().WantTextInput) return true;
+
+	return false;
+}
+
 LRESULT WINAPI
 wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 {
+	if (is_input_message(Msg))
+	{
+		g_LastInputQpc = performance_counter_now();
+		g_RenderDueNow = true;
+	}
+
 	if (ImGui_ImplWin32_WndProcHandler(Hwnd, Msg, WParam, LParam)) return 1;
 
 	switch (Msg)
@@ -989,6 +1037,13 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	refresh_render_cadence(Hwnd);
 	g_AppUpdateIntervalTicks = performance_interval_for_hz(APP_UPDATE_HZ);
+	g_RenderIdleIntervalTicks = performance_interval_for_hz(RENDER_IDLE_REFRESH_HZ);
+	g_WaitableTimer = CreateWaitableTimerExW(
+		nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_MODIFY_STATE | SYNCHRONIZE);
+	if (!g_WaitableTimer)
+	{
+		g_WaitableTimer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_MODIFY_STATE | SYNCHRONIZE);
+	}
 	LONGLONG Now = performance_counter_now();
 	g_NextAppTick = Now;
 	LONGLONG NextRenderTick = Now;
@@ -1047,7 +1102,12 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			}
 
 			g_RenderDueNow = false;
-			NextRenderTick = RenderStart + g_RenderIntervalTicks;
+			LONGLONG EffectiveRenderInterval = g_RenderIntervalTicks;
+			if (g_RenderIdleIntervalTicks > EffectiveRenderInterval && !ui_render_is_active(Now, AppState))
+			{
+				EffectiveRenderInterval = g_RenderIdleIntervalTicks;
+			}
+			NextRenderTick = RenderStart + EffectiveRenderInterval;
 		}
 
 		Now = performance_counter_now();
@@ -1069,10 +1129,30 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		}
 
 		DWORD WaitMs = milliseconds_until_counter(Now, NextDeadline);
+		if (WaitMs > 0 && g_WaitableTimer)
+		{
+			LONGLONG DueTicks = NextDeadline - Now;
+			if (DueTicks < 1) DueTicks = 1;
+			LARGE_INTEGER Due;
+			Due.QuadPart = -(LONGLONG)((DueTicks * 10000000LL + performance_counter_frequency() - 1)
+				/ performance_counter_frequency());
+			if (Due.QuadPart > -1) Due.QuadPart = -1;
+			if (SetWaitableTimer(g_WaitableTimer, &Due, 0, nullptr, nullptr, FALSE))
+			{
+				MsgWaitForMultipleObjectsEx(1, &g_WaitableTimer, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+				continue;
+			}
+		}
 		MsgWaitForMultipleObjectsEx(0, nullptr, WaitMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 	}
 
 	g_ImGuiReady = false;
+
+	if (g_WaitableTimer)
+	{
+		CloseHandle(g_WaitableTimer);
+		g_WaitableTimer = nullptr;
+	}
 
 	record_indicator_shutdown();
 

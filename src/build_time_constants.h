@@ -49,6 +49,8 @@ inline constexpr int WINDOW_MIN_WIDTH      = 320;
 inline constexpr int WINDOW_MIN_HEIGHT     = 240;
 inline constexpr int RENDER_REFRESH_FALLBACK_HZ = 60;
 inline constexpr int RENDER_SLEEP_MAX_MS         = 16;
+inline constexpr int RENDER_IDLE_REFRESH_HZ      = 10;
+inline constexpr int RENDER_IDLE_DELAY_MS        = 1000;
 inline constexpr const char *APP_ICON_PATH = "media/voicetyper-icon.png";
 
 // ---------------------------------------------------------------------------
