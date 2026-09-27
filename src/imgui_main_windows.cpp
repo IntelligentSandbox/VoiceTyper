@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 
 #pragma comment(lib, "dwmapi.lib")
 
@@ -394,12 +395,14 @@ run_due_app_updates(LONGLONG Now)
 // has been active for RecordIndicatorDelayMs (user setting), so brief
 // hold-mode presses never flash it. Click-through (WS_EX_TRANSPARENT) and
 // non-activating (WS_EX_NOACTIVATE), so it never steals input while the user
-// holds keys. There is no animation: a single frame is pushed once when the
-// session crosses the show-delay threshold and the window instantly pops out
-// of view when the session ends. The DWM keeps displaying the last pushed
-// surface, so a visible indicator is never redrawn; the 1Hz re-check only
-// pushes again if the window frame actually moved (taskbar/resolution change)
-// or the label changed (recording vs streaming).
+// holds keys. A frame is pushed once when the session crosses the show-delay
+// threshold, then again only when its content changes: the recording vs
+// streaming label swap or the elapsed timer advancing once per second
+// (seconds only, then M:SS past a minute, H:MM:SS past an hour), so redraws
+// stay at 1Hz while a session runs. The window instantly pops out of view
+// when the session ends. The DWM keeps displaying the last pushed surface, so
+// a visible indicator is never redrawn needlessly; the 1Hz re-check only
+// pushes again if the window frame actually moved (taskbar/resolution change).
 // ---------------------------------------------------------------------------
 #define RECORD_INDICATOR_REFRESH_MS     1000
 #define RECORD_INDICATOR_BOTTOM_GAP_PX  200
@@ -417,6 +420,7 @@ struct RecordIndicatorState
 	int Height;
 	std::vector<unsigned char> Base;
 	bool BaseIsStreaming;
+	int BaseElapsedSeconds;
 	UINT BaseDpi;
 	UINT CachedDpi;
 	bool ContentDirty;
@@ -510,13 +514,35 @@ record_indicator_alloc_frame(int Width, int Height)
 	return true;
 }
 
+// Elapsed time goes from bare seconds ("42s") to M:SS past a minute, then
+// H:MM:SS past an hour; hours keep counting up from there.
+static void
+record_indicator_build_label(wchar_t *Out, size_t OutCount, bool IsStreaming, int ElapsedSeconds)
+{
+	const wchar_t *Base = IsStreaming ? L"Streaming " : L"Recording ";
+	if (ElapsedSeconds < 0) ElapsedSeconds = 0;
+	if (ElapsedSeconds < 60)
+	{
+		swprintf(Out, OutCount, L"%s%ds", Base, ElapsedSeconds);
+	}
+	else if (ElapsedSeconds < 3600)
+	{
+		swprintf(Out, OutCount, L"%s%d:%02d", Base, ElapsedSeconds / 60, ElapsedSeconds % 60);
+	}
+	else
+	{
+		swprintf(Out, OutCount, L"%s%d:%02d:%02d", Base,
+			ElapsedSeconds / 3600, (ElapsedSeconds / 60) % 60, ElapsedSeconds % 60);
+	}
+}
+
 // Draw the indicator at RECORD_INDICATOR_SS x supersampling, then box-filter
 // down into Base as a full-opacity premultiplied ARGB image. Magenta is the
 // coverage key: any subpixel still exactly magenta is background. Text is
 // drawn with an opaque background equal to the pill fill so GDI's font
 // antialiasing blends against the pill, not against the key color.
 static void
-record_indicator_render_base(bool IsStreaming, UINT Dpi)
+record_indicator_render_base(bool IsStreaming, UINT Dpi, int ElapsedSeconds)
 {
 	RecordIndicatorState *Ri = &g_RecordIndicator;
 
@@ -529,7 +555,8 @@ record_indicator_render_base(bool IsStreaming, UINT Dpi)
 	const int Height = (int)(54.0f * Scale + 0.5f);
 	const int BorderPx = (int)(1.0f * Scale + 0.5f);
 
-	const wchar_t *Label = IsStreaming ? L"Streaming..." : L"Recording...";
+	wchar_t Label[64];
+	record_indicator_build_label(Label, sizeof(Label) / sizeof(Label[0]), IsStreaming, ElapsedSeconds);
 	const int LabelLen = lstrlenW(Label);
 
 	HDC ScreenDc = GetDC(nullptr);
@@ -636,6 +663,7 @@ record_indicator_render_base(bool IsStreaming, UINT Dpi)
 	Ri->Width = Width;
 	Ri->Height = FiltHeight;
 	Ri->BaseIsStreaming = IsStreaming;
+	Ri->BaseElapsedSeconds = ElapsedSeconds;
 	Ri->BaseDpi = Dpi;
 
 	SelectObject(Dc, SsPrev);
@@ -694,11 +722,11 @@ record_indicator_push_frame()
 }
 
 // Advance the indicator state for this instant. Runs every main loop
-// iteration so state changes take effect immediately, but the single frame is
-// only pushed when it appears, when its content changes, or when the 1Hz
-// re-check finds the window frame moved. Returns the counter deadline when
-// the overlay needs the loop to wake up again, or a far-future value when
-// idle.
+// iteration so state changes take effect immediately, but the frame is only
+// pushed when it appears, when its content changes (label swap or elapsed
+// second tick), or when the 1Hz re-check finds the window frame moved.
+// Returns the counter deadline when the overlay needs the loop to wake up
+// again, or a far-future value when idle.
 static LONGLONG
 record_indicator_update(GlobalState *AppState, LONGLONG Now)
 {
@@ -706,7 +734,11 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 	const LONGLONG Idle = 0x7fffffffffffffffLL;
 
 	bool Active = AppState->ShowRecordIndicator && (AppState->IsRecording || AppState->IsStreaming);
-	if (Active && !Ri->WasActive) Ri->ActiveSinceTicks = Now;
+	if (Active && !Ri->WasActive)
+	{
+		Ri->ActiveSinceTicks = Now;
+		Ri->BaseElapsedSeconds = -1;
+	}
 	Ri->WasActive = Active;
 
 	LONGLONG Frequency = performance_counter_frequency();
@@ -722,6 +754,7 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 			ShowWindow(Ri->Hwnd, SW_HIDE);
 			Ri->Visible = false;
 			Ri->LastPushedWidth = -1;
+			Ri->BaseElapsedSeconds = -1;
 		}
 		return Idle;
 	}
@@ -744,10 +777,12 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 	}
 
 	bool IsStreaming = AppState->IsStreaming;
-	bool ContentChanged = Ri->Base.empty() || Ri->BaseIsStreaming != IsStreaming || Ri->BaseDpi != Ri->CachedDpi;
+	int ElapsedSeconds = (int)((Now - Ri->ActiveSinceTicks) / Frequency);
+	bool ContentChanged = Ri->Base.empty() || Ri->BaseIsStreaming != IsStreaming ||
+		Ri->BaseDpi != Ri->CachedDpi || Ri->BaseElapsedSeconds != ElapsedSeconds;
 	if (ContentChanged)
 	{
-		record_indicator_render_base(IsStreaming, Ri->CachedDpi);
+		record_indicator_render_base(IsStreaming, Ri->CachedDpi, ElapsedSeconds);
 	}
 
 	if (!record_indicator_alloc_frame(Ri->Width, Ri->Height)) return Idle;
@@ -781,7 +816,12 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 		}
 	}
 
-	return Ri->Visible ? Ri->NextRefreshTicks : Idle;
+	// Wake the loop for whichever comes first: the periodic DPI/frame refresh
+	// or the next elapsed-second boundary so the timer ticks crisply.
+	LONGLONG NextSecondTick = Ri->ActiveSinceTicks + (LONGLONG)(ElapsedSeconds + 1) * Frequency;
+	LONGLONG Deadline = Ri->NextRefreshTicks;
+	if (NextSecondTick < Deadline) Deadline = NextSecondTick;
+	return Ri->Visible ? Deadline : Idle;
 }
 
 static void
