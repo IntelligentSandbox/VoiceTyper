@@ -14,6 +14,61 @@
 
 static GlobalState *g_AppState = nullptr;
 
+static Uint64 g_RenderIntervalTicks = 0;
+static Uint64 g_RenderIdleIntervalTicks = 0;
+static Uint64 g_LastInputCounter = 0;
+static Uint64 g_LastPresentCounter = 0;
+static bool g_RenderDueNow = true;
+
+static int
+detect_display_refresh_hz(SDL_Window *Window)
+{
+	int DisplayIndex = SDL_GetWindowDisplayIndex(Window);
+	if (DisplayIndex < 0) return RENDER_REFRESH_FALLBACK_HZ;
+
+	SDL_DisplayMode Mode = {};
+	if (SDL_GetCurrentDisplayMode(DisplayIndex, &Mode) != 0) return RENDER_REFRESH_FALLBACK_HZ;
+	if (Mode.refresh_rate <= 1 || Mode.refresh_rate > 1000) return RENDER_REFRESH_FALLBACK_HZ;
+
+	return Mode.refresh_rate;
+}
+
+static bool
+window_can_render(SDL_Window *Window)
+{
+	Uint32 Flags = SDL_GetWindowFlags(Window);
+	return (Flags & SDL_WINDOW_SHOWN) != 0 && (Flags & SDL_WINDOW_MINIMIZED) == 0;
+}
+
+static bool
+event_wakes_render(const SDL_Event &Event)
+{
+	switch (Event.type)
+	{
+	case SDL_MOUSEMOTION:
+	case SDL_MOUSEBUTTONDOWN:
+	case SDL_MOUSEBUTTONUP:
+	case SDL_MOUSEWHEEL:
+	case SDL_KEYDOWN:
+	case SDL_KEYUP:
+	case SDL_TEXTINPUT:
+		return true;
+	}
+
+	return false;
+}
+
+static bool
+ui_render_is_active(Uint64 Now, GlobalState *AppState)
+{
+	Uint64 IdleDelayTicks = SDL_GetPerformanceFrequency() * RENDER_IDLE_DELAY_MS / 1000;
+	if (g_LastInputCounter != 0 && Now - g_LastInputCounter < IdleDelayTicks) return true;
+	if (AppState && (AppState->IsRecording || AppState->IsStreaming)) return true;
+	if (ImGui::GetIO().WantTextInput) return true;
+
+	return false;
+}
+
 static bool
 load_window_size(int *OutWidth, int *OutHeight)
 {
@@ -273,8 +328,11 @@ main(int, char **)
 	refresh_inference_devices(AppState);
 
 	const Uint64 AppUpdateIntervalTicks = performance_interval_for_hz(APP_UPDATE_HZ);
+	g_RenderIdleIntervalTicks = performance_interval_for_hz(RENDER_IDLE_REFRESH_HZ);
+	g_RenderIntervalTicks = performance_interval_for_hz(detect_display_refresh_hz(Window));
 	Uint64 Now = performance_counter_now();
 	Uint64 NextAppTick = Now;
+	Uint64 NextRenderTick = Now;
 
 	AppFrameState FrameState = {};
 
@@ -285,6 +343,11 @@ main(int, char **)
 		while (SDL_PollEvent(&Event))
 		{
 			ImGui_ImplSDL2_ProcessEvent(&Event);
+			if (event_wakes_render(Event))
+			{
+				g_LastInputCounter = performance_counter_now();
+				g_RenderDueNow = true;
+			}
 			if (Event.type == SDL_QUIT) Running = false;
 			if (Event.type != SDL_WINDOWEVENT) continue;
 			if (Event.window.windowID != SDL_GetWindowID(Window)) continue;
@@ -292,6 +355,11 @@ main(int, char **)
 			if (Event.window.event == SDL_WINDOWEVENT_RESIZED || Event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
 			{
 				save_window_size(Window);
+			}
+			if (Event.window.event == SDL_WINDOWEVENT_MOVED)
+			{
+				g_RenderIntervalTicks = performance_interval_for_hz(detect_display_refresh_hz(Window));
+				g_RenderDueNow = true;
 			}
 		}
 
@@ -316,10 +384,44 @@ main(int, char **)
 
 		if (Now >= NextAppTick) NextAppTick = Now + AppUpdateIntervalTicks;
 
-		render_frame(Renderer);
+		// Input wakes a render instantly (capped at one refresh interval since
+		// the last present); otherwise frames follow the explicit schedule,
+		// which drops to RENDER_IDLE_REFRESH_HZ after RENDER_IDLE_DELAY_MS
+		// without input/recording so the software renderer idles cheap.
+		bool InputWake = g_RenderDueNow &&
+			(g_LastPresentCounter == 0 || Now - g_LastPresentCounter >= g_RenderIntervalTicks);
+		if (window_can_render(Window) && (Now >= NextRenderTick || InputWake))
+		{
+			Uint64 RenderStart = Now;
+
+			render_frame(Renderer);
+			Now = performance_counter_now();
+			g_LastPresentCounter = Now;
+
+			g_RenderDueNow = false;
+			InputWake = false;
+			Uint64 EffectiveRenderInterval = g_RenderIntervalTicks;
+			if (g_RenderIdleIntervalTicks > EffectiveRenderInterval && !ui_render_is_active(Now, AppState))
+			{
+				EffectiveRenderInterval = g_RenderIdleIntervalTicks;
+			}
+			NextRenderTick = RenderStart + EffectiveRenderInterval;
+		}
 
 		Now = performance_counter_now();
-		Uint32 WaitMs = milliseconds_until_counter(Now, NextAppTick);
+		Uint64 NextDeadline = NextAppTick;
+		if (window_can_render(Window))
+		{
+			if (InputWake)
+			{
+				NextDeadline = Now;
+			}
+			else if (NextRenderTick < NextDeadline)
+			{
+				NextDeadline = NextRenderTick;
+			}
+		}
+		Uint32 WaitMs = milliseconds_until_counter(Now, NextDeadline);
 		if (WaitMs > RENDER_SLEEP_MAX_MS) WaitMs = RENDER_SLEEP_MAX_MS;
 		if (WaitMs > 0) SDL_Delay(WaitMs);
 	}

@@ -1051,6 +1051,13 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 		printf("[audio_pipeline] ERROR: SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
 		return false;
 	}
+	if (Obtained.samples != Desired.samples)
+	{
+		printf("[audio_pipeline] capture callback size adjusted by SDL: requested %d samples (%d ms), got %d samples (%d ms)\n",
+			(int)Desired.samples, AUDIO_CAPTURE_BUFFER_MS,
+			(int)Obtained.samples,
+			(int)((Uint64)Obtained.samples * 1000 / AUDIO_CAPTURE_SAMPLE_RATE));
+	}
 
 	SDL_PauseAudioDevice(Device, 0);
 	while (AppState->CaptureRunning.load()) SDL_Delay(20);
