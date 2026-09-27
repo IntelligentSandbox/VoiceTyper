@@ -1550,14 +1550,14 @@ platform_download_file_thread(GlobalState *AppState, std::string Url, std::strin
 
 	AppState->Ui.Download.ChildPid.store((int64_t)Pid);
 
-	int Status = 0;
+	int ExitStatus = 0;
 	bool Canceled = false;
 
 	for (;;)
 	{
-		pid_t Result = waitpid(Pid, &Status, WNOHANG);
+		pid_t Result = waitpid(Pid, &ExitStatus, WNOHANG);
 		if (Result == Pid) break;
-		if (Result == -1) { Status = -1; break; }
+		if (Result == -1) { ExitStatus = -1; break; }
 
 		if (AppState->Ui.Download.CancelRequested.load())
 		{
@@ -1566,13 +1566,13 @@ platform_download_file_thread(GlobalState *AppState, std::string Url, std::strin
 			bool Reaped = false;
 			for (int i = 0; i < 50; i++)
 			{
-				if (waitpid(Pid, &Status, WNOHANG) == Pid) { Reaped = true; break; }
+				if (waitpid(Pid, &ExitStatus, WNOHANG) == Pid) { Reaped = true; break; }
 				usleep(10000);
 			}
 			if (!Reaped)
 			{
 				kill(Pid, SIGKILL);
-				waitpid(Pid, &Status, 0);
+				waitpid(Pid, &ExitStatus, 0);
 			}
 			break;
 		}
@@ -1588,8 +1588,8 @@ platform_download_file_thread(GlobalState *AppState, std::string Url, std::strin
 
 	AppState->Ui.Download.ChildPid.store(0);
 
-	bool Success = !Canceled && WIFEXITED(Status) && WEXITSTATUS(Status) == 0;
-	if (!Success)
+	bool Succeeded = !Canceled && WIFEXITED(ExitStatus) && WEXITSTATUS(ExitStatus) == 0;
+	if (!Succeeded)
 	{
 		remove(PartPath.c_str());
 		AppState->Ui.Download.Failed.store(true);
@@ -1637,8 +1637,8 @@ platform_http_get_string(const std::string &Url, std::string *OutBody)
 		OutBody->append(Buffer, Read);
 	}
 
-	int Status = pclose(Pipe);
-	return Status == 0 && !OutBody->empty();
+	int ExitStatus = pclose(Pipe);
+	return ExitStatus == 0 && !OutBody->empty();
 }
 
 inline void
@@ -1662,16 +1662,16 @@ platform_update_download_thread(GlobalState *AppState, std::string Url, std::str
 
 	U->ChildPid.store((int64_t)Pid);
 
-	int Status = 0;
+	int ExitStatus = 0;
 	bool Canceled = false;
 
 	for (;;)
 	{
-		pid_t Result = waitpid(Pid, &Status, WNOHANG);
+		pid_t Result = waitpid(Pid, &ExitStatus, WNOHANG);
 		if (Result == Pid) break;
 		if (Result == -1)
 		{
-			Status = -1;
+			ExitStatus = -1;
 			break;
 		}
 
@@ -1682,7 +1682,7 @@ platform_update_download_thread(GlobalState *AppState, std::string Url, std::str
 			bool Reaped = false;
 			for (int i = 0; i < 50; i++)
 			{
-				if (waitpid(Pid, &Status, WNOHANG) == Pid)
+				if (waitpid(Pid, &ExitStatus, WNOHANG) == Pid)
 				{
 					Reaped = true;
 					break;
@@ -1692,7 +1692,7 @@ platform_update_download_thread(GlobalState *AppState, std::string Url, std::str
 			if (!Reaped)
 			{
 				kill(Pid, SIGKILL);
-				waitpid(Pid, &Status, 0);
+				waitpid(Pid, &ExitStatus, 0);
 			}
 			break;
 		}
@@ -1708,8 +1708,8 @@ platform_update_download_thread(GlobalState *AppState, std::string Url, std::str
 
 	U->ChildPid.store(0);
 
-	bool Success = !Canceled && WIFEXITED(Status) && WEXITSTATUS(Status) == 0;
-	if (Success)
+	bool Succeeded = !Canceled && WIFEXITED(ExitStatus) && WEXITSTATUS(ExitStatus) == 0;
+	if (Succeeded)
 	{
 		U->DownloadSucceeded.store(true);
 	}
