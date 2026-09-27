@@ -79,9 +79,10 @@ capture/GUI/inference tuning session:
 - transcription: load ~250 ms / ~717 MB committed (198 MB touched, model file
   is 148 MB), peak ~820 MB, ~4.7-7.3 s CPU per 11 s utterance depending on
   load (audio_ctx-capped), RTF ~18-40
-- GUI idle (window visible): ~0.5-1.4% of a core (idle render throttle at 10 Hz
-  after 1 s without input); 100 Hz tick avg 10 ms, max ~13-22 ms (bounded by
-  vsync Present on the tick thread); no-model footprint ~65 MB private
+- GUI idle (window visible): ~0.5-1.5% of a core (idle render throttle at 10 Hz
+  after 1 s without input); 100 Hz tick avg 10 ms, p95/p99 10/11 ms, max ~14-16 ms
+  (OS scheduling noise; Present(0) since 2026-09-27 — the vsync block is gone);
+  no-model footprint ~65 MB private
 
 Pre-tuning 2026-09-19 numbers, for reference on the changes made that day+next:
 open ~14-24 ms, first_audio ~142 ms, tail loss up to 100 ms race, transcription
@@ -94,8 +95,15 @@ open ~14-24 ms, first_audio ~142 ms, tail loss up to 100 ms race, transcription
   needs a whisper.cpp patch or upstream bump to shrink further.
 - whisper sometimes decodes a trailing near-empty window into a "[BLANK_AUDIO]"
   segment (observed on GPU with audio_ctx caps; filtered in transcription_core).
-- Remaining tick-stall bound (~13-22 ms max) is vsync Present(1,0) running on
-  the tick/render thread (TODO at render_frame in imgui_main_windows.cpp).
+- Tick-stall fix 2026-09-27: Present(1,0) blocked the tick/render thread on
+  vblank whenever the render schedule drifted out of phase (rare but large
+  outliers; one 30 s idle session measured max 33 ms, historical 13-27 ms).
+  render_frame now uses Present(0) — tear-free through DWM composition of the
+  windowed blt-model chain — with the existing high-res-timer pacing; an
+  input-wake render is capped at one refresh interval since the last present
+  (the rate limit vsync used to provide). After: max ~14-16 ms = scheduling
+  noise floor; p99 unchanged at ~11 ms. perf.h tick stats now also report
+  p50/p95/p99 (per-ms histogram).
 - Bench DLL gotcha: VoiceTyperBench.exe loads ggml/whisper DLLs from its own
   directory first — copy fresh DLLs into build/perf/Bench_cpu after rebuilding,
   or you measure stale code.

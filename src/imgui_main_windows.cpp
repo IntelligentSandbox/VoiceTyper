@@ -43,6 +43,7 @@ static bool                    g_RenderDueNow      = true;
 static int                     g_RenderRefreshHz   = 60;
 static LONGLONG                g_RenderIntervalTicks = 0;
 static LONGLONG                g_RenderIdleIntervalTicks = 0;
+static LONGLONG                g_LastPresentTick   = 0;
 static LONGLONG                g_LastInputQpc      = 0;
 static HANDLE                  g_WaitableTimer     = nullptr;
 static LONGLONG                g_PerformanceCounterFrequency = 0;
@@ -342,10 +343,16 @@ render_frame()
 	g_DeviceContext->ClearRenderTargetView(g_RenderTargetView, ClearColor);
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-	// TODO: Reevaluate this if vsync fights the explicit render scheduler or causes cadence issues.
-	HRESULT Hr = g_SwapChain->Present(1, 0);
+	// Present(0): a vsynced Present(1,0) blocked this thread until the next
+	// vblank whenever the explicit render schedule drifted out of phase with
+	// the compositor, stalling app ticks behind it for up to a full refresh
+	// interval. The loop already paces renders with a high-resolution timer and
+	// the windowed blt-model swap chain is composed by the DWM, so an unthrottled
+	// present keeps frame timing without the block (and without tearing).
+	HRESULT Hr = g_SwapChain->Present(0, 0);
 	g_SwapChainOccluded = (Hr == DXGI_STATUS_OCCLUDED);
 	g_HasPresentedFrame = true;
+	g_LastPresentTick = performance_counter_now();
 }
 
 // Runs any due app update ticks, shared by the main loop and the live-resize
@@ -1131,7 +1138,13 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 		Now = performance_counter_now();
 		Now = run_due_app_updates(Now);
 
-		if (window_can_render(Hwnd) && (g_RenderDueNow || Now >= NextRenderTick))
+		// Present(0) no longer throttles input-driven renders, so an input wake
+		// bypasses the schedule only after one refresh interval since the last
+		// present — matching the rate vsync used to enforce while keeping the
+		// first frame after idle instant.
+		bool InputWake = g_RenderDueNow &&
+			(g_LastPresentTick == 0 || Now - g_LastPresentTick >= g_RenderIntervalTicks);
+		if (window_can_render(Hwnd) && (Now >= NextRenderTick || InputWake))
 		{
 			LONGLONG RenderStart = Now;
 
@@ -1142,6 +1155,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 			}
 
 			g_RenderDueNow = false;
+			InputWake = false;
 			LONGLONG EffectiveRenderInterval = g_RenderIntervalTicks;
 			if (g_RenderIdleIntervalTicks > EffectiveRenderInterval && !ui_render_is_active(Now, AppState))
 			{
@@ -1158,7 +1172,7 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 		if (window_can_render(Hwnd))
 		{
-			if (g_RenderDueNow)
+			if (InputWake)
 			{
 				NextDeadline = Now;
 			}

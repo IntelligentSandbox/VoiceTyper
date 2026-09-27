@@ -84,6 +84,9 @@ struct PerfTickStats
 	double MinMs;
 	double MaxMs;
 	double AvgMs;
+	double P50Ms;
+	double P95Ms;
+	double P99Ms;
 };
 
 #ifdef VOICETYPER_PERF
@@ -118,6 +121,7 @@ struct PerfSample
 inline constexpr int PERF_EVENT_CAPACITY   = 4096;
 inline constexpr int PERF_SAMPLE_CAPACITY  = 8192;
 inline constexpr int PERF_REPORT_FLUSH_SEC = 5;
+inline constexpr int PERF_TICK_HIST_BUCKETS = 65;
 
 struct PerfState
 {
@@ -136,6 +140,7 @@ struct PerfState
 	double TickMinMs;
 	double TickMaxMs;
 	double TickSumMs;
+	int64_t TickHistMs[PERF_TICK_HIST_BUCKETS];
 
 	uint64_t PeakWorkingSetBytes;
 	uint64_t PeakPrivateBytes;
@@ -157,6 +162,7 @@ struct PerfState
 		TickMinMs(0.0),
 		TickMaxMs(0.0),
 		TickSumMs(0.0),
+		TickHistMs{},
 		PeakWorkingSetBytes(0),
 		PeakPrivateBytes(0),
 		LastSampleCpuTotalMs(0.0),
@@ -323,7 +329,33 @@ perf_note_loop_tick(double DeltaMs)
 	if (DeltaMs > State.TickMaxMs) State.TickMaxMs = DeltaMs;
 	State.TickSumMs += DeltaMs;
 	State.TickLastMs = DeltaMs;
+	int Bucket = (int)DeltaMs;
+	if (Bucket < 0) Bucket = 0;
+	if (Bucket >= PERF_TICK_HIST_BUCKETS) Bucket = PERF_TICK_HIST_BUCKETS - 1;
+	State.TickHistMs[Bucket]++;
 	State.TickCount++;
+}
+
+// Nearest-rank percentile over the per-ms tick histogram; Ms is the bucket
+// floor, so the result is a slight overestimate at p50 and under at the tail.
+inline double
+perf_tick_percentile_locked(const PerfState &State, double Percent)
+{
+	if (State.TickCount <= 0) return 0.0;
+
+	int64_t Rank = (int64_t)(State.TickCount * Percent / 100.0);
+	if (Rank < 1) Rank = 1;
+	int64_t Seen = 0;
+	for (int i = 0; i < PERF_TICK_HIST_BUCKETS; i++)
+	{
+		Seen += State.TickHistMs[i];
+		if (Seen >= Rank)
+		{
+			bool Saturated = (i == PERF_TICK_HIST_BUCKETS - 1) && State.TickMaxMs > i;
+			return Saturated ? State.TickMaxMs : (double)i;
+		}
+	}
+	return State.TickMaxMs;
 }
 
 inline bool
@@ -339,6 +371,9 @@ perf_get_tick_stats(PerfTickStats *Out)
 	Out->MinMs = State.TickMinMs;
 	Out->MaxMs = State.TickMaxMs;
 	Out->AvgMs = State.TickCount > 0 ? State.TickSumMs / (double)State.TickCount : 0.0;
+	Out->P50Ms = perf_tick_percentile_locked(State, 50.0);
+	Out->P95Ms = perf_tick_percentile_locked(State, 95.0);
+	Out->P99Ms = perf_tick_percentile_locked(State, 99.0);
 	return true;
 }
 
@@ -406,7 +441,8 @@ perf_write_report()
 			"\"mem_working_set_bytes\":%llu,\"mem_private_bytes\":%llu,"
 			"\"peak_working_set_bytes\":%llu,\"peak_private_bytes\":%llu,"
 			"\"events_dropped\":%llu,\"samples_dropped\":%llu,"
-			"\"tick\":{\"count\":%lld,\"last_ms\":%.3f,\"min_ms\":%.3f,\"avg_ms\":%.3f,\"max_ms\":%.3f},"
+			"\"tick\":{\"count\":%lld,\"last_ms\":%.3f,\"min_ms\":%.3f,\"avg_ms\":%.3f,\"max_ms\":%.3f,"
+			"\"p50_ms\":%.0f,\"p95_ms\":%.0f,\"p99_ms\":%.0f},"
 			"\"events\":[",
 			perf_process_id(),
 			perf_now_ms_locked(State),
@@ -420,7 +456,10 @@ perf_write_report()
 			(long long)State.TickCount,
 			State.TickLastMs, State.TickMinMs,
 			State.TickCount > 0 ? State.TickSumMs / (double)State.TickCount : 0.0,
-			State.TickMaxMs);
+			State.TickMaxMs,
+			perf_tick_percentile_locked(State, 50.0),
+			perf_tick_percentile_locked(State, 95.0),
+			perf_tick_percentile_locked(State, 99.0));
 		Buffer += Line;
 
 		for (int i = 0; i < State.EventCount; i++)
