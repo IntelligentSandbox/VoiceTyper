@@ -131,9 +131,9 @@ hover_help_mark(const char *HelpText, const HelpMarkStyle &Style = help_mark_def
 	ImVec2 DotCenter = ImVec2(Center.x, StemBottom.y + GlyphH * 0.17f);
 
 	Draw->PathArcTo(BowlCenter, BowlR, BowlA0, BowlA1);
-	Draw->PathStroke(Color32, 0, Style.OutlineThickness);
+	Draw->PathStroke(Color32, Style.OutlineThickness);
 	Draw->PathArcTo(HookCenter, HookR, HookA0, HookA1);
-	Draw->PathStroke(Color32, 0, Style.OutlineThickness);
+	Draw->PathStroke(Color32, Style.OutlineThickness);
 	Draw->AddLine(StemTop, StemBottom, Color32, Style.OutlineThickness);
 	Draw->AddCircleFilled(DotCenter, GlyphH * 0.07f, Color32);
 
@@ -224,9 +224,9 @@ theme_toggle_button(GlobalState *AppState)
 		float InnerBottomA = atan2f(CuspBottom.y - InnerC.y, CuspBottom.x - InnerC.x);
 
 		Draw->PathArcTo(Center, R, Pi / 3.0f, Pi * 5.0f / 3.0f);
-		Draw->PathStroke(Color32, 0, Thickness);
+		Draw->PathStroke(Color32, Thickness);
 		Draw->PathArcTo(InnerC, InnerR, InnerBottomA - Pi * 2.0f, InnerTopA);
-		Draw->PathStroke(Color32, 0, Thickness);
+		Draw->PathStroke(Color32, Thickness);
 	}
 	else
 	{

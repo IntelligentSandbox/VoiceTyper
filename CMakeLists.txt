@@ -106,7 +106,7 @@ add_subdirectory(src/external/whisper.cpp)
 # ---------------------------------------------------------------------------
 # ImGui build
 # ---------------------------------------------------------------------------
-set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-1.92.6)
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-1.92.9b)
 
 set(IMGUI_SOURCES
 	${IMGUI_DIR}/imgui.cpp
