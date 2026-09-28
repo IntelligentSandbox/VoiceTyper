@@ -425,6 +425,8 @@ struct RecordIndicatorState
 	void *Bits;
 	int Width;
 	int Height;
+	int BitmapWidth;
+	int BitmapHeight;
 	std::vector<unsigned char> Base;
 	bool BaseIsStreaming;
 	int BaseElapsedSeconds;
@@ -487,13 +489,15 @@ record_indicator_free_buffers()
 	Ri->Bits = nullptr;
 	Ri->Width = 0;
 	Ri->Height = 0;
+	Ri->BitmapWidth = 0;
+	Ri->BitmapHeight = 0;
 }
 
 static bool
 record_indicator_alloc_frame(int Width, int Height)
 {
 	RecordIndicatorState *Ri = &g_RecordIndicator;
-	if (Ri->Bitmap && Ri->Width == Width && Ri->Height == Height) return true;
+	if (Ri->Bitmap && Ri->BitmapWidth == Width && Ri->BitmapHeight == Height) return true;
 
 	record_indicator_free_buffers();
 
@@ -517,6 +521,8 @@ record_indicator_alloc_frame(int Width, int Height)
 	SelectObject(Ri->MemDc, Ri->Bitmap);
 	Ri->Width = Width;
 	Ri->Height = Height;
+	Ri->BitmapWidth = Width;
+	Ri->BitmapHeight = Height;
 	Ri->ContentDirty = true;
 	return true;
 }
@@ -696,9 +702,10 @@ record_indicator_frame_changed(RecordIndicatorState *Ri, POINT *OutPos)
 	return Ri->LastPushedX != OutPos->x || Ri->LastPushedY != OutPos->y;
 }
 
-// Composite the single frame at full opacity. pptDst/psize are passed only
-// when the window frame actually changed (first show or a move), so a label
-// swap never goes through UpdateLayeredWindow's move+size path.
+// Composite the single frame at full opacity. The current position and size
+// are passed on every push: NULLing pptDst/psize for a content-only update
+// returns success but the window is never recomposited, so a ticking timer
+// would stay frozen on the first pushed frame.
 static void
 record_indicator_push_frame()
 {
@@ -706,8 +713,7 @@ record_indicator_push_frame()
 	if (!Ri->Hwnd || !Ri->Bitmap) return;
 
 	POINT Pos = {0, 0};
-	bool FrameChanged = record_indicator_frame_changed(Ri, &Pos);
-	bool SizeChanged = Ri->LastPushedWidth != Ri->Width || Ri->LastPushedHeight != Ri->Height;
+	record_indicator_frame_changed(Ri, &Pos);
 
 	SIZE Size = {Ri->Width, Ri->Height};
 	POINT SrcPos = {0, 0};
@@ -715,8 +721,8 @@ record_indicator_push_frame()
 
 	BOOL Ok = UpdateLayeredWindow(
 		Ri->Hwnd, Ri->ScreenDc,
-		FrameChanged ? &Pos : nullptr,
-		SizeChanged ? &Size : nullptr,
+		&Pos,
+		&Size,
 		Ri->MemDc, &SrcPos, 0, &Blend, ULW_ALPHA);
 
 	if (Ok)
