@@ -13,6 +13,10 @@ get_model_catalog()
 inline std::string
 catalog_model_url(const std::string &Name)
 {
+	if (Name == "distil-large-v3.5")
+	{
+		return std::string(DISTIL_WHISPER_HF_BASE_URL) + "/ggml-model.bin";
+	}
 	return std::string(WHISPER_HF_BASE_URL) + "/ggml-" + Name + ".bin";
 }
 

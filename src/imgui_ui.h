@@ -1964,7 +1964,7 @@ render_download_modal(GlobalState *AppState)
 		}
 		else
 		{
-			ImGui::TextDisabled("Source: huggingface.co/ggerganov/whisper.cpp");
+			ImGui::TextDisabled("Sources: huggingface.co/ggerganov/whisper.cpp, distil-whisper/distil-large-v3.5-ggml");
 			ImGui::Spacing();
 
 		if (ImGui::BeginTable("##CatalogTable", 3,
