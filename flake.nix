@@ -394,8 +394,8 @@
               # scanning the real executable's directory (/proc/self/exe). ggml
               # installs the module into bin/ next to the wrapped binary, so no
               # relocation is needed here. The DT_NEEDED shared libs
-              # (libwhisper/libggml/libggml-base) stay in $out/lib and resolve
-              # via the binary's nix-store rpath.
+              # (libwhisper/libparakeet/libggml/libggml-base) stay in $out/lib
+              # and resolve via the binary's nix-store rpath.
               postInstall = ''
                 wrapProgram $out/bin/VoiceTyper \
                   --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs} \
@@ -490,8 +490,8 @@
           # Portable bundle factory: a flat, Windows-style directory of
           # dynamically linked ELFs plus their full .so closure and a bundled
           # glibc ld-linux. Mirrors the Windows zip layout — the launcher, the
-          # whisper/ggml shared libs (libwhisper / libggml / libggml-base /
-          # libggml-cpu), and ld-linux all sit at the top level. The real
+          # whisper/ggml shared libs (libwhisper / libparakeet / libggml /
+          # libggml-base / libggml-cpu), and ld-linux all sit at the top level. The real
           # binary (VoiceTyper.elf) must stay at the top level because both
           # ggml_backend_load_all() and the app's cuda/ plugin probe resolve
           # libggml-cpu.so relative to /proc/self/exe. The top-level
@@ -583,6 +583,7 @@
                   R="${buildDir}"
                   cp -f "$R/VoiceTyper" $out/VoiceTyper.elf
                   cp -Lf "$R/libwhisper.so.1" $out/libwhisper.so.1
+                  cp -Lf "$R/libparakeet.so.1" $out/libparakeet.so.1
                   cp -Lf "$R/libggml.so.0" $out/libggml.so.0
                   cp -Lf "$R/libggml-base.so.0" $out/libggml-base.so.0
                   cp -Lf "$R/libggml-cpu.so" $out/libggml-cpu.so
