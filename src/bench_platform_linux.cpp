@@ -1,18 +1,26 @@
 #include "host_services.h"
+
+#define platform_audio_capture bench_real_platform_audio_capture
+#define platform_get_foreground_window bench_real_platform_get_foreground_window
 #include "platform_linux.h"
+#undef platform_audio_capture
+#undef platform_get_foreground_window
 
 // The platform layer is header-only: the platform_ functions are inline
 // definitions in platform_linux.h. Taking their address here forces this TU
 // to emit them, so the benchmark executable - whose main TU only sees the
 // declarations in host_services.h - links against them. The used attribute
 // keeps the table (and everything it references) alive under --gc-sections.
+// platform_audio_capture and platform_get_foreground_window are renamed at
+// include time (above) so the leak-soak mode can provide bench-side overrides
+// of them in benchmark_main.cpp and still forward to the real implementations.
 __attribute__((used))
 void *g_BenchPlatformAnchors[] = {
-	(void *)&platform_audio_capture,
+	(void *)&bench_real_platform_audio_capture,
+	(void *)&bench_real_platform_get_foreground_window,
 	(void *)&platform_query_audio_devices,
 	(void *)&platform_inject_text,
 	(void *)&platform_set_clipboard_text,
-	(void *)&platform_get_foreground_window,
 	(void *)&platform_get_window_process_name,
 	(void *)&platform_set_taskbar_icon,
 	(void *)&platform_apply_window_theme,

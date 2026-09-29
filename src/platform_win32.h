@@ -203,9 +203,10 @@ platform_set_clipboard_text_win32(const char *Utf8Text)
 	wchar_t *pMem = (wchar_t *)GlobalLock(hMem);
 	MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, pMem, WideLen);
 	GlobalUnlock(hMem);
-	SetClipboardData(CF_UNICODETEXT, hMem);
+	bool Ok = SetClipboardData(CF_UNICODETEXT, hMem) != nullptr;
 	CloseClipboard();
-	return true;
+	if (!Ok) GlobalFree(hMem);
+	return Ok;
 }
 
 static bool
@@ -459,19 +460,21 @@ platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs)
 			Buffer[i] = (short)Sample;
 		}
 
-		WAVEHDR Hdr = {};
-		Hdr.lpData = (LPSTR)Buffer;
-		Hdr.dwBufferLength = NumSamples * sizeof(short);
+	WAVEHDR Hdr = {};
+	Hdr.lpData = (LPSTR)Buffer;
+	Hdr.dwBufferLength = NumSamples * sizeof(short);
 
-		waveOutPrepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
-		waveOutWrite(HWaveOut, &Hdr, sizeof(Hdr));
-
-		while (!(Hdr.dwFlags & WHDR_DONE))
-			Sleep(1);
-
+	if (waveOutPrepareHeader(HWaveOut, &Hdr, sizeof(Hdr)) == MMSYSERR_NOERROR)
+	{
+		if (waveOutWrite(HWaveOut, &Hdr, sizeof(Hdr)) == MMSYSERR_NOERROR)
+		{
+			while (!(Hdr.dwFlags & WHDR_DONE))
+				Sleep(1);
+		}
 		waveOutUnprepareHeader(HWaveOut, &Hdr, sizeof(Hdr));
-		waveOutClose(HWaveOut);
-		delete[] Buffer;
+	}
+	waveOutClose(HWaveOut);
+	delete[] Buffer;
 	}).detach();
 }
 

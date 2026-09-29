@@ -202,18 +202,19 @@ static void
 stream_finish_buffer_on_stop(GlobalState *AppState, StreamingChunkQueue *Queue, bool HasSpeech)
 {
 	AudioClip Chunk;
+	bool Finalize = false;
 
 	{
 		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
-		bool Finalize = AppState->StreamingFinalizeOnStop.load() &&
+		Finalize = AppState->StreamingFinalizeOnStop.load() &&
 			HasSpeech &&
 			clip_duration_ms(&AppState->AudioAccum) >= STREAM_MIN_CHUNK_DURATION_MS;
-		if (Finalize) Chunk = AppState->AudioAccum;
+		Chunk = AppState->AudioAccum;
 		AppState->AudioAccum = AudioClip{};
 	}
 
-	clip_release(&AppState->AudioPool, &AppState->AudioAccum);
-	stream_push_completed_chunk(Queue, &Chunk);
+	if (Finalize) stream_push_completed_chunk(Queue, &Chunk);
+	else clip_release(&AppState->AudioPool, &Chunk);
 }
 
 static void

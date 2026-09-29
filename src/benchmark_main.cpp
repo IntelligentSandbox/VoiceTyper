@@ -6,8 +6,10 @@
 #include "transcription_core.h"
 #include "whisper_wrapper.h"
 #include "stream_chunker.h"
+#include "audio_pipeline.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -42,6 +44,9 @@ struct BenchOptions
 	bool HasNoise = false;
 	double SnrDb = 10.0;
 	bool HasSnr = false;
+	bool HasTakeMs = false;
+	int SoakTakeMs = 0;
+	bool SoakFast = false;
 };
 
 struct BenchPerfGuard
@@ -109,10 +114,11 @@ print_usage(const char *ExeName)
 {
 	std::cerr << "Usage: " << ExeName
 		<< " --audio <path> [--model <path>] [--expected-text <text>]"
-		<< " [--mode <record|streaming|capture-latency>] [--vad <on|off>] [--vad-model <path>]"
+		<< " [--mode <record|streaming|capture-latency|leak-soak>] [--vad <on|off>] [--vad-model <path>]"
 		<< " [--device <cpu|gpu>] [--audio-device <index>] [--warmup <count>] [--iterations <count>]"
 		<< " [--threads <count>] [--log <off|file|verbose>]"
-		<< " [--beam <1-16>] [--noise <wav>] [--snr <db>]\n";
+		<< " [--beam <1-16>] [--noise <wav>] [--snr <db>]"
+		<< " [--take-ms <ms>] [--soak-fast]\n";
 }
 
 static bool
@@ -211,12 +217,22 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 			const char *Value = require_value("--mode");
 			if (!Value) return false;
 			if (std::string(Value) != "record" && std::string(Value) != "streaming" &&
-				std::string(Value) != "capture-latency")
+				std::string(Value) != "capture-latency" && std::string(Value) != "leak-soak")
 			{
-				std::cerr << "--mode must be 'record', 'streaming' or 'capture-latency'\n";
+				std::cerr << "--mode must be 'record', 'streaming', 'capture-latency' or 'leak-soak'\n";
 				return false;
 			}
 			Options->Mode = Value;
+		}
+		else if (Arg == "--take-ms")
+		{
+			const char *Value = require_value("--take-ms");
+			if (!Value || !parse_int_arg(Value, 100, &Options->SoakTakeMs)) return false;
+			Options->HasTakeMs = true;
+		}
+		else if (Arg == "--soak-fast")
+		{
+			Options->SoakFast = true;
 		}
 		else if (Arg == "--audio-device")
 		{
@@ -875,6 +891,299 @@ run_capture_latency_bench(const BenchOptions &Options)
 	return 0;
 }
 
+extern bool bench_real_platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex);
+extern void *bench_real_platform_get_foreground_window(PlatformRuntimeState *Platform);
+
+static std::vector<float> g_SoakSamples;
+static std::atomic<bool> g_SoakSynthActive{false};
+static std::atomic<bool> g_SoakFast{false};
+static std::atomic<int64_t> g_SoakTakeSamples{0};
+static std::atomic<int64_t> g_SoakFedSamples{0};
+
+static_assert(AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS / 1000 <= 2048,
+	"soak synthetic capture chunk buffer is too small");
+
+bool platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, int DeviceIndex)
+{
+	if (!g_SoakSynthActive.load()) return bench_real_platform_audio_capture(Platform, AppState, DeviceIndex);
+
+	float Chunk[2048];
+	const int ChunkSamples = AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS / 1000;
+	const size_t SourceLength = g_SoakSamples.size();
+	const int64_t Target = g_SoakTakeSamples.load();
+	g_SoakFedSamples.store(0);
+	bool First = true;
+
+	while (AppState->CaptureRunning.load())
+	{
+		int64_t Fed = g_SoakFedSamples.load();
+		if (Fed >= Target) break;
+
+		int Count = ChunkSamples;
+		if ((int64_t)Count > Target - Fed) Count = (int)(Target - Fed);
+
+		size_t Source = (size_t)(Fed % (int64_t)SourceLength);
+		for (int i = 0; i < Count; i++)
+		{
+			Chunk[i] = g_SoakSamples[Source];
+			Source = (Source + 1 == SourceLength) ? 0 : Source + 1;
+		}
+
+		{
+			std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
+			clip_append(&AppState->AudioPool, &AppState->AudioAccum, Chunk, Count);
+		}
+
+		if (First)
+		{
+			First = false;
+			AppState->LastRecordFirstAudioMs.store(
+				(double)(perf_now_ns() - AppState->PipelineRequestNs.load()) / 1000000.0);
+			perf_event("audio_first_samples");
+		}
+
+		g_SoakFedSamples.store(Fed + Count);
+		if (!g_SoakFast.load())
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(AUDIO_CAPTURE_BUFFER_MS));
+		}
+	}
+
+	AppState->CaptureRunning.store(false);
+	return true;
+}
+
+void *platform_get_foreground_window(PlatformRuntimeState *Platform)
+{
+	if (g_SoakSynthActive.load()) return nullptr;
+	return bench_real_platform_get_foreground_window(Platform);
+}
+
+struct SoakCycleStats
+{
+	double RecordPrivateMb;
+	double RecordWorkingMb;
+	double StreamPrivateMb;
+	double StreamWorkingMb;
+	int PoolFreeAfterRecord;
+	int PoolFreeAfterStream;
+	int AccumSamplesAfterRecord;
+	int AccumSamplesAfterStream;
+	int StagingCapKb;
+	double RecordWallMs;
+	double StreamWallMs;
+};
+
+static void
+soak_sample_state(GlobalState *AppState, double *PrivateMb, double *WorkingMb, int *PoolFree, int *AccumSamples)
+{
+	PerfMemorySnapshot Mem = {};
+	perf_read_process_memory(&Mem);
+	*PrivateMb = (double)Mem.PrivateBytes / (1024.0 * 1024.0);
+	*WorkingMb = (double)Mem.WorkingSetBytes / (1024.0 * 1024.0);
+
+	{
+		std::lock_guard<std::mutex> Lock(AppState->AudioPool.Mutex);
+		*PoolFree = AppState->AudioPool.FreeCount;
+	}
+
+	{
+		std::lock_guard<std::mutex> Lock(AppState->AudioBufferMutex);
+		*AccumSamples = AppState->AudioAccum.TotalSamples;
+	}
+}
+
+static bool
+soak_wait_pipeline_idle(GlobalState *AppState, int TimeoutMs)
+{
+	int64_t WaitedMs = 0;
+	while (AppState->PipelineActive.load())
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		WaitedMs += 5;
+		if (WaitedMs >= TimeoutMs) return false;
+	}
+
+	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
+	std::this_thread::sleep_for(std::chrono::milliseconds(150));
+	return true;
+}
+
+static int
+run_leak_soak_bench(const BenchOptions &Options, const std::vector<float> &Samples)
+{
+	if (Samples.empty())
+	{
+		std::cerr << "leak-soak requires non-empty --audio\n";
+		return 1;
+	}
+
+	GlobalState AppState = {};
+	init_whisper_state(&AppState.WhisperState);
+
+	AudioInputDeviceInfo Device = {};
+	Device.Name = "soak-synth";
+	Device.Id = "soak-synth";
+	AppState.AudioInputDevices.push_back(Device);
+	AppState.CurrentAudioDeviceIndex = 0;
+	AppState.WhisperThreadCount = Options.ThreadCount;
+	AppState.VadModelPath = Options.VadModelPath;
+
+	pool_init(&AppState.AudioPool);
+	AppState.WhisperStaging.reserve(
+		(size_t)(AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_STAGING_INITIAL_MS / 1000));
+
+	{
+		PerfSpan Span("soak_model_load");
+		if (!load_whisper_model(&AppState.WhisperState, Options.ModelPath.c_str(), 0, 0))
+		{
+			std::cerr << "failed to load Whisper model: " << Options.ModelPath << "\n";
+			return 1;
+		}
+	}
+
+	int64_t TakeSamples = (int64_t)Samples.size();
+	if (Options.HasTakeMs) TakeSamples = (int64_t)Options.SoakTakeMs * AUDIO_CAPTURE_SAMPLE_RATE / 1000;
+
+	g_SoakSamples = Samples;
+	g_SoakFast.store(Options.SoakFast);
+	g_SoakTakeSamples.store(TakeSamples);
+	g_SoakSynthActive.store(true);
+
+	std::vector<SoakCycleStats> Cycles;
+	const int TotalCycles = Options.WarmupCount + Options.IterationCount;
+	bool Failed = false;
+
+	for (int Cycle = 0; Cycle < TotalCycles; Cycle++)
+	{
+		SoakCycleStats Stats = {};
+		std::chrono::steady_clock::time_point Start;
+
+		Start = std::chrono::steady_clock::now();
+		if (!start_record_pipeline(&AppState))
+		{
+			std::cerr << "record pipeline failed to start\n";
+			Failed = true;
+			break;
+		}
+		if (!soak_wait_pipeline_idle(&AppState, 600000))
+		{
+			std::cerr << "record pipeline timed out\n";
+			Failed = true;
+			break;
+		}
+		Stats.RecordWallMs = elapsed_ms(Start, std::chrono::steady_clock::now());
+		soak_sample_state(&AppState, &Stats.RecordPrivateMb, &Stats.RecordWorkingMb,
+			&Stats.PoolFreeAfterRecord, &Stats.AccumSamplesAfterRecord);
+
+		Start = std::chrono::steady_clock::now();
+		if (!start_streaming_pipeline(&AppState))
+		{
+			std::cerr << "streaming pipeline failed to start\n";
+			Failed = true;
+			break;
+		}
+		if (!soak_wait_pipeline_idle(&AppState, 600000))
+		{
+			std::cerr << "streaming pipeline timed out\n";
+			Failed = true;
+			break;
+		}
+		Stats.StreamWallMs = elapsed_ms(Start, std::chrono::steady_clock::now());
+		soak_sample_state(&AppState, &Stats.StreamPrivateMb, &Stats.StreamWorkingMb,
+			&Stats.PoolFreeAfterStream, &Stats.AccumSamplesAfterStream);
+
+		Stats.StagingCapKb = (int)(AppState.WhisperStaging.capacity() * sizeof(float) / 1024);
+
+		if (Cycle < Options.WarmupCount)
+		{
+			std::cerr << "warmup cycle " << Cycle << " done (rec " << format_ms(Stats.RecordWallMs)
+				<< " ms, strm " << format_ms(Stats.StreamWallMs) << " ms)\n";
+			continue;
+		}
+
+		Cycles.push_back(Stats);
+		size_t N = Cycles.size();
+		double RecDelta = 0.0;
+		double StrmDelta = 0.0;
+		if (N > 1)
+		{
+			RecDelta = Cycles[N - 1].RecordPrivateMb - Cycles[N - 2].RecordPrivateMb;
+			StrmDelta = Cycles[N - 1].StreamPrivateMb - Cycles[N - 2].StreamPrivateMb;
+		}
+		std::cerr << "cycle " << Cycle << ": rec private " << std::fixed << std::setprecision(1)
+			<< Stats.RecordPrivateMb << " MB (" << (RecDelta >= 0 ? "+" : "") << RecDelta << ")"
+			<< " | strm private " << Stats.StreamPrivateMb << " MB ("
+			<< (StrmDelta >= 0 ? "+" : "") << StrmDelta << ")"
+			<< " | pool free " << Stats.PoolFreeAfterRecord << " -> " << Stats.PoolFreeAfterStream
+			<< " | staging " << Stats.StagingCapKb << " KB"
+			<< " | rec " << format_ms(Stats.RecordWallMs) << " ms, strm "
+			<< format_ms(Stats.StreamWallMs) << " ms\n";
+	}
+
+	g_SoakSynthActive.store(false);
+
+	bool PoolLeak = false;
+	bool AccumResidue = false;
+	for (size_t i = 0; i < Cycles.size(); i++)
+	{
+		if (i > 0)
+		{
+			if (Cycles[i].PoolFreeAfterRecord < Cycles[i - 1].PoolFreeAfterRecord) PoolLeak = true;
+			if (Cycles[i].PoolFreeAfterStream < Cycles[i - 1].PoolFreeAfterStream) PoolLeak = true;
+		}
+		if (Cycles[i].AccumSamplesAfterRecord != 0 || Cycles[i].AccumSamplesAfterStream != 0) AccumResidue = true;
+	}
+
+	double SlopeKbPerCycle = 0.0;
+	if (Cycles.size() >= 4)
+	{
+		size_t Half = Cycles.size() / 2;
+		double FirstMb = Cycles[Half].StreamPrivateMb;
+		double LastMb = Cycles.back().StreamPrivateMb;
+		SlopeKbPerCycle = (LastMb - FirstMb) * 1024.0 / (double)(Cycles.size() - 1 - Half);
+	}
+
+	const char *Verdict = "flat";
+	if (Failed) Verdict = "incomplete";
+	else if (AccumResidue) Verdict = "accumulator-residue";
+	else if (PoolLeak) Verdict = "pool-leak";
+	else if (SlopeKbPerCycle > 32.0) Verdict = "growth";
+
+	std::cout << "{\"mode\":\"leak-soak\""
+		<< ",\"audio\":\"" << json_escape(Options.AudioPath) << "\""
+		<< ",\"take_ms\":" << (int)(TakeSamples * 1000 / AUDIO_CAPTURE_SAMPLE_RATE)
+		<< ",\"fast\":" << (Options.SoakFast ? "true" : "false")
+		<< ",\"warmup\":" << Options.WarmupCount
+		<< ",\"cycles\":" << Cycles.size()
+		<< ",\"peak_private_mb\":" << format_ms((double)perf_peak_private_bytes() / (1024.0 * 1024.0))
+		<< ",\"private_slope_kb_per_cycle\":" << format_ms(SlopeKbPerCycle)
+		<< ",\"verdict\":\"" << Verdict << "\""
+		<< ",\"per_cycle\":[";
+
+	for (size_t i = 0; i < Cycles.size(); i++)
+	{
+		std::cout << (i > 0 ? "," : "")
+			<< "{\"record_private_mb\":" << format_ms(Cycles[i].RecordPrivateMb)
+			<< ",\"stream_private_mb\":" << format_ms(Cycles[i].StreamPrivateMb)
+			<< ",\"record_working_mb\":" << format_ms(Cycles[i].RecordWorkingMb)
+			<< ",\"stream_working_mb\":" << format_ms(Cycles[i].StreamWorkingMb)
+			<< ",\"pool_free_after_record\":" << Cycles[i].PoolFreeAfterRecord
+			<< ",\"pool_free_after_stream\":" << Cycles[i].PoolFreeAfterStream
+			<< ",\"accum_after_record\":" << Cycles[i].AccumSamplesAfterRecord
+			<< ",\"accum_after_stream\":" << Cycles[i].AccumSamplesAfterStream
+			<< ",\"staging_cap_kb\":" << Cycles[i].StagingCapKb
+			<< ",\"record_ms\":" << format_ms(Cycles[i].RecordWallMs)
+			<< ",\"stream_ms\":" << format_ms(Cycles[i].StreamWallMs)
+			<< "}";
+	}
+
+	std::cout << "]}\n";
+
+	unload_whisper_model(&AppState.WhisperState);
+	return Failed ? 1 : 0;
+}
+
 int
 main(int ArgCount, char **Args)
 {
@@ -916,9 +1225,6 @@ main(int ArgCount, char **Args)
 		mix_noise_at_snr(&Samples, Noise, Options.SnrDb);
 	}
 
-	WhisperModelState ModelState = {};
-	init_whisper_state(&ModelState);
-
 	setup_bench_logging(Options);
 
 	// GGML_BACKEND_DL: the CPU backend ships as a separate ggml-cpu.dll that
@@ -926,6 +1232,17 @@ main(int ArgCount, char **Args)
 	// (not ggml_backend_load_all) so a ggml-cuda.dll next to the exe is not
 	// eagerly loaded here; the CUDA plugin is loaded on demand below.
 	load_cpu_backend();
+
+	if (Options.Mode == "leak-soak")
+	{
+		int Ret = run_leak_soak_bench(Options, Samples);
+		perf_event("bench_process_end");
+		shutdown_bench_logging();
+		return Ret;
+	}
+
+	WhisperModelState ModelState = {};
+	init_whisper_state(&ModelState);
 
 	bool UseGpu = (Options.Device == "gpu");
 	int InferenceDeviceIndex = 0;
