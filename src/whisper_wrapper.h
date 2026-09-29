@@ -3,11 +3,14 @@
 #include "whisper.h"
 #include "parakeet.h"
 #include "ggml-backend.h"
+#include <cstdint>
+#include <cstdio>
 #include <exception>
 #include <string>
 
 enum EngineKind
 {
+	ENGINE_UNKNOWN,
 	ENGINE_WHISPER,
 	ENGINE_PARAKEET,
 };
@@ -26,7 +29,7 @@ struct WhisperModelState
 inline void
 init_stt_state(WhisperModelState *State)
 {
-	State->Kind = ENGINE_WHISPER;
+	State->Kind = ENGINE_UNKNOWN;
 	State->WhisperContext = nullptr;
 	State->ParakeetContext = nullptr;
 	State->IsLoaded = false;
@@ -35,11 +38,41 @@ init_stt_state(WhisperModelState *State)
 	State->ModelPath = "";
 }
 
+// Both model formats share the ggml magic; the hparam block that follows
+// differs structurally, which identifies the engine from file content alone.
+// whisper (11 ints):  n_vocab n_audio_ctx n_audio_state n_audio_head n_audio_layer
+//                     n_text_ctx n_text_state n_text_head n_text_layer n_mels ftype
+// parakeet (15 ints): n_vocab n_audio_ctx n_audio_state n_audio_head n_audio_layer
+//                     n_mels ftype n_fft subsampling_factor n_subsampling_channels
+//                     n_conv_kernel n_pred_dim n_pred_layers n_tdt_durations n_max_tokens
 inline EngineKind
 detect_stt_engine_kind(const char *Path)
 {
-	(void)Path;
-	return ENGINE_WHISPER;
+	if (Path == nullptr) return ENGINE_UNKNOWN;
+
+	FILE *File = std::fopen(Path, "rb");
+	if (File == nullptr) return ENGINE_UNKNOWN;
+
+	uint32_t Magic = 0;
+	int32_t Ints[15] = {};
+	bool Ok = std::fread(&Magic, sizeof(Magic), 1, File) == 1;
+	Ok = Ok && std::fread(Ints, sizeof(Ints), 1, File) == 1;
+	std::fclose(File);
+	if (!Ok) return ENGINE_UNKNOWN;
+
+	if (Magic != 0x67676d6c) return ENGINE_UNKNOWN;
+
+	if (Ints[5] == 448 && Ints[0] >= 51800 && Ints[0] <= 52000)
+	{
+		return ENGINE_WHISPER;
+	}
+
+	if (Ints[0] == 8192 && Ints[7] == 512 && Ints[13] >= 1 && Ints[13] <= 32)
+	{
+		return ENGINE_PARAKEET;
+	}
+
+	return ENGINE_UNKNOWN;
 }
 
 // Returns true on success, false on failure.
@@ -77,6 +110,8 @@ load_stt_model(WhisperModelState *State, const char *ModelPath,
 	}
 
 	State->Kind = detect_stt_engine_kind(ModelPath);
+
+	if (State->Kind == ENGINE_UNKNOWN) return false;
 
 	if (State->Kind == ENGINE_PARAKEET)
 	{

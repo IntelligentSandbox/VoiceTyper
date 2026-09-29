@@ -165,6 +165,8 @@ inline constexpr const char *WHISPER_HF_BASE_URL =
 	"https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 inline constexpr const char *DISTIL_WHISPER_HF_BASE_URL =
 	"https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main";
+inline constexpr const char *PARAKEET_HF_BASE_URL =
+	"https://huggingface.co/ggml-org/parakeet-GGUF/resolve/main";
 inline constexpr const char *VAD_HF_BASE_URL =
 	"https://huggingface.co/ggml-org/whisper-vad/resolve/main";
 inline constexpr const char *VAD_MODEL_FILENAME     = "ggml-silero-v5.1.2.bin";
@@ -194,6 +196,8 @@ inline const std::vector<CatalogModel> MODEL_CATALOG = {
 	{"large-v3-turbo", "Large v3 Turbo",           1620ULL * 1024 * 1024, false},
 	{"large-v3-turbo-q5_0", "Large v3 Turbo (q5_0 quant)", 548ULL  * 1024 * 1024, false},
 	{"distil-large-v3.5",   "Distil Large v3.5 English",   1450ULL * 1024 * 1024, true},
+	{"parakeet-tdt-0.6b-v3-q8_0", "Parakeet TDT 0.6B v3 (recommended)", 640ULL * 1024 * 1024, false},
+	{"parakeet-tdt-0.6b-v3-q4_0", "Parakeet TDT 0.6B v3 (q4_0 quant)", 340ULL * 1024 * 1024, false},
 };
 
 // ---------------------------------------------------------------------------

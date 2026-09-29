@@ -17,6 +17,10 @@ catalog_model_url(const std::string &Name)
 	{
 		return std::string(DISTIL_WHISPER_HF_BASE_URL) + "/ggml-model.bin";
 	}
+	if (Name.rfind("parakeet-", 0) == 0)
+	{
+		return std::string(PARAKEET_HF_BASE_URL) + "/ggml-" + Name + ".bin";
+	}
 	return std::string(WHISPER_HF_BASE_URL) + "/ggml-" + Name + ".bin";
 }
 
