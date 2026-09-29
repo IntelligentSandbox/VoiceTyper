@@ -86,8 +86,14 @@ resolve_paste_hotkey(GlobalState *AppState, void *TargetWindow)
 	return PasteHotkey;
 }
 
+struct SttInferenceParams
+{
+	whisper_full_params WhisperParams;
+	parakeet_full_params ParakeetParams;
+};
+
 static void
-run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, const float *Samples, int SampleCount)
+run_stt_on_chunk(GlobalState *AppState, SttInferenceParams &Params, const float *Samples, int SampleCount)
 {
 	float Rms = compute_rms(Samples, SampleCount);
 	if (Rms < PIPELINE_SILENCE_RMS_THRESHOLD)
@@ -100,16 +106,29 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, const f
 	std::vector<TranscribedWord> TranscribedWords;
 	std::chrono::steady_clock::time_point TxStart = std::chrono::steady_clock::now();
 	PerfSpan TranscribeSpan("transcribe");
-	int Ret = transcribe_pcm_to_string(
-		AppState->WhisperState.WhisperContext, Params, Samples, SampleCount,
-		&Transcription, &TranscribedWords);
+	int Ret;
+	if (AppState->WhisperState.Kind == ENGINE_PARAKEET)
+	{
+		Ret = transcribe_pcm_to_string(
+			AppState->WhisperState.ParakeetContext, Params.ParakeetParams, Samples, SampleCount,
+			&Transcription, &TranscribedWords);
+	}
+	else
+	{
+		Ret = transcribe_pcm_to_string(
+			AppState->WhisperState.WhisperContext, Params.WhisperParams, Samples, SampleCount,
+			&Transcription, &TranscribedWords);
+	}
 	std::chrono::steady_clock::time_point TxEnd = std::chrono::steady_clock::now();
 	double TxMs = std::chrono::duration<double, std::milli>(TxEnd - TxStart).count();
 	if (Ret == 0) AppState->LastTranscriptionMs.store(TxMs);
 
 	if (Ret != 0)
 	{
-		printf("[audio_pipeline] whisper_full failed (ret=%d)\n", Ret);
+		if (AppState->WhisperState.Kind == ENGINE_PARAKEET)
+			printf("[audio_pipeline] parakeet_full failed (ret=%d)\n", Ret);
+		else
+			printf("[audio_pipeline] whisper_full failed (ret=%d)\n", Ret);
 		return;
 	}
 
@@ -279,12 +298,14 @@ stream_infer_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 		InitialPrompt = AppState->WhisperInitialPrompt;
 	}
 
-	whisper_full_params Params = make_transcription_whisper_params(
+	SttInferenceParams Params = {};
+	Params.WhisperParams = make_transcription_whisper_params(
 		AppState->WhisperThreadCount,
 		STREAMING_WHISPER_VAD,
 		AppState->VadModelPath.c_str(),
 		InitialPrompt.empty() ? nullptr : InitialPrompt.c_str());
-	Params.single_segment      = true;
+	Params.WhisperParams.single_segment = true;
+	Params.ParakeetParams = make_transcription_parakeet_params(AppState->WhisperThreadCount);
 
 	for (;;)
 	{
@@ -295,7 +316,7 @@ stream_infer_thread(GlobalState *AppState, StreamingChunkQueue *Queue)
 		clip_release(&AppState->AudioPool, &Clip);
 		if (SampleCount <= 0) continue;
 
-		run_whisper_on_chunk(AppState, Params, AppState->WhisperStaging.data(), SampleCount);
+		run_stt_on_chunk(AppState, Params, AppState->WhisperStaging.data(), SampleCount);
 	}
 }
 
@@ -352,14 +373,16 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 			InitialPrompt = AppState->WhisperInitialPrompt;
 		}
 
-	whisper_full_params Params = make_transcription_whisper_params(
-		AppState->WhisperThreadCount,
-		RECORD_WHISPER_VAD,
-		AppState->VadModelPath.c_str(),
-		InitialPrompt.empty() ? nullptr : InitialPrompt.c_str());
-		Params.single_segment      = false;
+		SttInferenceParams Params = {};
+		Params.WhisperParams = make_transcription_whisper_params(
+			AppState->WhisperThreadCount,
+			RECORD_WHISPER_VAD,
+			AppState->VadModelPath.c_str(),
+			InitialPrompt.empty() ? nullptr : InitialPrompt.c_str());
+		Params.WhisperParams.single_segment = false;
+		Params.ParakeetParams = make_transcription_parakeet_params(AppState->WhisperThreadCount);
 
-		run_whisper_on_chunk(AppState, Params, AppState->WhisperStaging.data(), SampleCount);
+		run_stt_on_chunk(AppState, Params, AppState->WhisperStaging.data(), SampleCount);
 	}
 
 	perf_event("record_pipeline_done");

@@ -1312,21 +1312,38 @@ main(int ArgCount, char **Args)
 	const char *VadModelArg = Options.EnableVad ? Options.VadModelPath.c_str() : nullptr;
 
 	auto run_one_pass = [&](std::string *OutText, std::vector<double> *UnitTimes) -> int {
-	whisper_full_params Params = make_transcription_whisper_params(
-		Options.ThreadCount, Options.EnableVad, VadModelArg);
-	Params.single_segment = SingleSegment;
-	if (Options.BeamSize > 1)
-	{
-		Params.strategy             = WHISPER_SAMPLING_BEAM_SEARCH;
-		Params.beam_search.beam_size = Options.BeamSize;
-	}
+		bool IsParakeet = (ModelState.Kind == ENGINE_PARAKEET);
+
+		whisper_full_params WhisperParams = make_transcription_whisper_params(
+			Options.ThreadCount, Options.EnableVad, VadModelArg);
+		if (!IsParakeet)
+		{
+			WhisperParams.single_segment = SingleSegment;
+			if (Options.BeamSize > 1)
+			{
+				WhisperParams.strategy             = WHISPER_SAMPLING_BEAM_SEARCH;
+				WhisperParams.beam_search.beam_size = Options.BeamSize;
+			}
+		}
+
+		parakeet_full_params ParakeetParams = make_transcription_parakeet_params(Options.ThreadCount);
+
 		OutText->clear();
 		for (size_t u = 0; u < Units.size(); u++)
 		{
 			std::string UnitText;
 			auto UnitStart = std::chrono::steady_clock::now();
-			int Ret = transcribe_pcm_to_string(
-				ModelState.WhisperContext, Params, Units[u].Samples, Units[u].Count, &UnitText);
+			int Ret;
+			if (IsParakeet)
+			{
+				Ret = transcribe_pcm_to_string(
+					ModelState.ParakeetContext, ParakeetParams, Units[u].Samples, Units[u].Count, &UnitText);
+			}
+			else
+			{
+				Ret = transcribe_pcm_to_string(
+					ModelState.WhisperContext, WhisperParams, Units[u].Samples, Units[u].Count, &UnitText);
+			}
 			auto UnitEnd = std::chrono::steady_clock::now();
 			if (Ret != 0) return Ret;
 			if (UnitTimes) UnitTimes->push_back(elapsed_ms(UnitStart, UnitEnd));
