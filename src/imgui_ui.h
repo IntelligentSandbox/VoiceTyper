@@ -318,6 +318,24 @@ load_model_button_idle_label(GlobalState *AppState)
 	return "Load Selected Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
 }
 
+// Engine kind the UI should assume for the current selection: the loaded
+// model's Kind when it matches the selection, else detected from the selected
+// file's header (cheap 64-byte read; ENGINE_UNKNOWN for missing/invalid paths).
+static EngineKind
+effective_stt_engine_kind(GlobalState *AppState)
+{
+	if (is_stt_model_loaded(&AppState->WhisperState) &&
+		AppState->WhisperState.LoadedModelIndex == AppState->CurrentSTTModelIndex)
+	{
+		return AppState->WhisperState.Kind;
+	}
+
+	int Index = AppState->CurrentSTTModelIndex;
+	if (Index < 0 || Index >= (int)AppState->STTModelPaths.size()) return ENGINE_UNKNOWN;
+
+	return detect_stt_engine_kind(AppState->STTModelPaths[Index].c_str());
+}
+
 // ---------------------------------------------------------------------------
 // Settings panel helpers (inline in left column)
 // ---------------------------------------------------------------------------
@@ -1056,21 +1074,24 @@ render_settings_panel(GlobalState *AppState)
 		save_int_setting("ui_font_size", AppState->UiFontSize);
 	}
 
-	ImGui::TextUnformatted("Initial Whisper Prompt");
-	ImGui::SameLine();
-	HelpMarkStyle InitialWhisperPromptMarkStyle = help_mark_default_style();
-	InitialWhisperPromptMarkStyle.DiameterScale = 0.75f;
-	hover_help_mark(
-		"Guides the transcription model toward the vocabulary and style you use. "
-		"Applied from the next recording or streaming session onwards. (e.g. \"C++, ImGui, ggml, CUDA...\")",
-		InitialWhisperPromptMarkStyle);
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::InputTextWithHint("##WhisperInitialPrompt",
-		"Vocabulary/style hint",
-		S->WhisperPromptBuffer, sizeof(S->WhisperPromptBuffer));
-	if (ImGui::IsItemDeactivated())
+	if (effective_stt_engine_kind(AppState) != ENGINE_PARAKEET)
 	{
-		whisper_prompt_apply(AppState, S->WhisperPromptBuffer);
+		ImGui::TextUnformatted("Initial Whisper Prompt");
+		ImGui::SameLine();
+		HelpMarkStyle InitialWhisperPromptMarkStyle = help_mark_default_style();
+		InitialWhisperPromptMarkStyle.DiameterScale = 0.75f;
+		hover_help_mark(
+			"Guides the transcription model toward the vocabulary and style you use. "
+			"Applied from the next recording or streaming session onwards. (e.g. \"C++, ImGui, ggml, CUDA...\")",
+			InitialWhisperPromptMarkStyle);
+		ImGui::SetNextItemWidth(-1.0f);
+		ImGui::InputTextWithHint("##WhisperInitialPrompt",
+			"Vocabulary/style hint",
+			S->WhisperPromptBuffer, sizeof(S->WhisperPromptBuffer));
+		if (ImGui::IsItemDeactivated())
+		{
+			whisper_prompt_apply(AppState, S->WhisperPromptBuffer);
+		}
 	}
 
 	float AvailWidth = ImGui::GetContentRegionAvail().x;
@@ -1620,6 +1641,10 @@ render_left_panel(GlobalState *AppState)
 		if (colored_button("Download Model", SmallButton, BUTTON_COLOR_GREY))
 		{
 			AppState->Ui.Download.IsModalOpen = true;
+		}
+		if (effective_stt_engine_kind(AppState) == ENGINE_PARAKEET)
+		{
+			ImGui::TextDisabled("(parakeet TDT engine)");
 		}
 	}
 
