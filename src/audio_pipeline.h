@@ -101,7 +101,7 @@ run_whisper_on_chunk(GlobalState *AppState, whisper_full_params &Params, const f
 	std::chrono::steady_clock::time_point TxStart = std::chrono::steady_clock::now();
 	PerfSpan TranscribeSpan("transcribe");
 	int Ret = transcribe_pcm_to_string(
-		AppState->WhisperState.Context, Params, Samples, SampleCount,
+		AppState->WhisperState.WhisperContext, Params, Samples, SampleCount,
 		&Transcription, &TranscribedWords);
 	std::chrono::steady_clock::time_point TxEnd = std::chrono::steady_clock::now();
 	double TxMs = std::chrono::duration<double, std::milli>(TxEnd - TxStart).count();
@@ -373,7 +373,7 @@ record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 static bool
 pipeline_preflight(GlobalState *AppState)
 {
-	if (!is_whisper_model_loaded(&AppState->WhisperState)) return false;
+	if (!is_stt_model_loaded(&AppState->WhisperState)) return false;
 
 	int DeviceIndex = AppState->CurrentAudioDeviceIndex;
 	if (DeviceIndex < 0 || DeviceIndex >= (int)AppState->AudioInputDevices.size()) return false;

@@ -30,14 +30,14 @@ runtime_model_transition_thread(GlobalState *AppState, int ModelIndex,
 	if (UnloadCurrentModel)
 	{
 		PerfSpan ModelUnloadSpan("model_unload");
-		unload_whisper_model(&AppState->WhisperState);
+		unload_stt_model(&AppState->WhisperState);
 	}
 
 	if (ModelIndex >= 0)
 	{
 		std::chrono::steady_clock::time_point Start = std::chrono::steady_clock::now();
 		PerfSpan ModelLoadSpan("model_load");
-		Success = load_whisper_model(
+		Success = load_stt_model(
 			&AppState->WhisperState,
 			AppState->STTModelPaths[ModelIndex].c_str(),
 			ModelIndex, InferenceDeviceIndex);
@@ -121,7 +121,7 @@ runtime_update_inference_device_selection(GlobalState *AppState, int Index)
 	AppState->CurrentInferenceDeviceIndex = Index;
 	save_string_setting("inference_device", AppState->InferenceDevices[Index].c_str());
 
-	if (!is_whisper_model_loaded(&AppState->WhisperState)) return MODEL_TRANSITION_FAILURE_NONE;
+	if (!is_stt_model_loaded(&AppState->WhisperState)) return MODEL_TRANSITION_FAILURE_NONE;
 
 	if (AppState->IsModelTransitioning.load() || AppState->PipelineActive.load() ||
 		AppState->PendingRecordOnModelLoad || AppState->PendingStreamOnModelLoad)
@@ -164,7 +164,7 @@ runtime_update_stt_model_selection(GlobalState *AppState, int Index)
 	std::string FileName = (Slash == std::string::npos) ? ModelPath : ModelPath.substr(Slash + 1);
 	save_string_setting("stt_model", FileName.c_str());
 
-	if (!is_whisper_model_loaded(&AppState->WhisperState)) return MODEL_TRANSITION_FAILURE_NONE;
+	if (!is_stt_model_loaded(&AppState->WhisperState)) return MODEL_TRANSITION_FAILURE_NONE;
 	if (AppState->WhisperState.LoadedModelIndex == Index) return MODEL_TRANSITION_FAILURE_NONE;
 	if (AppState->IsModelTransitioning.load()) return MODEL_TRANSITION_FAILURE_NONE;
 	if (AppState->PendingRecordOnModelLoad || AppState->PendingStreamOnModelLoad) return MODEL_TRANSITION_FAILURE_NONE;
@@ -185,7 +185,7 @@ runtime_update_stt_model_selection(GlobalState *AppState, int Index)
 inline bool
 runtime_model_matches_selection(GlobalState *AppState)
 {
-	if (!is_whisper_model_loaded(&AppState->WhisperState)) return false;
+	if (!is_stt_model_loaded(&AppState->WhisperState)) return false;
 	if (AppState->WhisperState.LoadedModelIndex != AppState->CurrentSTTModelIndex) return false;
 	if (AppState->WhisperState.LoadedInferenceDeviceIndex != AppState->CurrentInferenceDeviceIndex) return false;
 	return true;
@@ -343,7 +343,7 @@ runtime_start_pending_pipelines(GlobalState *AppState)
 
 	if (!WantsRecord && !WantsStream) return;
 
-	if (!is_whisper_model_loaded(&AppState->WhisperState)) return;
+	if (!is_stt_model_loaded(&AppState->WhisperState)) return;
 
 	if (WantsRecord)
 	{
@@ -377,7 +377,7 @@ runtime_toggle_stt_model_load(GlobalState *AppState)
 
 	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
 
-	if (is_whisper_model_loaded(&AppState->WhisperState))
+	if (is_stt_model_loaded(&AppState->WhisperState))
 	{
 		// ModelIndex -1 = unload only. whisper_free of a GPU-backed context
 		// touches CUDA (buffer frees can synchronize the device), so it must

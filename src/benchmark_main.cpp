@@ -1019,7 +1019,7 @@ run_leak_soak_bench(const BenchOptions &Options, const std::vector<float> &Sampl
 	}
 
 	GlobalState AppState = {};
-	init_whisper_state(&AppState.WhisperState);
+	init_stt_state(&AppState.WhisperState);
 
 	AudioInputDeviceInfo Device = {};
 	Device.Name = "soak-synth";
@@ -1035,7 +1035,7 @@ run_leak_soak_bench(const BenchOptions &Options, const std::vector<float> &Sampl
 
 	{
 		PerfSpan Span("soak_model_load");
-		if (!load_whisper_model(&AppState.WhisperState, Options.ModelPath.c_str(), 0, 0))
+		if (!load_stt_model(&AppState.WhisperState, Options.ModelPath.c_str(), 0, 0))
 		{
 			std::cerr << "failed to load Whisper model: " << Options.ModelPath << "\n";
 			return 1;
@@ -1180,7 +1180,7 @@ run_leak_soak_bench(const BenchOptions &Options, const std::vector<float> &Sampl
 
 	std::cout << "]}\n";
 
-	unload_whisper_model(&AppState.WhisperState);
+	unload_stt_model(&AppState.WhisperState);
 	return Failed ? 1 : 0;
 }
 
@@ -1242,7 +1242,7 @@ main(int ArgCount, char **Args)
 	}
 
 	WhisperModelState ModelState = {};
-	init_whisper_state(&ModelState);
+	init_stt_state(&ModelState);
 
 	bool UseGpu = (Options.Device == "gpu");
 	int InferenceDeviceIndex = 0;
@@ -1266,7 +1266,7 @@ main(int ArgCount, char **Args)
 	auto LoadStart = std::chrono::steady_clock::now();
 	{
 		PerfSpan ModelLoadSpan("bench_model_load");
-		Loaded = load_whisper_model(&ModelState, Options.ModelPath.c_str(), 0, InferenceDeviceIndex);
+		Loaded = load_stt_model(&ModelState, Options.ModelPath.c_str(), 0, InferenceDeviceIndex);
 	}
 	auto LoadEnd = std::chrono::steady_clock::now();
 	if (!Loaded)
@@ -1326,7 +1326,7 @@ main(int ArgCount, char **Args)
 			std::string UnitText;
 			auto UnitStart = std::chrono::steady_clock::now();
 			int Ret = transcribe_pcm_to_string(
-				ModelState.Context, Params, Units[u].Samples, Units[u].Count, &UnitText);
+				ModelState.WhisperContext, Params, Units[u].Samples, Units[u].Count, &UnitText);
 			auto UnitEnd = std::chrono::steady_clock::now();
 			if (Ret != 0) return Ret;
 			if (UnitTimes) UnitTimes->push_back(elapsed_ms(UnitStart, UnitEnd));
@@ -1346,7 +1346,7 @@ main(int ArgCount, char **Args)
 		if (Ret != 0)
 		{
 			std::cerr << "whisper_full failed during warmup (ret=" << Ret << ")\n";
-			unload_whisper_model(&ModelState);
+			unload_stt_model(&ModelState);
 			return 1;
 		}
 	}
@@ -1365,7 +1365,7 @@ main(int ArgCount, char **Args)
 		if (Ret != 0)
 		{
 			std::cerr << "whisper_full failed during iteration (ret=" << Ret << ")\n";
-			unload_whisper_model(&ModelState);
+			unload_stt_model(&ModelState);
 			return 1;
 		}
 
@@ -1485,7 +1485,7 @@ main(int ArgCount, char **Args)
 
 	std::cout << "}\n";
 
-	unload_whisper_model(&ModelState);
+	unload_stt_model(&ModelState);
 	perf_event("bench_process_end");
 	shutdown_bench_logging();
 	return 0;

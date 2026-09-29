@@ -174,7 +174,7 @@ function(apply_voicetyper_output_dirs TARGET_NAME)
 	endif()
 endfunction()
 
-foreach(_voicetyper_shared_lib whisper ggml ggml-base ggml-cpu ggml-cuda)
+foreach(_voicetyper_shared_lib whisper parakeet ggml ggml-base ggml-cpu ggml-cuda)
 	if(TARGET ${_voicetyper_shared_lib})
 		apply_voicetyper_output_dirs(${_voicetyper_shared_lib}
 			RELEASE_DIR "${VOICETYPER_RELEASE_OUTPUT_DIR}"
@@ -212,6 +212,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 # links them twice (pragma + here), which is harmless.
 target_link_libraries(${PROJECT_NAME} PRIVATE
 	whisper
+	parakeet
 	$<$<PLATFORM_ID:Windows>:d3d11>
 	$<$<PLATFORM_ID:Windows>:dxgi>
 	$<$<PLATFORM_ID:Windows>:d3dcompiler>
@@ -264,6 +265,7 @@ if(VOICETYPER_BUILD_BENCH)
 
 	target_link_libraries(VoiceTyperBench PRIVATE
 		whisper
+		parakeet
 		$<$<PLATFORM_ID:Windows>:d3d11>
 		$<$<PLATFORM_ID:Windows>:dxgi>
 		$<$<PLATFORM_ID:Windows>:d3dcompiler>

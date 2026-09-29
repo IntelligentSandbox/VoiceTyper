@@ -94,7 +94,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->WhisperStaging.reserve(
 		(size_t)AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_STAGING_INITIAL_MS / 1000);
 
-	init_whisper_state(&AppState->WhisperState);
+	init_stt_state(&AppState->WhisperState);
 
 	cleanup_legacy_settings_json();
 	migrate_legacy_data_dir_settings();
@@ -209,7 +209,7 @@ app_shutdown_runtime(GlobalState *AppState)
 	if (AppState->ModelTransitionThread.joinable()) AppState->ModelTransitionThread.join();
 	if (AppState->InferenceDevicesThread.joinable()) AppState->InferenceDevicesThread.join();
 
-	if (is_whisper_model_loaded(&AppState->WhisperState)) unload_whisper_model(&AppState->WhisperState);
+	if (is_stt_model_loaded(&AppState->WhisperState)) unload_stt_model(&AppState->WhisperState);
 
 	platform_close_warm_audio_device();
 }

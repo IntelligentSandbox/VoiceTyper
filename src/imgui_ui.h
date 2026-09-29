@@ -1625,7 +1625,7 @@ render_left_panel(GlobalState *AppState)
 
 	// Load Model Button
 	{
-		bool ModelLoaded = !IsModelTransitioning && is_whisper_model_loaded(&AppState->WhisperState);
+		bool ModelLoaded = !IsModelTransitioning && is_stt_model_loaded(&AppState->WhisperState);
 		ImVec4 Color = BUTTON_COLOR_GREY;
 		std::string Label = load_model_button_idle_label(AppState);
 		bool Enabled = !AppState->STTModelNames.empty() && !Busy;
