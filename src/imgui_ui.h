@@ -1094,24 +1094,9 @@ render_settings_panel(GlobalState *AppState)
 		}
 	}
 
-	float AvailWidth = ImGui::GetContentRegionAvail().x;
-	float Spacing = ImGui::GetStyle().ItemSpacing.x;
-
 	ImGui::Separator();
 
-	float UtilityBtnWidth = (AvailWidth - Spacing) / 2;
-	ImVec2 UtilityBtnSize = ImVec2(UtilityBtnWidth, 0.0f);
-
-	if (colored_button("Copy Exe Dir Path", UtilityBtnSize, BUTTON_COLOR_GREY))
-	{
-		std::string ExeDir = platform_get_binary_dir();
-		ImGui::SetClipboardText(ExeDir.c_str());
-		show_success_toast(AppState, "Exe dir copied to clipboard!");
-	}
-
-	ImGui::SameLine();
-
-	if (colored_button("Check for Updates", UtilityBtnSize, BUTTON_COLOR_GREY))
+	if (colored_button("Check for Updates", ImVec2(-1.0f, 0.0f), BUTTON_COLOR_GREY))
 	{
 		AppState->Ui.Update.IsModalOpen = true;
 		start_update_check(AppState);
