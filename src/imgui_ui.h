@@ -396,6 +396,16 @@ settings_select_action(GlobalState *AppState, int Action)
 }
 
 static void
+start_hotkey_capture(HotkeyCaptureState *Capture)
+{
+	Capture->IsCapturing = true;
+	Capture->Arming = true;
+	Capture->PeakModifiers = 0;
+	Capture->PeakVirtualKey = 0;
+	Capture->ReleaseFrames = 0;
+}
+
+static void
 settings_preview_sound(GlobalState *AppState, int FreqHz, bool Force)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
@@ -1245,43 +1255,15 @@ render_hotkeys_modal(GlobalState *AppState)
 	{
 		modal_close_on_click_outside(&S->HotkeysModalOpen);
 
-		ImGui::Text("Actions");
-		ImGui::SameLine();
 		HelpMarkStyle ShortcutsMarkStyle = help_mark_default_style();
 		ShortcutsMarkStyle.DiameterScale = 0.75f;
+		float MarkSize = ImGui::GetFontSize() * ShortcutsMarkStyle.DiameterScale;
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - MarkSize);
 		hover_help_mark(
-			"Select an action below, then click the box and press your desired combination. "
-			"Modifier-only combos (e.g. Ctrl+Alt) are supported. Escape clears the selected shortcut.",
+			"Click a shortcut, then press the new key combination. "
+			"Modifier-only combos (e.g. Ctrl+Alt) are supported. "
+			"Escape cancels without changing the shortcut, X clears it.",
 			ShortcutsMarkStyle);
-
-		float AvailWidth = ImGui::GetContentRegionAvail().x;
-		float Spacing = ImGui::GetStyle().ItemSpacing.x;
-		float BtnWidth = (AvailWidth - Spacing * 4) / 5;
-		ImVec2 ActionSize = ImVec2(BtnWidth, 40);
-
-		const char *ActionLabels[] = { "Record", "Cancel Record", "Stream", "Load Model", "Paste Text" };
-		for (int i = 0; i < 5; i++)
-		{
-			if (i > 0) ImGui::SameLine();
-			ImVec4 Color = (S->SelectedAction == i) ? BUTTON_COLOR_BLUE : BUTTON_COLOR_GREY;
-			if (colored_button(ActionLabels[i], ActionSize, Color)) settings_select_action(AppState, i);
-		}
-
-		const char *FontActionLabels[] = { "Bigger Font", "Smaller Font" };
-		for (int i = 0; i < 2; i++)
-		{
-			int Action = 5 + i;
-			if (i > 0) ImGui::SameLine();
-			ImVec4 Color = (S->SelectedAction == Action) ? BUTTON_COLOR_BLUE : BUTTON_COLOR_GREY;
-			if (colored_button(FontActionLabels[i], ActionSize, Color)) settings_select_action(AppState, Action);
-		}
-
-		HotkeyConfig *CurrentHotkey = settings_action_hotkey_ptr(AppState, S->SelectedAction);
-		if (CurrentHotkey)
-		{
-			std::string CurrentLabel = CurrentHotkey->is_valid() ? hotkey_to_label(*CurrentHotkey) : "(none)";
-			ImGui::Text("Current: %s", CurrentLabel.c_str());
-		}
 
 		if (S->Capture.IsCapturing)
 		{
@@ -1289,9 +1271,7 @@ render_hotkeys_modal(GlobalState *AppState)
 			HotkeyCaptureResult CaptureResult = poll_hotkey_capture(&S->Capture, &Captured);
 			if (CaptureResult == HOTKEY_CAPTURE_CLEARED)
 			{
-				HotkeyConfig *H = settings_action_hotkey_ptr(AppState, S->SelectedAction);
-				if (H) *H = {};
-				settings_save_action_hotkey(AppState, S->SelectedAction);
+				S->Capture.IsCapturing = false;
 			}
 			else if (CaptureResult == HOTKEY_CAPTURE_COMMITTED)
 			{
@@ -1301,46 +1281,89 @@ render_hotkeys_modal(GlobalState *AppState)
 			}
 		}
 
-		// Capture display button
+		const char *ActionLabels[7] =
 		{
-			std::string CaptureText;
-			ImVec4 BgColor;
+			"Record", "Cancel Record", "Stream", "Load Model", "Paste Text",
+			"Bigger Font", "Smaller Font"
+		};
 
-			if (S->Capture.IsCapturing)
-			{
-				BgColor = ImVec4(0.08f, 0.40f, 0.75f, 1.0f);
-				if (S->Capture.HasCapture) CaptureText = hotkey_to_label(S->Capture.Captured) + "...";
-				else CaptureText = "Press a key combination...";
-			}
-			else
-			{
-				BgColor = ImVec4(0.20f, 0.20f, 0.20f, 1.0f);
-				if (S->Capture.HasCapture) CaptureText = hotkey_to_label(S->Capture.Captured);
-				else CaptureText = "Click here, then press your hotkey...";
-			}
+		float LabelPad = ImGui::GetStyle().FramePadding.x * 2.0f;
+		float ShortcutWidth = ImGui::CalcTextSize("Press a key combination...").x + LabelPad;
+		for (int Action = 0; Action < 7; Action++)
+		{
+			HotkeyConfig *H = settings_action_hotkey_ptr(AppState, Action);
+			if (!H || !H->is_valid()) continue;
+			float W = ImGui::CalcTextSize(hotkey_to_label(*H).c_str()).x + LabelPad;
+			if (W > ShortcutWidth) ShortcutWidth = W;
+		}
 
-			ImGui::PushStyleColor(ImGuiCol_Button, BgColor);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-				ImVec4(BgColor.x * 1.3f > 1.0f ? 1.0f : BgColor.x * 1.3f,
-				       BgColor.y * 1.3f > 1.0f ? 1.0f : BgColor.y * 1.3f,
-				       BgColor.z * 1.3f > 1.0f ? 1.0f : BgColor.z * 1.3f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, BgColor);
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+		float ClearWidth = ImGui::CalcTextSize("X").x + LabelPad;
+		float RowSpacing = ImGui::GetStyle().ItemSpacing.x;
 
-			std::string ButtonLabel = CaptureText + "##CaptureHotkey";
-			if (ImGui::Button(ButtonLabel.c_str(), ImVec2(-1, 40)))
+		if (ImGui::BeginTable("##HotkeyActions", 2, ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed,
+				ShortcutWidth + RowSpacing + ClearWidth);
+
+			for (int Action = 0; Action < 7; Action++)
 			{
-				S->Capture.IsCapturing = !S->Capture.IsCapturing;
-				if (S->Capture.IsCapturing)
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(ActionLabels[Action]);
+
+				ImGui::TableSetColumnIndex(1);
+				ImGui::PushID(Action);
+
+				HotkeyConfig *H = settings_action_hotkey_ptr(AppState, Action);
+				bool Capturing = S->Capture.IsCapturing && S->SelectedAction == Action;
+				bool ShowClear = H && H->is_valid() && !Capturing;
+
+				float ClusterWidth = ShortcutWidth;
+				if (ShowClear) ClusterWidth += RowSpacing + ClearWidth;
+				float AvailX = ImGui::GetContentRegionAvail().x;
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + AvailX - ClusterWidth);
+
+				std::string ShortcutLabel = "(none)";
+				ImVec4 ShortcutColor = BUTTON_COLOR_GREY;
+				if (Capturing)
 				{
-					S->Capture.Arming = true;
-					S->Capture.PeakModifiers = 0;
-					S->Capture.PeakVirtualKey = 0;
-					S->Capture.ReleaseFrames = 0;
+					ShortcutColor = ImVec4(0.08f, 0.40f, 0.75f, 1.0f);
+					if (S->Capture.HasCapture) ShortcutLabel = hotkey_to_label(S->Capture.Captured) + "...";
+					else ShortcutLabel = "Press a key combination...";
 				}
-			}
+				else if (H && H->is_valid())
+				{
+					ShortcutLabel = hotkey_to_label(*H);
+				}
 
-			ImGui::PopStyleColor(4);
+				std::string ButtonLabel = ShortcutLabel + "##Rebind";
+				if (colored_button(ButtonLabel.c_str(), ImVec2(ShortcutWidth, 0.0f), ShortcutColor))
+				{
+					if (Capturing)
+					{
+						S->Capture.IsCapturing = false;
+					}
+					else
+					{
+						settings_select_action(AppState, Action);
+						start_hotkey_capture(&S->Capture);
+					}
+				}
+
+				if (ShowClear)
+				{
+					ImGui::SameLine();
+					if (colored_button("X##Clear", ImVec2(0.0f, 0.0f), BUTTON_COLOR_RED))
+					{
+						*H = HotkeyConfig{};
+						settings_save_action_hotkey(AppState, Action);
+					}
+				}
+
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
 		}
 
 		ImGui::Spacing();
@@ -1386,11 +1409,7 @@ render_hotkeys_modal(GlobalState *AppState)
 				S->PasteOverrideCaptureProcess = Override.ProcessName;
 				S->PasteOverrideCapture.Captured = {};
 				S->PasteOverrideCapture.HasCapture = false;
-				S->PasteOverrideCapture.IsCapturing = true;
-				S->PasteOverrideCapture.Arming = true;
-				S->PasteOverrideCapture.PeakModifiers = 0;
-				S->PasteOverrideCapture.PeakVirtualKey = 0;
-				S->PasteOverrideCapture.ReleaseFrames = 0;
+				start_hotkey_capture(&S->PasteOverrideCapture);
 			}
 			ImGui::SameLine();
 			if (colored_button("X##Forget", ImVec2(0.0f, 0.0f), BUTTON_COLOR_RED))
@@ -1415,6 +1434,7 @@ render_hotkeys_modal(GlobalState *AppState)
 			HotkeyCaptureResult CaptureResult = poll_hotkey_capture(&S->PasteOverrideCapture, &Captured);
 			if (CaptureResult == HOTKEY_CAPTURE_CLEARED)
 			{
+				S->PasteOverrideCapture.IsCapturing = false;
 				S->PasteOverrideCaptureProcess.clear();
 			}
 			else if (CaptureResult == HOTKEY_CAPTURE_COMMITTED)
@@ -1456,11 +1476,7 @@ render_hotkeys_modal(GlobalState *AppState)
 				S->PasteOverrideCaptureProcess = NewName;
 				S->PasteOverrideCapture.Captured = {};
 				S->PasteOverrideCapture.HasCapture = false;
-				S->PasteOverrideCapture.IsCapturing = true;
-				S->PasteOverrideCapture.Arming = true;
-				S->PasteOverrideCapture.PeakModifiers = 0;
-				S->PasteOverrideCapture.PeakVirtualKey = 0;
-				S->PasteOverrideCapture.ReleaseFrames = 0;
+				start_hotkey_capture(&S->PasteOverrideCapture);
 			}
 		}
 
