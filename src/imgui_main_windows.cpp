@@ -1120,6 +1120,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	refresh_inference_devices(AppState);
 	perf_event("gpu_probe_started");
 
+	start_update_check(AppState);
+
 	bool Running = true;
 	while (Running)
 	{

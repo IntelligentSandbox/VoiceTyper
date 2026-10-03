@@ -1824,6 +1824,38 @@ render_transcribed_text_box(GlobalState *AppState)
 #endif
 	hover_help_mark(TimingsTooltip.c_str(), TimingsMarkStyle);
 
+	UpdateState *Upd = &AppState->Ui.Update;
+	if (Upd->IsNewerAvailable && !Upd->IsModalOpen)
+	{
+		float IndSize = ImGui::GetTextLineHeight() * 1.5f;
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - IndSize);
+		if (colored_button("##UpdateIndicator", ImVec2(IndSize, IndSize), ImVec4(0.20f, 0.60f, 0.25f, 1.0f)))
+		{
+			Upd->IsModalOpen = true;
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Update available - click to view");
+		}
+
+		ImVec2 IndMin = ImGui::GetItemRectMin();
+		ImVec2 IndMax = ImGui::GetItemRectMax();
+		ImVec2 Center = ImVec2((IndMin.x + IndMax.x) * 0.5f, (IndMin.y + IndMax.y) * 0.5f);
+		float Size = IndMax.x - IndMin.x;
+		float Thick = ImMax(Size * 0.09f, 1.5f);
+		ImU32 Col = ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
+		ImDrawList *Draw = ImGui::GetWindowDrawList();
+		float LineY = Center.y + Size * 0.24f;
+
+		Draw->AddLine(ImVec2(Center.x - Size * 0.21f, LineY), ImVec2(Center.x + Size * 0.21f, LineY), Col, Thick);
+		Draw->AddLine(ImVec2(Center.x, Center.y - Size * 0.26f), ImVec2(Center.x, LineY - Size * 0.10f), Col, Thick);
+		Draw->AddTriangleFilled(
+			ImVec2(Center.x - Size * 0.15f, LineY - Size * 0.16f),
+			ImVec2(Center.x + Size * 0.15f, LineY - Size * 0.16f),
+			ImVec2(Center.x, LineY - Thick * 0.5f), Col);
+	}
+
 	const float BoxHeight = ImGui::GetTextLineHeightWithSpacing() * 6.0f +
 		ImGui::GetStyle().FramePadding.y * 2.0f;
 
