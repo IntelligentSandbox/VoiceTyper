@@ -1283,7 +1283,7 @@ render_hotkeys_modal(GlobalState *AppState)
 
 		const char *ActionLabels[7] =
 		{
-			"Record", "Cancel Record", "Stream", "Load Model", "Paste Text",
+			"Record", "Cancel Record", "Stream", "Load Model", "Default Paste Key Combo",
 			"Bigger Font", "Smaller Font"
 		};
 
@@ -1380,10 +1380,6 @@ render_hotkeys_modal(GlobalState *AppState)
 			"Type a program name below and press Enter to start capturing its shortcut. "
 			"Click a shortcut to change it, X to remove it.",
 			HotkeyMarkStyle);
-		ImGui::SameLine();
-		std::string DefaultPasteLabel = AppState->PasteHotkey.is_valid()
-			? hotkey_to_label(AppState->PasteHotkey) : "(none)";
-		ImGui::TextDisabled("(default: %s)", DefaultPasteLabel.c_str());
 		ImGui::Spacing();
 
 		std::vector<PasteHotkeyOverride> Overrides;
