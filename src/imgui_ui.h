@@ -1642,10 +1642,6 @@ render_left_panel(GlobalState *AppState)
 		{
 			AppState->Ui.Download.IsModalOpen = true;
 		}
-		if (effective_stt_engine_kind(AppState) == ENGINE_PARAKEET)
-		{
-			ImGui::TextDisabled("(parakeet TDT engine)");
-		}
 	}
 
 	// Load Model Button
