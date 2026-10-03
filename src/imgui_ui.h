@@ -1388,11 +1388,6 @@ render_hotkeys_modal(GlobalState *AppState)
 			Overrides = AppState->PasteHotkeyOverrides;
 		}
 
-		if (Overrides.empty())
-		{
-			ImGui::TextDisabled("(none yet)");
-		}
-
 		std::string ForgetOverrideName;
 		for (const PasteHotkeyOverride &Override : Overrides)
 		{
