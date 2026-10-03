@@ -214,6 +214,10 @@ linux_app_key_to_keysym(AppKeyCode Key)
 	{
 		return XK_F1 + (Key - APP_KEY_F1);
 	}
+	if (Key >= APP_KEY_NUMPAD0 && Key <= APP_KEY_NUMPAD9)
+	{
+		return XK_KP_0 + (Key - APP_KEY_NUMPAD0);
+	}
 
 	switch (Key)
 	{
@@ -232,6 +236,28 @@ linux_app_key_to_keysym(AppKeyCode Key)
 	case APP_KEY_RIGHT:     return XK_Right;
 	case APP_KEY_UP:        return XK_Up;
 	case APP_KEY_DOWN:      return XK_Down;
+	case APP_KEY_PAUSE:       return XK_Pause;
+	case APP_KEY_CAPSLOCK:    return XK_Caps_Lock;
+	case APP_KEY_NUMLOCK:     return XK_Num_Lock;
+	case APP_KEY_SCROLLLOCK:  return XK_Scroll_Lock;
+	case APP_KEY_PRINTSCREEN: return XK_Print;
+	case APP_KEY_MENU:        return XK_Menu;
+	case APP_KEY_NUMPAD_MULTIPLY: return XK_KP_Multiply;
+	case APP_KEY_NUMPAD_ADD:      return XK_KP_Add;
+	case APP_KEY_NUMPAD_SUBTRACT: return XK_KP_Subtract;
+	case APP_KEY_NUMPAD_DECIMAL:  return XK_KP_Decimal;
+	case APP_KEY_NUMPAD_DIVIDE:   return XK_KP_Divide;
+	case APP_KEY_SEMICOLON:    return XK_semicolon;
+	case APP_KEY_EQUALS:       return XK_equal;
+	case APP_KEY_COMMA:        return XK_comma;
+	case APP_KEY_MINUS:        return XK_minus;
+	case APP_KEY_PERIOD:       return XK_period;
+	case APP_KEY_SLASH:        return XK_slash;
+	case APP_KEY_GRAVE:        return XK_grave;
+	case APP_KEY_LEFTBRACKET:  return XK_bracketleft;
+	case APP_KEY_BACKSLASH:    return XK_backslash;
+	case APP_KEY_RIGHTBRACKET: return XK_bracketright;
+	case APP_KEY_APOSTROPHE:   return XK_apostrophe;
 	default:                return 0;
 	}
 }
@@ -849,6 +875,8 @@ platform_is_key_down(AppKeyCode Key)
 	SDL_Scancode Scan = SDL_SCANCODE_UNKNOWN;
 	if (Key >= 'A' && Key <= 'Z') Scan = (SDL_Scancode)(SDL_SCANCODE_A + (Key - 'A'));
 	else if (Key >= APP_KEY_F1 && Key <= APP_KEY_F24) Scan = (SDL_Scancode)(SDL_SCANCODE_F1 + (Key - APP_KEY_F1));
+	else if (Key >= APP_KEY_NUMPAD1 && Key <= APP_KEY_NUMPAD9)
+		Scan = (SDL_Scancode)(SDL_SCANCODE_KP_1 + (Key - APP_KEY_NUMPAD1));
 	else
 	{
 		switch (Key)
@@ -878,6 +906,29 @@ platform_is_key_down(AppKeyCode Key)
 		case APP_KEY_RIGHT:     Scan = SDL_SCANCODE_RIGHT; break;
 		case APP_KEY_UP:        Scan = SDL_SCANCODE_UP; break;
 		case APP_KEY_DOWN:      Scan = SDL_SCANCODE_DOWN; break;
+		case APP_KEY_PAUSE:       Scan = SDL_SCANCODE_PAUSE; break;
+		case APP_KEY_CAPSLOCK:    Scan = SDL_SCANCODE_CAPSLOCK; break;
+		case APP_KEY_NUMLOCK:     Scan = SDL_SCANCODE_NUMLOCKCLEAR; break;
+		case APP_KEY_SCROLLLOCK:  Scan = SDL_SCANCODE_SCROLLLOCK; break;
+		case APP_KEY_PRINTSCREEN: Scan = SDL_SCANCODE_PRINTSCREEN; break;
+		case APP_KEY_MENU:        Scan = SDL_SCANCODE_APPLICATION; break;
+		case APP_KEY_NUMPAD0:         Scan = SDL_SCANCODE_KP_0; break;
+		case APP_KEY_NUMPAD_MULTIPLY: Scan = SDL_SCANCODE_KP_MULTIPLY; break;
+		case APP_KEY_NUMPAD_ADD:      Scan = SDL_SCANCODE_KP_PLUS; break;
+		case APP_KEY_NUMPAD_SUBTRACT: Scan = SDL_SCANCODE_KP_MINUS; break;
+		case APP_KEY_NUMPAD_DECIMAL:  Scan = SDL_SCANCODE_KP_PERIOD; break;
+		case APP_KEY_NUMPAD_DIVIDE:   Scan = SDL_SCANCODE_KP_DIVIDE; break;
+		case APP_KEY_SEMICOLON:    Scan = SDL_SCANCODE_SEMICOLON; break;
+		case APP_KEY_EQUALS:       Scan = SDL_SCANCODE_EQUALS; break;
+		case APP_KEY_COMMA:        Scan = SDL_SCANCODE_COMMA; break;
+		case APP_KEY_MINUS:        Scan = SDL_SCANCODE_MINUS; break;
+		case APP_KEY_PERIOD:       Scan = SDL_SCANCODE_PERIOD; break;
+		case APP_KEY_SLASH:        Scan = SDL_SCANCODE_SLASH; break;
+		case APP_KEY_GRAVE:        Scan = SDL_SCANCODE_GRAVE; break;
+		case APP_KEY_LEFTBRACKET:  Scan = SDL_SCANCODE_LEFTBRACKET; break;
+		case APP_KEY_BACKSLASH:    Scan = SDL_SCANCODE_BACKSLASH; break;
+		case APP_KEY_RIGHTBRACKET: Scan = SDL_SCANCODE_RIGHTBRACKET; break;
+		case APP_KEY_APOSTROPHE:   Scan = SDL_SCANCODE_APOSTROPHE; break;
 		default: break;
 		}
 	}

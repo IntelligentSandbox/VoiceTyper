@@ -21,6 +21,8 @@ app_key_label(AppKeyCode Key)
 
 	if (Key >= '0' && Key <= '9') return std::string(1, (char)Key);
 
+	if (Key >= APP_KEY_NUMPAD0 && Key <= APP_KEY_NUMPAD9) return "Num " + std::to_string(Key - APP_KEY_NUMPAD0);
+
 	switch (Key)
 	{
 	case APP_KEY_SPACE:     return "Space";
@@ -38,6 +40,28 @@ app_key_label(AppKeyCode Key)
 	case APP_KEY_RIGHT:     return "Right";
 	case APP_KEY_UP:        return "Up";
 	case APP_KEY_DOWN:      return "Down";
+	case APP_KEY_PAUSE:       return "Pause";
+	case APP_KEY_CAPSLOCK:    return "CapsLock";
+	case APP_KEY_NUMLOCK:     return "NumLock";
+	case APP_KEY_SCROLLLOCK:  return "ScrollLock";
+	case APP_KEY_PRINTSCREEN: return "PrintScreen";
+	case APP_KEY_MENU:        return "Menu";
+	case APP_KEY_NUMPAD_MULTIPLY: return "Num *";
+	case APP_KEY_NUMPAD_ADD:      return "Num +";
+	case APP_KEY_NUMPAD_SUBTRACT: return "Num -";
+	case APP_KEY_NUMPAD_DECIMAL:  return "Num .";
+	case APP_KEY_NUMPAD_DIVIDE:   return "Num /";
+	case APP_KEY_SEMICOLON:    return ";";
+	case APP_KEY_EQUALS:       return "=";
+	case APP_KEY_COMMA:        return ",";
+	case APP_KEY_MINUS:        return "-";
+	case APP_KEY_PERIOD:       return ".";
+	case APP_KEY_SLASH:        return "/";
+	case APP_KEY_GRAVE:        return "`";
+	case APP_KEY_LEFTBRACKET:  return "[";
+	case APP_KEY_BACKSLASH:    return "\\";
+	case APP_KEY_RIGHTBRACKET: return "]";
+	case APP_KEY_APOSTROPHE:   return "'";
 	default:                return "??";
 	}
 }
@@ -88,11 +112,21 @@ poll_nonmodifier_key()
 	{
 		if (app_key_is_down(Key)) return Key;
 	}
+	for (AppKeyCode Key = APP_KEY_NUMPAD0; Key <= APP_KEY_NUMPAD9; Key++)
+	{
+		if (app_key_is_down(Key)) return Key;
+	}
 
 	AppKeyCode Specials[] = {
 		APP_KEY_SPACE, APP_KEY_ENTER, APP_KEY_TAB, APP_KEY_BACKSPACE, APP_KEY_DELETE, APP_KEY_INSERT,
 		APP_KEY_HOME, APP_KEY_END, APP_KEY_PAGEUP, APP_KEY_PAGEDOWN,
-		APP_KEY_LEFT, APP_KEY_RIGHT, APP_KEY_UP, APP_KEY_DOWN
+		APP_KEY_LEFT, APP_KEY_RIGHT, APP_KEY_UP, APP_KEY_DOWN,
+		APP_KEY_PAUSE, APP_KEY_CAPSLOCK, APP_KEY_NUMLOCK, APP_KEY_SCROLLLOCK, APP_KEY_PRINTSCREEN,
+		APP_KEY_MENU,
+		APP_KEY_NUMPAD_MULTIPLY, APP_KEY_NUMPAD_ADD, APP_KEY_NUMPAD_SUBTRACT, APP_KEY_NUMPAD_DECIMAL,
+		APP_KEY_NUMPAD_DIVIDE,
+		APP_KEY_SEMICOLON, APP_KEY_EQUALS, APP_KEY_COMMA, APP_KEY_MINUS, APP_KEY_PERIOD, APP_KEY_SLASH,
+		APP_KEY_GRAVE, APP_KEY_LEFTBRACKET, APP_KEY_BACKSLASH, APP_KEY_RIGHTBRACKET, APP_KEY_APOSTROPHE
 	};
 	for (int i = 0; i < (int)(sizeof(Specials) / sizeof(Specials[0])); i++)
 	{
