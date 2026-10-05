@@ -278,6 +278,9 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return;
 
+	SetForegroundWindow(TargetWindow);
+	Sleep(50);
+
 	std::wstring PastedWide;
 	std::wstring PreviousClipboard;
 	bool HadPreviousText = false;
@@ -290,9 +293,6 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 	}
 
 	if (!platform_set_clipboard_text_win32(Utf8Text)) return;
-
-	SetForegroundWindow(TargetWindow);
-	Sleep(50);
 
 	WORD ModVk[4];
 	int ModCount = 0;
