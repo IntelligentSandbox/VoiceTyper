@@ -11,6 +11,7 @@
 #include <ctime>
 #include <thread>
 #include <cmath>
+#include <io.h>
 
 #include <windows.h>
 #include <dbghelp.h>
@@ -1143,7 +1144,8 @@ win32_http_close(HINTERNET Request, HINTERNET Connect, HINTERNET Session)
 
 static bool
 win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
-	std::atomic<int64_t> *Downloaded, std::atomic<int64_t> *Total, std::atomic<bool> *Cancel)
+	std::atomic<int64_t> *Downloaded, std::atomic<int64_t> *Total, std::atomic<bool> *Cancel,
+	int64_t StartOffset = 0)
 {
 	std::wstring WideUrl(Url.begin(), Url.end());
 	URL_COMPONENTSW Comp = {};
@@ -1183,8 +1185,15 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		return false;
 	}
 
+	std::wstring RangeHeader;
+	if (StartOffset > 0)
+	{
+		RangeHeader = L"Range: bytes=" + std::to_wstring(StartOffset) + L"\r\n";
+	}
+
 	if (!WinHttpSendRequest(Request,
-		WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+		StartOffset > 0 ? RangeHeader.c_str() : WINHTTP_NO_ADDITIONAL_HEADERS,
+		StartOffset > 0 ? (DWORD)-1 : 0,
 		WINHTTP_NO_REQUEST_DATA, 0,
 		WINHTTP_IGNORE_REQUEST_TOTAL_LENGTH, 0) ||
 		!WinHttpReceiveResponse(Request, nullptr))
@@ -1204,6 +1213,32 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		return false;
 	}
 
+	int64_t Offset = StartOffset;
+	if (StartOffset > 0)
+	{
+		if (StatusCode == 206)
+		{
+			if (File && _fseeki64(File, StartOffset, SEEK_SET) != 0)
+			{
+				win32_http_close(Request, Connect, Session);
+				return false;
+			}
+		}
+		else
+		{
+			if (File && (_chsize_s(_fileno(File), 0) != 0 || _fseeki64(File, 0, SEEK_SET) != 0))
+			{
+				win32_http_close(Request, Connect, Session);
+				return false;
+			}
+			if (OutBody)
+			{
+				OutBody->clear();
+			}
+			Offset = 0;
+		}
+	}
+
 	int64_t ContentLength = 0;
 	wchar_t LengthBuf[32] = {};
 	DWORD LengthSize = sizeof(LengthBuf);
@@ -1216,7 +1251,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 
 	if (Total && ContentLength > 0)
 	{
-		Total->store(ContentLength);
+		Total->store(Offset + ContentLength);
 	}
 
 	const DWORD BufSize = 64 * 1024;
@@ -1253,7 +1288,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		}
 
 		TotalRead += BytesRead;
-		if (Downloaded) Downloaded->store(TotalRead);
+		if (Downloaded) Downloaded->store(Offset + TotalRead);
 	}
 
 	win32_http_close(Request, Connect, Session);
@@ -1291,18 +1326,34 @@ platform_download_file_thread(GlobalState *AppState, std::string Url, std::strin
 	// `if (condition) statement;` Seems like even if this is mentioned in AGENTS.md, LLMs will still inevitably
 	// forget when given a lot of stuff in context. Plenty of places in this file where the if statement is not
 	// written in the right style.
-	FILE *File = nullptr;
-	fopen_s(&File, PartPath.c_str(), "wb");
-	if (!File)
+	bool Ok = false;
+	for (int Attempt = 0; Attempt < 3; Attempt++)
 	{
-		Fail();
-		return;
+		if (Attempt > 0)
+		{
+			Sleep(Attempt == 1 ? 500 : 1500);
+			if (AppState->Ui.Download.CancelRequested.load()) break;
+		}
+
+		int64_t BytesOnDisk = AppState->Ui.Download.DownloadedBytes.load();
+
+		FILE *File = nullptr;
+		if (BytesOnDisk > 0) fopen_s(&File, PartPath.c_str(), "r+b");
+		else fopen_s(&File, PartPath.c_str(), "wb");
+		if (!File)
+		{
+			Fail();
+			return;
+		}
+
+		Ok = win32_http_get(Url, File, nullptr, &AppState->Ui.Download.DownloadedBytes,
+			&AppState->Ui.Download.TotalBytes, &AppState->Ui.Download.CancelRequested, BytesOnDisk);
+
+		fclose(File);
+
+		if (Ok) break;
+		if (AppState->Ui.Download.CancelRequested.load()) break;
 	}
-
-	bool Ok = win32_http_get(Url, File, nullptr, &AppState->Ui.Download.DownloadedBytes,
-		&AppState->Ui.Download.TotalBytes, &AppState->Ui.Download.CancelRequested);
-
-	fclose(File);
 
 	if (!Ok)
 	{
