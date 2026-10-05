@@ -465,13 +465,8 @@ start_streaming_pipeline(GlobalState *AppState)
 inline void
 stop_streaming_pipeline(GlobalState *AppState, bool FinalizeCurrentChunk = false)
 {
-	if (!AppState->CaptureRunning.load() && !AppState->CaptureThread.joinable()) return;
+	if (!AppState->CaptureRunning.load()) return;
 
 	AppState->StreamingFinalizeOnStop.store(FinalizeCurrentChunk);
 	AppState->CaptureRunning.store(false);
-
-	if (AppState->CaptureThread.joinable()) AppState->CaptureThread.join();
-
-	AppState->PipelineActive.store(false);
-	AppState->StreamingFinalizeOnStop.store(false);
 }
