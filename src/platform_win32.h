@@ -339,7 +339,8 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 
 	if (ClipboardRestoreDelayMs < 0) ClipboardRestoreDelayMs = 0;
 	if (ClipboardRestoreDelayMs > 10000) ClipboardRestoreDelayMs = 10000;
-	if (ClipboardRestoreDelayMs > 0) Sleep((DWORD)ClipboardRestoreDelayMs);
+	if (ClipboardRestoreDelayMs < 500) ClipboardRestoreDelayMs = 500;
+	Sleep((DWORD)ClipboardRestoreDelayMs);
 
 	std::wstring CurrentClipboard;
 	bool CurrentHasText = false;
