@@ -1265,7 +1265,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		Total->store(Offset + ContentLength);
 	}
 
-	const DWORD BufSize = 64 * 1024;
+	const DWORD BufSize = 256 * 1024;
 	std::vector<char> Buffer(BufSize);
 	int64_t TotalRead = 0;
 
@@ -1373,8 +1373,7 @@ platform_download_file_thread(GlobalState *AppState, std::string Url, std::strin
 		return;
 	}
 
-	remove(DestPath.c_str());
-	if (rename(PartPath.c_str(), DestPath.c_str()) != 0)
+	if (!MoveFileExA(PartPath.c_str(), DestPath.c_str(), MOVEFILE_REPLACE_EXISTING))
 	{
 		remove(PartPath.c_str());
 		AppState->Ui.Download.Failed.store(true);
@@ -1398,8 +1397,10 @@ platform_update_download_thread(GlobalState *AppState, std::string Url, std::str
 {
 	UpdateState *U = &AppState->Ui.Update;
 
+	std::string PartPath = DestPath + ".part";
+
 	FILE *File = nullptr;
-	fopen_s(&File, DestPath.c_str(), "wb");
+	fopen_s(&File, PartPath.c_str(), "wb");
 	if (!File)
 	{
 		U->DownloadFailed.store(true);
@@ -1412,13 +1413,13 @@ platform_update_download_thread(GlobalState *AppState, std::string Url, std::str
 
 	fclose(File);
 
-	if (Ok)
+	if (Ok && MoveFileExA(PartPath.c_str(), DestPath.c_str(), MOVEFILE_REPLACE_EXISTING))
 	{
 		U->DownloadSucceeded.store(true);
 	}
 	else
 	{
-		remove(DestPath.c_str());
+		remove(PartPath.c_str());
 		U->DownloadFailed.store(true);
 	}
 
