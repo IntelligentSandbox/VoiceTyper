@@ -303,11 +303,18 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 
 	bool HasKey = PasteHotkey.VirtualKey != APP_KEY_NONE;
 
+	bool ModHeld[4] = {};
+	for (int i = 0; i < ModCount; i++)
+	{
+		ModHeld[i] = (GetAsyncKeyState((int)ModVk[i]) & 0x8000) != 0;
+	}
+
 	INPUT Inputs[10] = {};
 	int Count = 0;
 
 	for (int i = 0; i < ModCount; i++)
 	{
+		if (ModHeld[i]) continue;
 		Inputs[Count].type = INPUT_KEYBOARD;
 		Inputs[Count].ki.wVk = ModVk[i];
 		Count++;
@@ -327,6 +334,7 @@ platform_inject_text_via_paste(HWND TargetWindow, const char *Utf8Text, const Ho
 
 	for (int i = ModCount - 1; i >= 0; i--)
 	{
+		if (ModHeld[i]) continue;
 		Inputs[Count].type = INPUT_KEYBOARD;
 		Inputs[Count].ki.wVk = ModVk[i];
 		Inputs[Count].ki.dwFlags = KEYEVENTF_KEYUP;
