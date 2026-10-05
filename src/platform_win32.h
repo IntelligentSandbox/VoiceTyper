@@ -11,6 +11,7 @@
 #include <ctime>
 #include <thread>
 #include <cmath>
+#include <mutex>
 #include <io.h>
 
 #include <windows.h>
@@ -1134,12 +1135,30 @@ platform_open_folder_selecting_file(const std::string &FilePath)
 // Downloads / updater
 // ---------------------------------------------------------------------------
 
+static HINTERNET g_Win32HttpSession = nullptr;
+static std::once_flag g_Win32HttpSessionOnce;
+
+static HINTERNET
+win32_http_session()
+{
+	std::call_once(g_Win32HttpSessionOnce, []()
+	{
+		g_Win32HttpSession = WinHttpOpen(L"VoiceTyper",
+			WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+			WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+		if (g_Win32HttpSession)
+		{
+			WinHttpSetTimeouts(g_Win32HttpSession, 30000, 30000, 30000, 30000);
+		}
+	});
+	return g_Win32HttpSession;
+}
+
 static void
-win32_http_close(HINTERNET Request, HINTERNET Connect, HINTERNET Session)
+win32_http_close(HINTERNET Request, HINTERNET Connect)
 {
 	if (Request) WinHttpCloseHandle(Request);
 	if (Connect) WinHttpCloseHandle(Connect);
-	if (Session) WinHttpCloseHandle(Session);
 }
 
 static bool
@@ -1162,26 +1181,18 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		return false;
 	}
 
-	HINTERNET Session = WinHttpOpen(L"VoiceTyper",
-		WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-		WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+	HINTERNET Session = win32_http_session();
 	if (!Session) return false;
-
-	WinHttpSetTimeouts(Session, 30000, 30000, 30000, 30000);
 
 	INTERNET_PORT Port = Comp.nPort ? Comp.nPort : INTERNET_DEFAULT_HTTPS_PORT;
 	HINTERNET Connect = WinHttpConnect(Session, Comp.lpszHostName, Port, 0);
-	if (!Connect)
-	{
-		win32_http_close(nullptr, nullptr, Session);
-		return false;
-	}
+	if (!Connect) return false;
 
 	HINTERNET Request = WinHttpOpenRequest(Connect, L"GET", Comp.lpszUrlPath,
 		nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
 	if (!Request)
 	{
-		win32_http_close(nullptr, Connect, Session);
+		win32_http_close(nullptr, Connect);
 		return false;
 	}
 
@@ -1198,7 +1209,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		WINHTTP_IGNORE_REQUEST_TOTAL_LENGTH, 0) ||
 		!WinHttpReceiveResponse(Request, nullptr))
 	{
-		win32_http_close(Request, Connect, Session);
+		win32_http_close(Request, Connect);
 		return false;
 	}
 
@@ -1209,7 +1220,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		WINHTTP_HEADER_NAME_BY_INDEX, &StatusCode, &StatusCodeSize, WINHTTP_NO_HEADER_INDEX) ||
 		StatusCode < 200 || StatusCode >= 300)
 	{
-		win32_http_close(Request, Connect, Session);
+		win32_http_close(Request, Connect);
 		return false;
 	}
 
@@ -1220,7 +1231,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		{
 			if (File && _fseeki64(File, StartOffset, SEEK_SET) != 0)
 			{
-				win32_http_close(Request, Connect, Session);
+				win32_http_close(Request, Connect);
 				return false;
 			}
 		}
@@ -1228,7 +1239,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		{
 			if (File && (_chsize_s(_fileno(File), 0) != 0 || _fseeki64(File, 0, SEEK_SET) != 0))
 			{
-				win32_http_close(Request, Connect, Session);
+				win32_http_close(Request, Connect);
 				return false;
 			}
 			if (OutBody)
@@ -1262,14 +1273,14 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 	{
 		if (Cancel && Cancel->load())
 		{
-			win32_http_close(Request, Connect, Session);
+			win32_http_close(Request, Connect);
 			return false;
 		}
 
 		DWORD BytesRead = 0;
 		if (!WinHttpReadData(Request, Buffer.data(), BufSize, &BytesRead))
 		{
-			win32_http_close(Request, Connect, Session);
+			win32_http_close(Request, Connect);
 			return false;
 		}
 		if (BytesRead == 0) break;
@@ -1278,7 +1289,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		{
 			if (fwrite(Buffer.data(), 1, BytesRead, File) != BytesRead)
 			{
-				win32_http_close(Request, Connect, Session);
+				win32_http_close(Request, Connect);
 				return false;
 			}
 		}
@@ -1291,7 +1302,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		if (Downloaded) Downloaded->store(Offset + TotalRead);
 	}
 
-	win32_http_close(Request, Connect, Session);
+	win32_http_close(Request, Connect);
 
 	if (ContentLength > 0 && TotalRead != ContentLength)
 	{
