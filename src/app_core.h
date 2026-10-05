@@ -1,6 +1,7 @@
 #pragma once
 
 #include "input.h"
+#include "control.h"
 #include "model_assets.h"
 #include "model_downloader.h"
 #include "runtime_control.h"
@@ -31,6 +32,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->IsStreaming = false;
 	AppState->PendingRecordOnModelLoad = false;
 	AppState->PendingStreamOnModelLoad = false;
+	AppState->PendingRecordOnPipelineIdle = false;
 	AppState->CaptureRunning = false;
 	AppState->PipelineActive = false;
 	AppState->StreamingFinalizeOnStop = false;
@@ -167,6 +169,21 @@ app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool 
 	FrameState->FontSizeDownKeyWasDown = FontSizeDownKeyIsDown;
 
 	if (!HotkeysEnabled || AppState->IsModelTransitioning.load()) return Result;
+
+	if (AppState->PendingRecordOnPipelineIdle && !AppState->PipelineActive.load())
+	{
+		AppState->PendingRecordOnPipelineIdle = false;
+
+		if (AppState->RecordHotkeyMode != RECORDING_HOTKEY_TOGGLE &&
+			!is_hotkey_down(AppState->RecordHotkey))
+		{
+			show_toast(AppState, "Recording deferred - previous take still transcribing");
+		}
+		else
+		{
+			runtime_start_recording(AppState);
+		}
+	}
 
 	bool RecordKeyIsDown       = is_hotkey_down(AppState->RecordHotkey);
 	bool CancelRecordKeyIsDown = is_hotkey_down(AppState->CancelRecordHotkey);

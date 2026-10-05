@@ -235,7 +235,11 @@ runtime_start_recording(GlobalState *AppState)
 	// A previous take's pipeline is still transcribing: starting now would join
 	// that thread on the UI thread (seconds-long stall). The UI button already
 	// disables for this case; give the hotkey path the same guard.
-	if (AppState->PipelineActive.load() && !AppState->IsRecording) return false;
+	if (AppState->PipelineActive.load() && !AppState->IsRecording)
+	{
+		AppState->PendingRecordOnPipelineIdle = true;
+		return false;
+	}
 
 	if (!runtime_model_matches_selection(AppState))
 	{
@@ -243,6 +247,8 @@ runtime_start_recording(GlobalState *AppState)
 	}
 
 	if (AppState->IsRecording) return true;
+
+	AppState->PendingRecordOnPipelineIdle = false;
 
 	AppState->IsRecording = true;
 
@@ -284,6 +290,7 @@ inline void
 runtime_cancel_recording(GlobalState *AppState)
 {
 	AppState->PendingRecordOnModelLoad = false;
+	AppState->PendingRecordOnPipelineIdle = false;
 
 	if (!AppState->IsRecording) return;
 
@@ -322,6 +329,8 @@ runtime_toggle_streaming(GlobalState *AppState)
 		runtime_request_model_load_for_hotkey(AppState, false);
 		return;
 	}
+
+	AppState->PendingRecordOnPipelineIdle = false;
 
 	AppState->IsStreaming = true;
 

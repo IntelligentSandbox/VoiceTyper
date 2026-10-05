@@ -186,6 +186,7 @@ struct CoreRuntimeState
 	bool IsStreaming;
 	bool PendingRecordOnModelLoad;
 	bool PendingStreamOnModelLoad;
+	bool PendingRecordOnPipelineIdle;
 	std::atomic<bool> IsModelTransitioning;
 	std::atomic<bool> ExitRequested = false;
 	bool PlayRecordSound;
