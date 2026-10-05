@@ -422,6 +422,7 @@ start_record_pipeline(GlobalState *AppState)
 	}
 
 	AppState->CaptureRunning.store(true);
+	AppState->CancelRequested.store(false);
 	AppState->PipelineActive.store(true);
 	AppState->CaptureThread = std::thread(record_pipeline_thread, AppState, DeviceIndex);
 
