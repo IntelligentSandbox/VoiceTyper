@@ -185,12 +185,23 @@ platform_inject_text_char_by_char(HWND TargetWindow, const char *Utf8Text)
 }
 
 static bool
+win32_open_clipboard_with_retry()
+{
+	for (int Attempt = 0; Attempt < 10; Attempt++)
+	{
+		if (OpenClipboard(nullptr)) return true;
+		Sleep(10);
+	}
+	return false;
+}
+
+static bool
 platform_set_clipboard_text_win32(const char *Utf8Text)
 {
 	int WideLen = MultiByteToWideChar(CP_UTF8, 0, Utf8Text, -1, nullptr, 0);
 	if (WideLen <= 1) return false;
 
-	if (!OpenClipboard(nullptr)) return false;
+	if (!win32_open_clipboard_with_retry()) return false;
 	EmptyClipboard();
 
 	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, WideLen * sizeof(wchar_t));
@@ -212,7 +223,7 @@ platform_set_clipboard_text_win32(const char *Utf8Text)
 static bool
 platform_get_clipboard_text_win32(std::wstring *Out, bool *HasText)
 {
-	if (!Out || !HasText || !OpenClipboard(nullptr)) return false;
+	if (!Out || !HasText || !win32_open_clipboard_with_retry()) return false;
 
 	bool Ok = false;
 	*HasText = false;
@@ -249,7 +260,7 @@ platform_restore_clipboard_text_win32(const std::wstring &Wide)
 	memcpy(pMem, Wide.c_str(), Bytes);
 	GlobalUnlock(hMem);
 
-	if (!OpenClipboard(nullptr))
+	if (!win32_open_clipboard_with_retry())
 	{
 		GlobalFree(hMem);
 		return false;
@@ -265,7 +276,7 @@ platform_restore_clipboard_text_win32(const std::wstring &Wide)
 static bool
 platform_clear_clipboard_win32()
 {
-	if (!OpenClipboard(nullptr)) return false;
+	if (!win32_open_clipboard_with_retry()) return false;
 	EmptyClipboard();
 	CloseClipboard();
 	return true;
