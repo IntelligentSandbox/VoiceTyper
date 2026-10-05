@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <cstdlib>
 #include <ctime>
 #include <thread>
 #include <cmath>
@@ -1164,7 +1165,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (!Session) return false;
 
-	WinHttpSetTimeouts(Session, 30000, 30000, 30000, 5000);
+	WinHttpSetTimeouts(Session, 30000, 30000, 30000, 30000);
 
 	INTERNET_PORT Port = Comp.nPort ? Comp.nPort : INTERNET_DEFAULT_HTTPS_PORT;
 	HINTERNET Connect = WinHttpConnect(Session, Comp.lpszHostName, Port, 0);
@@ -1203,17 +1204,19 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		return false;
 	}
 
-	if (Total)
+	int64_t ContentLength = 0;
+	wchar_t LengthBuf[32] = {};
+	DWORD LengthSize = sizeof(LengthBuf);
+	if (WinHttpQueryHeaders(Request,
+		WINHTTP_QUERY_CONTENT_LENGTH, WINHTTP_HEADER_NAME_BY_INDEX,
+		LengthBuf, &LengthSize, WINHTTP_NO_HEADER_INDEX))
 	{
-		DWORD ContentLength = 0;
-		DWORD ContentLengthSize = sizeof(ContentLength);
-		if (WinHttpQueryHeaders(Request,
-			WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
-			WINHTTP_HEADER_NAME_BY_INDEX, &ContentLength, &ContentLengthSize, WINHTTP_NO_HEADER_INDEX) &&
-			ContentLength > 0)
-		{
-			Total->store((int64_t)ContentLength);
-		}
+		ContentLength = _wcstoi64(LengthBuf, nullptr, 10);
+	}
+
+	if (Total && ContentLength > 0)
+	{
+		Total->store(ContentLength);
 	}
 
 	const DWORD BufSize = 64 * 1024;
@@ -1254,6 +1257,12 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 	}
 
 	win32_http_close(Request, Connect, Session);
+
+	if (ContentLength > 0 && TotalRead != ContentLength)
+	{
+		return false;
+	}
+
 	return TotalRead > 0;
 }
 
