@@ -157,6 +157,11 @@ inline constexpr const char *UPDATER_API_RELEASES_URL =
 	"https://api.github.com/repos/IntelligentSandbox/VoiceTyper/releases?per_page=100";
 inline constexpr const char *UPDATER_RELEASES_URL =
 	"https://github.com/IntelligentSandbox/VoiceTyper/releases/latest";
+// Name fragment shared by every platform's modular CUDA plugin asset
+// (e.g. VoiceTyper-v0.1.9-x64_win-cuda-plugin.zip). The updater skips assets
+// carrying it (they are upgrades, not app updates); the in-app CUDA plugin
+// downloader looks for the platform-specific full tag instead.
+inline constexpr const char *CUDA_PLUGIN_ASSET_MARKER = "-cuda-plugin";
 
 // ---------------------------------------------------------------------------
 // Models

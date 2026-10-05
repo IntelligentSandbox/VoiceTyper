@@ -2,6 +2,7 @@
 
 #include "input.h"
 #include "control.h"
+#include "cuda_plugin.h"
 #include "model_assets.h"
 #include "model_downloader.h"
 #include "runtime_control.h"
@@ -219,6 +220,7 @@ app_shutdown_runtime(GlobalState *AppState)
 {
 	shutdown_model_download(AppState);
 	shutdown_updater(AppState);
+	shutdown_cuda_plugin_download(AppState);
 
 	AppState->StreamingFinalizeOnStop.store(false);
 	AppState->CaptureRunning.store(false);

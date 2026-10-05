@@ -83,6 +83,53 @@ struct ModelDownloadState
 	ModelDownloadState &operator=(const ModelDownloadState &) = delete;
 };
 
+enum CudaPluginStage
+{
+	CUDA_PLUGIN_STAGE_IDLE,
+	CUDA_PLUGIN_STAGE_RESOLVE,
+	CUDA_PLUGIN_STAGE_DOWNLOAD,
+	CUDA_PLUGIN_STAGE_EXTRACT,
+};
+
+struct CudaPluginState
+{
+	std::atomic<bool> IsRunning;
+	std::atomic<bool> CancelRequested;
+	std::atomic<bool> Succeeded;
+	std::atomic<bool> Failed;
+	std::atomic<int> Stage;
+	std::atomic<int64_t> DownloadedBytes;
+	std::atomic<int64_t> TotalBytes;
+	// Nonzero while a platform layer has delegated the download to an external
+	// child process (e.g. curl under Linux); always 0 on platforms that
+	// download in-process.
+	std::atomic<int64_t> ChildPid;
+
+	// Written by the worker thread before it clears IsRunning; only read by
+	// the UI thread afterwards (the thread join provides the ordering).
+	std::string FailureReason;
+	bool JustFinished;
+	bool IsModalOpen;
+
+	std::thread Thread;
+
+	CudaPluginState() :
+		IsRunning(false),
+		CancelRequested(false),
+		Succeeded(false),
+		Failed(false),
+		Stage(CUDA_PLUGIN_STAGE_IDLE),
+		DownloadedBytes(0),
+		TotalBytes(0),
+		ChildPid(0),
+		JustFinished(false),
+		IsModalOpen(false)
+	{}
+
+	CudaPluginState(const CudaPluginState &) = delete;
+	CudaPluginState &operator=(const CudaPluginState &) = delete;
+};
+
 struct UpdateAssetInfo
 {
 	std::string Name;
@@ -274,6 +321,7 @@ struct UiRuntimeState
 	SettingsWindowState SettingsState;
 	ModelDownloadState Download;
 	UpdateState Update;
+	CudaPluginState CudaPlugin;
 	std::string ToastMessage;
 	double ToastExpireTime;
 	ColorRgba ToastBackgroundColor;

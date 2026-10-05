@@ -2,9 +2,11 @@
 #
 # tools/release.sh - the single build / package / release entry point.
 #
-# Builds and packages the Windows (cpu + cuda) distributables into dist/. The
-# v<VERSION> git tag and / or a DRAFT GitHub release are opt-in. Portable Linux
-# outputs are opt-in (--linux), built on a remote NixOS box over ssh.
+# Builds and packages the Windows (cpu + cuda + cuda-plugin) distributables
+# into dist/. The cuda-plugin zip holds just the CUDA DLLs, so a CPU-only
+# install can download it from the release to gain GPU support in place.
+# The v<VERSION> git tag and / or a DRAFT GitHub release are opt-in. Portable
+# Linux outputs are opt-in (--linux), built on a remote NixOS box over ssh.
 #
 # Canonical invocations (operations compose via flags):
 #   tools/release.sh                  build + package Windows                 -> dist/
@@ -358,8 +360,10 @@ windows_package() {
 	local stage_dir="build/package_${platform}"
 	local cpu_stage="$stage_dir/cpu"
 	local cuda_stage="$stage_dir/cuda"
+	local cuda_plugin_stage="$stage_dir/cuda-plugin"
 	local cpu_zip="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cpu.zip"
 	local cuda_zip="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cuda.zip"
+	local cuda_plugin_zip="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cuda-plugin.zip"
 	local cpu_msi="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cpu.msi"
 	local cuda_msi="$DIST_DIR/VoiceTyper-v${VERSION}-${platform}-cuda.msi"
 
@@ -375,6 +379,15 @@ windows_package() {
 	remove_model_files "$cuda_stage"
 	copy_build_output "$cpu_build" "$cpu_stage"
 	remove_model_files "$cpu_stage"
+
+	# Modular CUDA plugin: just the DLLs a CPU install needs for GPU inference.
+	# Extracted flat next to VoiceTyper.exe by the in-app downloader.
+	rm -rf "$cuda_plugin_stage"
+	mkdir -p "$cuda_plugin_stage"
+	cp -u "$cuda_stage"/ggml-cuda.dll "$cuda_plugin_stage/"
+	cp -u "$cuda_stage"/cublas64_*.dll "$cuda_plugin_stage/"
+	cp -u "$cuda_stage"/cublasLt64_*.dll "$cuda_plugin_stage/"
+	cp -u "$cuda_stage"/cudart64_*.dll "$cuda_plugin_stage/"
 	echo "    Staging took $((SECONDS - start))s"
 
 	echo "=== Creating package artifacts ($platform) ==="
@@ -385,6 +398,7 @@ windows_package() {
 	run_job "CUDA MSI" build_msi "$cuda_stage" "$cuda_msi"
 	run_job "CPU zip" zip_dir "$cpu_stage" "$cpu_zip"
 	run_job "CPU MSI" build_msi "$cpu_stage" "$cpu_msi"
+	run_job "CUDA plugin zip" zip_dir "$cuda_plugin_stage" "$cuda_plugin_zip"
 	wait_for_jobs
 	echo "    Package artifacts took $((SECONDS - start))s"
 }

@@ -7,6 +7,7 @@
 #include "perf.h"
 #include "settings.h"
 #include "control.h"
+#include "cuda_plugin.h"
 #include "diagnostics.h"
 #include "model_catalog.h"
 #include "model_assets.h"
@@ -662,6 +663,112 @@ render_update_modal(GlobalState *AppState)
 	}
 
 	if (!Open) U->IsModalOpen = false;
+}
+
+// ---------------------------------------------------------------------------
+// CUDA plugin modal - modular GPU support download for CPU-only builds
+// ---------------------------------------------------------------------------
+static void
+render_cuda_plugin_modal(GlobalState *AppState)
+{
+	CudaPluginState *P = &AppState->Ui.CudaPlugin;
+
+	poll_cuda_plugin_download(AppState);
+
+	if (!P->IsModalOpen) return;
+
+	if (!ImGui::IsPopupOpen("Add GPU Support"))
+	{
+		ImGui::OpenPopup("Add GPU Support");
+	}
+
+	ImVec2 Display = ImGui::GetIO().DisplaySize;
+	float WinW = Display.x * 0.6f;
+	if (WinW > 520.0f) WinW = 520.0f;
+	ImGui::SetNextWindowSizeConstraints(ImVec2(WinW, 0.0f), ImVec2(Display.x * 0.95f, Display.y * 0.95f));
+	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowBgAlpha(1.0f);
+
+	bool Open = true;
+	if (ImGui::BeginPopupModal("Add GPU Support", &Open,
+		ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	{
+		modal_close_on_click_outside(&P->IsModalOpen);
+
+		if (P->IsRunning.load())
+		{
+			int Stage = P->Stage.load();
+			if (Stage == CUDA_PLUGIN_STAGE_RESOLVE)
+			{
+				ImGui::TextDisabled("Looking up the CUDA plugin for v%s...",
+					updater_current_version_base().c_str());
+			}
+			else if (Stage == CUDA_PLUGIN_STAGE_EXTRACT)
+			{
+				ImGui::TextDisabled("Installing plugin files...");
+			}
+			else
+			{
+				int64_t Done = P->DownloadedBytes.load();
+				int64_t Total = P->TotalBytes.load();
+				float Fraction = Total > 0 ? (float)((double)Done / (double)Total) : 0.0f;
+				char Overlay[64];
+				snprintf(Overlay, sizeof(Overlay), "%.1f / %.1f MB",
+					(double)Done / 1000000.0, (double)Total / 1000000.0);
+				ImGui::ProgressBar(Fraction, ImVec2(-1.0f, 0.0f), Overlay);
+			}
+
+			if (ImGui::Button("Cancel"))
+			{
+				cancel_cuda_plugin_download(AppState);
+			}
+		}
+		else if (P->Succeeded.load())
+		{
+			ImGui::TextWrapped("GPU (CUDA) support installed.");
+			ImGui::Spacing();
+			ImGui::TextWrapped("NVIDIA GPUs now appear in the Inference Device list. "
+				"Reload the model to run it on the GPU.");
+			if (ImGui::Button("Close"))
+			{
+				P->IsModalOpen = false;
+			}
+		}
+		else if (P->Failed.load())
+		{
+			ImGui::TextWrapped("Failed: %s", P->FailureReason.c_str());
+			if (ImGui::Button("Retry"))
+			{
+				start_cuda_plugin_download(AppState);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Close"))
+			{
+				P->IsModalOpen = false;
+			}
+		}
+		else
+		{
+			ImGui::TextWrapped("Download the CUDA GPU-acceleration plugin for this version from the "
+				"VoiceTyper GitHub releases? It installs next to the app and enables NVIDIA GPU inference.");
+			ImGui::Spacing();
+			ImGui::TextDisabled("Requires an NVIDIA GPU and driver. Large download.");
+			ImGui::Spacing();
+			if (ImGui::Button("Download"))
+			{
+				start_cuda_plugin_download(AppState);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel"))
+			{
+				P->IsModalOpen = false;
+			}
+		}
+
+		ImGui::EndPopup();
+	}
+
+	if (!Open) P->IsModalOpen = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1697,6 +1804,24 @@ render_left_panel(GlobalState *AppState)
 			ImGui::TextDisabled("(loading GPU devices...)");
 		}
 
+		// CPU-only install on a platform that ships the modular CUDA plugin:
+		// offer the in-place GPU upgrade download.
+		bool CudaInstallable =
+			DevicesLoaded &&
+			AppState->InferenceDevices.size() == 1 &&
+			cuda_plugin_supported() &&
+			!cuda_plugin_installed() &&
+			!platform_is_installed_build();
+		if (CudaInstallable)
+		{
+			if (ImGui::SmallButton("Add GPU (CUDA) support..."))
+			{
+				AppState->Ui.CudaPlugin.IsModalOpen = true;
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(NVIDIA, large download)");
+		}
+
 		if (AppState->CurrentInferenceDeviceIndex == 0)
 		{
 			ImGui::Text("CPU Cores for Inference");
@@ -2245,6 +2370,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 
 	render_download_modal(AppState);
 	render_update_modal(AppState);
+	render_cuda_plugin_modal(AppState);
 	render_crash_dialog_ui(AppState);
 	render_hotkeys_modal(AppState);
 

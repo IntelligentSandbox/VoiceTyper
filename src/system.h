@@ -1,3 +1,5 @@
+#pragma once
+
 #include "state.h"
 #include "host_services.h"
 #include "settings.h"
@@ -157,6 +159,18 @@ load_cpu_backend()
 	ggml_backend_load(PluginPath.c_str());
 }
 
+inline bool
+cuda_plugin_installed()
+{
+	std::string PluginPath = platform_ggml_backend_library_path(platform_get_binary_dir(), "cuda");
+
+	FILE *F = std::fopen(PluginPath.c_str(), "rb");
+	if (!F) return false;
+	std::fclose(F);
+
+	return true;
+}
+
 inline void
 refresh_inference_devices(GlobalState *AppState)
 {
@@ -165,17 +179,15 @@ refresh_inference_devices(GlobalState *AppState)
 
 	AppState->InferenceDevicesThread = std::thread([AppState]()
 	{
-		std::string ExeDir = platform_get_binary_dir();
-		std::string PluginPath = platform_ggml_backend_library_path(ExeDir, "cuda");
-
-		FILE *F = std::fopen(PluginPath.c_str(), "rb");
-		if (!F)
+		if (!cuda_plugin_installed())
 		{
 			AppState->InferenceDevicesLoaded.store(true, std::memory_order_release);
 			AppState->InferenceDevicesLoading.store(false);
 			return;
 		}
-		std::fclose(F);
+
+		std::string ExeDir = platform_get_binary_dir();
+		std::string PluginPath = platform_ggml_backend_library_path(ExeDir, "cuda");
 
 		ggml_backend_reg_t Reg = ggml_backend_load(PluginPath.c_str());
 		if (Reg == nullptr)

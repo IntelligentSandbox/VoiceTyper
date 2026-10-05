@@ -1832,6 +1832,125 @@ platform_asset_is_installer(const std::string &AssetName)
 	return false;
 }
 
+inline const char *
+platform_cuda_plugin_asset_tag()
+{
+	// No Linux CUDA plugin artifact is released yet; an empty tag hides the
+	// in-app downloader (the full cuda tarballs remain the upgrade path).
+	return "";
+}
+
+inline void
+platform_cuda_plugin_download_run(GlobalState *AppState, const std::string &Url, const std::string &DestPath)
+{
+	CudaPluginState *P = &AppState->Ui.CudaPlugin;
+
+	pid_t Pid = fork();
+	if (Pid == 0)
+	{
+		execlp("curl", "curl", "-L", "-s", "--fail", "-o", DestPath.c_str(), Url.c_str(), (char *)nullptr);
+		execlp("wget", "wget", "-q", "-O", DestPath.c_str(), Url.c_str(), (char *)nullptr);
+		_exit(127);
+	}
+	if (Pid < 0)
+	{
+		P->Failed.store(true);
+		return;
+	}
+
+	P->ChildPid.store((int64_t)Pid);
+
+	int ExitStatus = 0;
+	bool Canceled = false;
+
+	for (;;)
+	{
+		pid_t Result = waitpid(Pid, &ExitStatus, WNOHANG);
+		if (Result == Pid) break;
+		if (Result == -1)
+		{
+			ExitStatus = -1;
+			break;
+		}
+
+		if (P->CancelRequested.load())
+		{
+			Canceled = true;
+			kill(Pid, SIGTERM);
+			bool Reaped = false;
+			for (int i = 0; i < 50; i++)
+			{
+				if (waitpid(Pid, &ExitStatus, WNOHANG) == Pid)
+				{
+					Reaped = true;
+					break;
+				}
+				usleep(10000);
+			}
+			if (!Reaped)
+			{
+				kill(Pid, SIGKILL);
+				waitpid(Pid, &ExitStatus, 0);
+			}
+			break;
+		}
+
+		struct stat St;
+		if (stat(DestPath.c_str(), &St) == 0 && S_ISREG(St.st_mode))
+		{
+			P->DownloadedBytes.store(St.st_size);
+		}
+
+		usleep(200000);
+	}
+
+	P->ChildPid.store(0);
+
+	if (Canceled)
+	{
+		remove(DestPath.c_str());
+	}
+	else if (WIFEXITED(ExitStatus) && WEXITSTATUS(ExitStatus) == 0)
+	{
+		P->Succeeded.store(true);
+	}
+	else
+	{
+		remove(DestPath.c_str());
+		P->Failed.store(true);
+	}
+}
+
+inline void
+platform_cancel_cuda_plugin_download(GlobalState *AppState)
+{
+	linux_terminate_child(AppState->Ui.CudaPlugin.ChildPid.load());
+}
+
+inline bool
+platform_extract_archive(const std::string &ArchivePath, const std::string &DestDir)
+{
+	pid_t Pid = fork();
+	if (Pid == 0)
+	{
+		if (chdir(DestDir.c_str()) != 0) _exit(1);
+		execlp("tar", "tar", "-xzf", ArchivePath.c_str(), (char *)nullptr);
+		_exit(127);
+	}
+	if (Pid < 0)
+	{
+		return false;
+	}
+
+	int ExitStatus = 0;
+	if (waitpid(Pid, &ExitStatus, -1) != Pid)
+	{
+		return false;
+	}
+
+	return WIFEXITED(ExitStatus) && WEXITSTATUS(ExitStatus) == 0;
+}
+
 #ifdef VOICETYPER_HAVE_X11
 #undef Bool
 #undef None

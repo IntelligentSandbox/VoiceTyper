@@ -1490,7 +1490,7 @@ win32_apply_portable_zip(const std::string &ZipPath)
 	Bat += "ping -n 2 127.0.0.1 >nul\r\n";
 	Bat += "goto waitloop\r\n";
 	Bat += ")\r\n";
-	Bat += "tar -xf \"" + Zip + "\" -C \"" + ExeDir + "\"\r\n";
+	Bat += "%SystemRoot%\\System32\\tar.exe\" -xf \"" + Zip + "\" -C \"" + ExeDir + "\"\r\n";
 	Bat += "if errorlevel 1 exit /b 1\r\n";
 	Bat += "del \"" + Zip + "\"\r\n";
 	Bat += "start \"\" \"" + ExeDir + "/VoiceTyper.exe\"\r\n";
@@ -1532,4 +1532,113 @@ inline bool
 platform_asset_is_installer(const std::string &AssetName)
 {
 	return win32_string_ends_with(AssetName, ".msi");
+}
+
+inline const char *
+platform_cuda_plugin_asset_tag()
+{
+	return "-x64_win-cuda-plugin.zip";
+}
+
+// Runs on the CUDA plugin worker thread. Mirrors the model downloader rather
+// than the updater: the plugin archive is large, so partial .part downloads
+// are resumed with Range requests across bounded retries.
+inline void
+platform_cuda_plugin_download_run(GlobalState *AppState, const std::string &Url, const std::string &DestPath)
+{
+	CudaPluginState *P = &AppState->Ui.CudaPlugin;
+
+	std::string PartPath = DestPath + ".part";
+
+	bool Ok = false;
+	for (int Attempt = 0; Attempt < 3; Attempt++)
+	{
+		if (Attempt > 0)
+		{
+			Sleep(Attempt == 1 ? 500 : 1500);
+			if (P->CancelRequested.load()) break;
+		}
+
+		int64_t BytesOnDisk = P->DownloadedBytes.load();
+
+		FILE *File = nullptr;
+		if (BytesOnDisk > 0) fopen_s(&File, PartPath.c_str(), "r+b");
+		else fopen_s(&File, PartPath.c_str(), "wb");
+		if (!File) break;
+
+		Ok = win32_http_get(Url, File, nullptr, &P->DownloadedBytes,
+			&P->TotalBytes, &P->CancelRequested, BytesOnDisk);
+
+		fclose(File);
+
+		if (Ok) break;
+		if (P->CancelRequested.load()) break;
+	}
+
+	if (!Ok)
+	{
+		remove(PartPath.c_str());
+		P->Failed.store(true);
+	}
+	else if (MoveFileExA(PartPath.c_str(), DestPath.c_str(), MOVEFILE_REPLACE_EXISTING))
+	{
+		P->Succeeded.store(true);
+	}
+	else
+	{
+		remove(PartPath.c_str());
+		P->Failed.store(true);
+	}
+}
+
+inline void
+platform_cancel_cuda_plugin_download(GlobalState *AppState)
+{
+	(void)AppState;
+}
+
+inline bool
+platform_extract_archive(const std::string &ArchivePath, const std::string &DestDir)
+{
+	// Pin the Windows bsdtar (libarchive, reads zip + tar) rather than a bare
+	// "tar" PATH lookup: e.g. git-bash's GNU tar comes first on dev machines
+	// and cannot read zip archives at all.
+	char SystemDir[MAX_PATH + 1] = {};
+	UINT SystemLength = GetSystemDirectoryA(SystemDir, MAX_PATH + 1);
+	std::string TarPath = (SystemLength > 0 && SystemLength <= MAX_PATH)
+		? std::string(SystemDir) + "\\tar.exe"
+		: std::string("tar.exe");
+
+	std::string CommandLine = "\"" + TarPath + "\" -xf \"" + ArchivePath + "\" -C \"" + DestDir + "\"";
+
+	int WsLength = MultiByteToWideChar(CP_UTF8, 0, CommandLine.c_str(), -1, nullptr, 0);
+	int WdLength = MultiByteToWideChar(CP_UTF8, 0, DestDir.c_str(), -1, nullptr, 0);
+	if (WsLength <= 0 || WdLength <= 0)
+	{
+		return false;
+	}
+
+	std::wstring WideCommandLine((size_t)WsLength, L'\0');
+	std::wstring WideWorkingDir((size_t)WdLength, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, CommandLine.c_str(), -1, WideCommandLine.data(), WsLength);
+	MultiByteToWideChar(CP_UTF8, 0, DestDir.c_str(), -1, WideWorkingDir.data(), WdLength);
+
+	STARTUPINFOW Si = {};
+	Si.cb = sizeof(Si);
+	PROCESS_INFORMATION Pi = {};
+
+	if (!CreateProcessW(nullptr, WideCommandLine.data(), nullptr, nullptr, FALSE,
+		CREATE_NO_WINDOW, nullptr, WideWorkingDir.c_str(), &Si, &Pi))
+	{
+		return false;
+	}
+
+	CloseHandle(Pi.hThread);
+
+	DWORD WaitResult = WaitForSingleObject(Pi.hProcess, INFINITE);
+	DWORD ExitCode = 0;
+	GetExitCodeProcess(Pi.hProcess, &ExitCode);
+	CloseHandle(Pi.hProcess);
+
+	return WaitResult == WAIT_OBJECT_0 && ExitCode == 0;
 }

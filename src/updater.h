@@ -452,6 +452,9 @@ updater_check_thread(GlobalState *AppState)
 	{
 		for (const UpdateAssetInfo &Asset : Latest->Assets)
 		{
+			// The modular CUDA plugin package is an in-place GPU upgrade, not an
+			// app update; it is downloaded from its own flow instead.
+			if (Asset.Name.find(CUDA_PLUGIN_ASSET_MARKER) != std::string::npos) continue;
 			if (Asset.Name.find(PlatformTag) == std::string::npos) continue;
 			Matching.push_back(Asset);
 		}
