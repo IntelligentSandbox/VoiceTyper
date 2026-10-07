@@ -20,12 +20,12 @@
 # Only DRAFT releases are ever created automatically - publishing is a manual
 # click in the GitHub UI.
 #
-# Windows artifacts are Authenticode-signed when the self-signed
-# IntelligentSandbox code-signing cert is available (auto-detected in
-# Cert:\CurrentUser\My, or forced via $VOICETYPER_CODESIGN_THUMBPRINT);
-# signing is skipped with a notice otherwise. The cert is self-signed, so
-# machines that have not imported packaging/IntelligentSandbox-CodeSigning.cer
-# show "Unknown publisher" - the signature still carries the authorship info.
+# Windows artifacts can be Authenticode-signed, opt-in via --sign (optionally
+# taking a .pfx key path; defaults to the self-signed IntelligentSandbox cert
+# auto-detected in Cert:\CurrentUser\My, or $VOICETYPER_CODESIGN_THUMBPRINT).
+# The cert is self-signed, so machines that have not imported
+# packaging/IntelligentSandbox-CodeSigning.cer show "Unknown publisher" - the
+# signature still carries the authorship info.
 
 set -euo pipefail
 
@@ -40,12 +40,15 @@ NIX_SSH="${VOICETYPER_NIX_SSH:-rock}"
 NIX_REPO="${VOICETYPER_NIX_REPO:-~/repos/VoiceTyper}"
 NIX_GIT_REMOTE="${VOICETYPER_NIX_GIT_REMOTE:-gitea}"
 NIX_RELEASE_REPO="${VOICETYPER_NIX_RELEASE_REPO:-}"
+CODESIGN_PASSWORD="${VOICETYPER_CODESIGN_PASSWORD:-}"
 CHANGELOG_FILE="$DIST_DIR/release-notes-$TAG.md"
 LINUX_PLATFORM="x86_64-linux"
 
 DO_TAG=0
 DO_RELEASE=0
 DO_LINUX=0
+DO_SIGN=0
+CODESIGN_KEY=""
 USE_CCACHE=0
 NOTES_FILE=""
 INTERNAL_WINDOWS_BUILD=0
@@ -74,6 +77,12 @@ Operations:
                     only after the build + package succeeds. Any existing local
                     + remote tag for v<VERSION> is removed first, unless a
                     GitHub release for that tag already exists.
+  --sign [KEY]      also Authenticode-sign the staged exe/dll + both MSIs. KEY
+                    is an optional .pfx path; without it the self-signed
+                    IntelligentSandbox cert is auto-detected in
+                    Cert:\CurrentUser\My (or VOICETYPER_CODESIGN_THUMBPRINT).
+                    PFX password comes from VOICETYPER_CODESIGN_PASSWORD
+                    (prompted when unset). Without --sign nothing is signed.
 
 Options:
   --linux             Also build + package portable Linux (flat tar.gz bundles:
@@ -119,6 +128,11 @@ require_command() {
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--tag) DO_TAG=1 ;;
+		--sign) DO_SIGN=1
+			if [ "$#" -ge 2 ] && [ "${2#-}" = "$2" ]; then
+				CODESIGN_KEY="$2"
+				shift
+			fi ;;
 		--release) DO_RELEASE=1 ;;
 		--linux) DO_LINUX=1 ;;
 		--ccache) USE_CCACHE=1 ;;
@@ -332,15 +346,16 @@ build_msi() {
 }
 
 # ---------------------------------------------------------------------------
-# Code signing. Signs with the self-signed IntelligentSandbox code-signing
-# cert (CN=IntelligentSandbox, O=IntelligentSandbox,
-# E=warren.min.wang@gmail.com) from Cert:\CurrentUser\My, or the certificate
-# identified by $VOICETYPER_CODESIGN_THUMBPRINT when set. No RFC3161
+# Code signing (opt-in: --sign). Signs with the .pfx key passed to --sign, or
+# by default with the self-signed IntelligentSandbox code-signing cert
+# (CN=IntelligentSandbox, O=IntelligentSandbox, E=warren.min.wang@gmail.com)
+# from Cert:\CurrentUser\My / $VOICETYPER_CODESIGN_THUMBPRINT. No RFC3161
 # timestamping: it is meaningless for a cert with no chain to verify.
 # ---------------------------------------------------------------------------
 
 CODESIGN_TOOL=""
 CODESIGN_THUMBPRINT=""
+CODESIGN_READY=0
 
 find_signtool() {
 	local candidate found=""
@@ -366,27 +381,44 @@ resolve_codesign_thumbprint() {
 }
 
 codesign_setup() {
-	[ -n "$CODESIGN_THUMBPRINT" ] && return 0
+	[ "$DO_SIGN" = "1" ] || return 1
+	[ "$CODESIGN_READY" = "1" ] && return 0
 	local tool
-	tool="$(find_signtool)" || {
-		echo "    (signtool not found - skipping code signing)"
-		return 1
-	}
-	CODESIGN_THUMBPRINT="$(resolve_codesign_thumbprint)"
-	[ -n "$CODESIGN_THUMBPRINT" ] || {
-		echo "    (no IntelligentSandbox code-signing cert in the user store - skipping code signing)"
-		return 1
-	}
+	tool="$(find_signtool)" || die "--sign was requested but signtool was not found."
+	if [ -n "$CODESIGN_KEY" ]; then
+		[ -f "$CODESIGN_KEY" ] || die "Code-signing key '$CODESIGN_KEY' not found."
+		if [ -z "$CODESIGN_PASSWORD" ] && [ -t 0 ]; then
+			read -s -r -p "PFX password for $CODESIGN_KEY: " CODESIGN_PASSWORD
+			echo "" >&2
+		fi
+	else
+		CODESIGN_THUMBPRINT="$(resolve_codesign_thumbprint)"
+		[ -n "$CODESIGN_THUMBPRINT" ] || die "--sign was requested but no code-signing cert was found in Cert:\\CurrentUser\\My (pass a .pfx path to --sign or set VOICETYPER_CODESIGN_THUMBPRINT)."
+	fi
 	CODESIGN_TOOL="$tool"
-	echo "    (code signing: thumbprint $CODESIGN_THUMBPRINT)"
+	CODESIGN_READY=1
+	if [ -n "$CODESIGN_KEY" ]; then
+		echo "    (code signing: $CODESIGN_KEY)"
+	else
+		echo "    (code signing: thumbprint $CODESIGN_THUMBPRINT)"
+	fi
 	return 0
 }
 
 codesign_file() {
 	local file="$1"
+	local key_args=()
+	if [ -n "$CODESIGN_KEY" ]; then
+		key_args=(-f "$CODESIGN_KEY")
+		if [ -n "$CODESIGN_PASSWORD" ]; then
+			key_args+=(-p "$CODESIGN_PASSWORD")
+		fi
+	else
+		key_args=(-sha1 "$CODESIGN_THUMBPRINT")
+	fi
 	# Dash-prefixed flags (not /fd etc.): git bash's MSYS layer rewrites
 	# leading-slash args as POSIX paths and mangles them.
-	"$CODESIGN_TOOL" sign -fd SHA256 -sha1 "$CODESIGN_THUMBPRINT" \
+	"$CODESIGN_TOOL" sign -fd SHA256 "${key_args[@]}" \
 		-d "VoiceTyper" -du "https://github.com/IntelligentSandbox/VoiceTyper" "$file"
 }
 
