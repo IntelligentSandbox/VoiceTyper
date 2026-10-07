@@ -258,6 +258,101 @@ theme_toggle_button(GlobalState *AppState)
 }
 
 // ---------------------------------------------------------------------------
+// Update status: small download-arrow button (down arrow over a line). Green
+// when a newer release is available, grey otherwise. Opens the update modal.
+// ---------------------------------------------------------------------------
+static void
+update_status_button(GlobalState *AppState)
+{
+	UpdateState *U = &AppState->Ui.Update;
+
+	float FontSize = ImGui::GetFontSize();
+	float Diameter = FontSize * 1.35f;
+
+	if (ImGui::InvisibleButton("##UpdateStatus", ImVec2(Diameter, Diameter)))
+	{
+		U->IsModalOpen = true;
+		start_update_check(AppState);
+	}
+
+	bool Hovered = ImGui::IsItemHovered();
+	ImDrawList *Draw = ImGui::GetWindowDrawList();
+	ImVec2 Pos = ImGui::GetItemRectMin();
+	ImVec2 Center = ImVec2(Pos.x + Diameter * 0.5f, Pos.y + Diameter * 0.5f);
+	float Thickness = ImMax(1.5f, FontSize * 0.09f);
+
+	if (Hovered)
+	{
+		Draw->AddCircleFilled(Center, Diameter * 0.62f,
+			ImGui::GetColorU32(ImGuiCol_ButtonHovered, 0.35f));
+	}
+
+	bool Checking = U->CheckRunning.load();
+	bool UpdateAvailable = !Checking && U->CheckSucceeded.load() && U->IsNewerAvailable;
+
+	ImVec4 Color;
+	if (UpdateAvailable)
+	{
+		Color = Hovered ? ImVec4(0.30f, 1.00f, 0.40f, 1.0f)
+			: ImVec4(0.20f, 0.90f, 0.30f, 1.0f);
+	}
+	else if (AppState->Ui.LightMode)
+	{
+		Color = Hovered ? ImVec4(0.22f, 0.24f, 0.30f, 1.0f)
+			: ImVec4(0.45f, 0.47f, 0.53f, 1.0f);
+	}
+	else
+	{
+		Color = Hovered ? ImVec4(0.88f, 0.89f, 0.92f, 1.0f)
+			: ImVec4(0.62f, 0.64f, 0.68f, 1.0f);
+	}
+	ImU32 Color32 = ImGui::ColorConvertFloat4ToU32(Color);
+
+	Draw->AddLine(
+		ImVec2(Center.x, Center.y - Diameter * 0.30f),
+		ImVec2(Center.x, Center.y + Diameter * 0.04f),
+		Color32, Thickness);
+	Draw->AddLine(
+		ImVec2(Center.x - Diameter * 0.17f, Center.y - Diameter * 0.09f),
+		ImVec2(Center.x, Center.y + Diameter * 0.04f),
+		Color32, Thickness);
+	Draw->AddLine(
+		ImVec2(Center.x + Diameter * 0.17f, Center.y - Diameter * 0.09f),
+		ImVec2(Center.x, Center.y + Diameter * 0.04f),
+		Color32, Thickness);
+	Draw->AddLine(
+		ImVec2(Center.x - Diameter * 0.24f, Center.y + Diameter * 0.26f),
+		ImVec2(Center.x + Diameter * 0.24f, Center.y + Diameter * 0.26f),
+		Color32, Thickness);
+
+	if (Hovered)
+	{
+		ImGui::BeginTooltip();
+		if (Checking)
+		{
+			ImGui::TextUnformatted("Checking for updates...");
+		}
+		else if (U->CheckFailed.load())
+		{
+			ImGui::TextUnformatted("Update check failed; click to retry");
+		}
+		else if (UpdateAvailable)
+		{
+			ImGui::Text("Update available: %s", U->LatestVersion.c_str());
+		}
+		else if (U->CheckSucceeded.load())
+		{
+			ImGui::Text("Up to date (%s)", U->LatestVersion.c_str());
+		}
+		else
+		{
+			ImGui::TextUnformatted("Check for updates");
+		}
+		ImGui::EndTooltip();
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Combo helper for std::vector<std::string>
 // ---------------------------------------------------------------------------
 static bool
@@ -1058,9 +1153,12 @@ render_settings_panel(GlobalState *AppState)
 	}
 
 	ImGui::SameLine();
-	float ThemeButtonSize = ImGui::GetFontSize() * 1.35f;
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ThemeButtonSize);
+	float IconSize = ImGui::GetFontSize() * 1.35f;
+	float IconsWidth = IconSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - IconsWidth);
 	theme_toggle_button(AppState);
+	ImGui::SameLine();
+	update_status_button(AppState);
 
 	if (AppState->PlayRecordSound)
 	{
@@ -1209,14 +1307,6 @@ render_settings_panel(GlobalState *AppState)
 		{
 			whisper_prompt_apply(AppState, S->WhisperPromptBuffer);
 		}
-	}
-
-	ImGui::Separator();
-
-	if (colored_button("Check for Updates", ImVec2(-1.0f, 0.0f), BUTTON_COLOR_GREY))
-	{
-		AppState->Ui.Update.IsModalOpen = true;
-		start_update_check(AppState);
 	}
 }
 
