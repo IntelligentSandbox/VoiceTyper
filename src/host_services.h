@@ -16,7 +16,9 @@ void platform_shutdown_crash_diagnostics();
 void platform_open_folder_selecting_file(const std::string &FilePath);
 void platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, int64_t ExpectedSize);
 void platform_cancel_model_download(GlobalState *AppState);
-bool platform_http_get_string(const std::string &Url, std::string *OutBody);
+bool platform_http_get_string(const std::string &Url, std::string *OutBody,
+	const std::string *IfNoneMatch = nullptr, std::string *OutEtag = nullptr,
+	bool *OutNotModified = nullptr);
 void platform_update_download_thread(GlobalState *AppState, std::string Url, std::string DestPath);
 void platform_cancel_update_download(GlobalState *AppState);
 bool platform_apply_update_package(const std::string &PackagePath);

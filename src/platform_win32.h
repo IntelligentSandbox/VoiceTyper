@@ -1164,17 +1164,21 @@ win32_http_close(HINTERNET Request, HINTERNET Connect)
 static bool
 win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 	std::atomic<int64_t> *Downloaded, std::atomic<int64_t> *Total, std::atomic<bool> *Cancel,
-	int64_t StartOffset = 0)
+	int64_t StartOffset = 0, const std::string *IfNoneMatch = nullptr,
+	std::string *OutEtag = nullptr, bool *OutNotModified = nullptr)
 {
 	std::wstring WideUrl(Url.begin(), Url.end());
 	URL_COMPONENTSW Comp = {};
 	Comp.dwStructSize = sizeof(Comp);
 	wchar_t HostBuf[256] = {};
 	wchar_t PathBuf[2048] = {};
+	wchar_t ExtraBuf[1024] = {};
 	Comp.lpszHostName = HostBuf;
 	Comp.dwHostNameLength = sizeof(HostBuf) / sizeof(wchar_t);
 	Comp.lpszUrlPath = PathBuf;
 	Comp.dwUrlPathLength = sizeof(PathBuf) / sizeof(wchar_t);
+	Comp.lpszExtraInfo = ExtraBuf;
+	Comp.dwExtraInfoLength = sizeof(ExtraBuf) / sizeof(wchar_t);
 
 	if (!WinHttpCrackUrl(WideUrl.c_str(), (DWORD)WideUrl.size(), 0, &Comp))
 	{
@@ -1188,7 +1192,9 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 	HINTERNET Connect = WinHttpConnect(Session, Comp.lpszHostName, Port, 0);
 	if (!Connect) return false;
 
-	HINTERNET Request = WinHttpOpenRequest(Connect, L"GET", Comp.lpszUrlPath,
+	std::wstring ObjectName = std::wstring(Comp.lpszUrlPath, Comp.dwUrlPathLength) +
+		std::wstring(Comp.lpszExtraInfo, Comp.dwExtraInfoLength);
+	HINTERNET Request = WinHttpOpenRequest(Connect, L"GET", ObjectName.c_str(),
 		nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
 	if (!Request)
 	{
@@ -1196,15 +1202,20 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		return false;
 	}
 
-	std::wstring RangeHeader;
+	std::wstring ExtraHeaders;
 	if (StartOffset > 0)
 	{
-		RangeHeader = L"Range: bytes=" + std::to_wstring(StartOffset) + L"\r\n";
+		ExtraHeaders += L"Range: bytes=" + std::to_wstring(StartOffset) + L"\r\n";
+	}
+	if (IfNoneMatch && !IfNoneMatch->empty())
+	{
+		std::wstring WideEtag(IfNoneMatch->begin(), IfNoneMatch->end());
+		ExtraHeaders += L"If-None-Match: " + WideEtag + L"\r\n";
 	}
 
 	if (!WinHttpSendRequest(Request,
-		StartOffset > 0 ? RangeHeader.c_str() : WINHTTP_NO_ADDITIONAL_HEADERS,
-		StartOffset > 0 ? (DWORD)-1 : 0,
+		ExtraHeaders.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : ExtraHeaders.c_str(),
+		ExtraHeaders.empty() ? 0 : (DWORD)-1,
 		WINHTTP_NO_REQUEST_DATA, 0,
 		WINHTTP_IGNORE_REQUEST_TOTAL_LENGTH, 0) ||
 		!WinHttpReceiveResponse(Request, nullptr))
@@ -1217,8 +1228,37 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 	DWORD StatusCodeSize = sizeof(StatusCode);
 	if (!WinHttpQueryHeaders(Request,
 		WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-		WINHTTP_HEADER_NAME_BY_INDEX, &StatusCode, &StatusCodeSize, WINHTTP_NO_HEADER_INDEX) ||
-		StatusCode < 200 || StatusCode >= 300)
+		WINHTTP_HEADER_NAME_BY_INDEX, &StatusCode, &StatusCodeSize, WINHTTP_NO_HEADER_INDEX))
+	{
+		win32_http_close(Request, Connect);
+		return false;
+	}
+
+	if (OutEtag)
+	{
+		wchar_t EtagBuf[128] = {};
+		DWORD EtagSize = sizeof(EtagBuf);
+		if (WinHttpQueryHeaders(Request, WINHTTP_QUERY_ETAG,
+			WINHTTP_HEADER_NAME_BY_INDEX, EtagBuf, &EtagSize, WINHTTP_NO_HEADER_INDEX))
+		{
+			std::wstring WideEtag(EtagBuf);
+			OutEtag->clear();
+			OutEtag->reserve(WideEtag.size());
+			for (wchar_t Ch : WideEtag)
+			{
+				OutEtag->push_back((char)Ch);
+			}
+		}
+	}
+
+	if (StatusCode == 304 && IfNoneMatch)
+	{
+		win32_http_close(Request, Connect);
+		if (OutNotModified) *OutNotModified = true;
+		return true;
+	}
+
+	if (StatusCode < 200 || StatusCode >= 300)
 	{
 		win32_http_close(Request, Connect);
 		return false;
@@ -1313,9 +1353,11 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 }
 
 inline bool
-platform_http_get_string(const std::string &Url, std::string *OutBody)
+platform_http_get_string(const std::string &Url, std::string *OutBody,
+	const std::string *IfNoneMatch, std::string *OutEtag, bool *OutNotModified)
 {
-	return win32_http_get(Url, nullptr, OutBody, nullptr, nullptr, nullptr);
+	return win32_http_get(Url, nullptr, OutBody, nullptr, nullptr, nullptr,
+		0, IfNoneMatch, OutEtag, OutNotModified);
 }
 
 inline void

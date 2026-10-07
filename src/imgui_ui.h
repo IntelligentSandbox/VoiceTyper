@@ -679,7 +679,7 @@ render_update_modal(GlobalState *AppState)
 			}
 			else if (U->CheckFailed.load())
 			{
-				ImGui::Text("Update check failed (GitHub unreachable?)");
+				ImGui::Text("Update check failed (offline, or GitHub API rate limit hit?)");
 			}
 
 			if (Succeeded)

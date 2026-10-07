@@ -23,7 +23,8 @@ cuda_plugin_download_thread(GlobalState *AppState)
 	P->Stage.store(CUDA_PLUGIN_STAGE_RESOLVE);
 
 	std::string Body;
-	if (!platform_http_get_string(UPDATER_API_RELEASES_URL, &Body))
+	bool NotModified = false;
+	if (!updater_fetch_releases(&Body, &NotModified))
 	{
 		P->FailureReason = "Could not reach GitHub.";
 		P->Failed.store(true);

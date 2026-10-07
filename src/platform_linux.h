@@ -12,6 +12,7 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <dirent.h>
 #include <dlfcn.h>
@@ -1671,25 +1672,91 @@ platform_cancel_model_download(GlobalState *AppState)
 }
 
 inline bool
-platform_http_get_string(const std::string &Url, std::string *OutBody)
+platform_http_get_string(const std::string &Url, std::string *OutBody,
+	const std::string *IfNoneMatch, std::string *OutEtag, bool *OutNotModified)
 {
-	std::string Cmd = "curl -sL --fail --max-time 30 -A VoiceTyper \"" + Url + "\" 2>/dev/null";
+	char HeaderTmpl[] = "/tmp/voicetyper_hdr_XXXXXX";
+	int HeaderFd = mkstemp(HeaderTmpl);
+	if (HeaderFd < 0) return false;
+	close(HeaderFd);
+
+	std::string Cmd = "curl -sL --max-time 30 -A VoiceTyper -D " + std::string(HeaderTmpl);
+	if (IfNoneMatch && !IfNoneMatch->empty())
+	{
+		Cmd += " -H \"If-None-Match: " + *IfNoneMatch + "\"";
+	}
+	Cmd += " \"" + Url + "\" 2>/dev/null";
 
 	FILE *Pipe = popen(Cmd.c_str(), "r");
 	if (!Pipe)
 	{
+		unlink(HeaderTmpl);
 		return false;
 	}
 
+	OutBody->clear();
 	char Buffer[16384];
 	size_t Read = 0;
 	while ((Read = fread(Buffer, 1, sizeof(Buffer), Pipe)) > 0)
 	{
 		OutBody->append(Buffer, Read);
 	}
+	pclose(Pipe);
 
-	int ExitStatus = pclose(Pipe);
-	return ExitStatus == 0 && !OutBody->empty();
+	std::string Headers;
+	FILE *HeaderFile = fopen(HeaderTmpl, "rb");
+	if (HeaderFile)
+	{
+		char HdrBuf[8192];
+		size_t HdrRead = 0;
+		while ((HdrRead = fread(HdrBuf, 1, sizeof(HdrBuf), HeaderFile)) > 0)
+		{
+			Headers.append(HdrBuf, HdrRead);
+		}
+		fclose(HeaderFile);
+	}
+	unlink(HeaderTmpl);
+
+	long StatusCode = 0;
+	size_t StatusPos = std::string::npos;
+	for (;;)
+	{
+		size_t Next = Headers.find("HTTP/", StatusPos == std::string::npos ? 0 : StatusPos + 5);
+		if (Next == std::string::npos) break;
+
+		size_t Space = Headers.find(' ', Next);
+		if (Space == std::string::npos) break;
+
+		StatusPos = Next;
+		StatusCode = strtol(Headers.c_str() + Space + 1, nullptr, 10);
+	}
+	if (StatusPos == std::string::npos) return false;
+
+	if (OutEtag)
+	{
+		size_t EtagPos = Headers.find("etag:");
+		if (EtagPos == std::string::npos) EtagPos = Headers.find("ETag:");
+		if (EtagPos != std::string::npos)
+		{
+			size_t EtagStart = Headers.find_first_not_of(" \t", EtagPos + 5);
+			size_t EtagEnd = Headers.find_first_of("\r\n", EtagStart);
+			if (EtagStart != std::string::npos && EtagEnd != std::string::npos)
+			{
+				OutEtag->assign(Headers, EtagStart, EtagEnd - EtagStart);
+			}
+		}
+	}
+
+	if (StatusCode == 304 && IfNoneMatch)
+	{
+		OutBody->clear();
+		if (OutNotModified) *OutNotModified = true;
+		return true;
+	}
+
+	if (StatusCode < 200 || StatusCode >= 300 || OutBody->empty()) return false;
+
+	return true;
 }
 
 inline void

@@ -6,6 +6,8 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -421,13 +423,78 @@ updater_clean_release_notes(const std::string &Body)
 	return Cleaned;
 }
 
+// The GitHub API allows only 60 unauthenticated requests per hour per IP, and
+// every boot/check burns one. Conditional requests are the sanctioned escape:
+// a 304 Not Modified response does not count against the limit, so the ETag of
+// the last successful fetch is cached in the data dir and replayed on every
+// check. Only a genuinely changed release list (a new release) costs a request.
+static std::string
+updater_releases_cache_path(const char *Suffix)
+{
+	return platform_join_path(platform_get_data_dir(), std::string("update_releases") + Suffix);
+}
+
+static bool
+updater_read_file(const std::string &Path, std::string *Out)
+{
+	std::ifstream In(Path, std::ios::binary);
+	if (!In) return false;
+
+	std::ostringstream Ss;
+	Ss << In.rdbuf();
+	*Out = Ss.str();
+
+	return !Out->empty();
+}
+
+static void
+updater_write_file(const std::string &Path, const std::string &Content)
+{
+	std::ofstream Out(Path, std::ios::binary);
+	if (!Out) return;
+
+	Out << Content;
+}
+
+static bool
+updater_fetch_releases(std::string *Body, bool *NotModified)
+{
+	*NotModified = false;
+
+	std::string CachedEtag;
+	std::string CachedBody;
+	bool HaveCache = updater_read_file(updater_releases_cache_path(".etag"), &CachedEtag) &&
+		updater_read_file(updater_releases_cache_path(".json"), &CachedBody);
+
+	std::string Etag;
+	bool ServerNotModified = false;
+	bool Fetched = platform_http_get_string(UPDATER_API_RELEASES_URL, Body,
+		HaveCache ? &CachedEtag : nullptr, &Etag, &ServerNotModified);
+	if (!Fetched) return false;
+
+	if (ServerNotModified)
+	{
+		if (!HaveCache) return false;
+
+		*Body = CachedBody;
+		*NotModified = true;
+		return true;
+	}
+
+	updater_write_file(updater_releases_cache_path(".etag"), Etag);
+	updater_write_file(updater_releases_cache_path(".json"), *Body);
+	return true;
+}
+
 static void
 updater_check_thread(GlobalState *AppState)
 {
 	UpdateState *U = &AppState->Ui.Update;
 
 	std::string Body;
-	bool Fetched = platform_http_get_string(UPDATER_API_RELEASES_URL, &Body);
+	bool NotModified = false;
+	bool Fetched = updater_fetch_releases(&Body, &NotModified);
+	(void)NotModified;
 
 	std::vector<UpdateReleaseInfo> Releases;
 	if (!Fetched || !updater_parse_releases_json(Body, &Releases))
