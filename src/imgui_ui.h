@@ -1773,11 +1773,15 @@ render_left_panel(GlobalState *AppState)
 
 	// Inference Device
 	{
+		// The probe that loads the CUDA plugin DLL (refresh_inference_devices,
+		// kicked by the platform main right after the first visible frame) must
+		// NOT be started from here: this code runs during the hidden warm-up
+		// render, before the window is shown, and the plugin's LoadLibrary
+		// holds the process loader lock for the whole multi-hundred-MB image
+		// map — ShowWindow then blocks on that lock and the window sits on the
+		// DWM's white uninitialized-surface fill until the load finishes
+		// (multi-second on a cold boot).
 		bool DevicesLoaded = AppState->InferenceDevicesLoaded.load(std::memory_order_acquire);
-		if (!DevicesLoaded)
-		{
-			refresh_inference_devices(AppState);
-		}
 
 		ImGui::Text("Inference Device");
 		int SelectedInferenceDeviceIndex = AppState->CurrentInferenceDeviceIndex;
