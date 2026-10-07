@@ -19,6 +19,13 @@
 #
 # Only DRAFT releases are ever created automatically - publishing is a manual
 # click in the GitHub UI.
+#
+# Windows artifacts are Authenticode-signed when the self-signed
+# IntelligentSandbox code-signing cert is available (auto-detected in
+# Cert:\CurrentUser\My, or forced via $VOICETYPER_CODESIGN_THUMBPRINT);
+# signing is skipped with a notice otherwise. The cert is self-signed, so
+# machines that have not imported packaging/IntelligentSandbox-CodeSigning.cer
+# show "Unknown publisher" - the signature still carries the authorship info.
 
 set -euo pipefail
 
@@ -324,6 +331,65 @@ build_msi() {
 		packaging/VoiceTyper.wxs
 }
 
+# ---------------------------------------------------------------------------
+# Code signing. Signs with the self-signed IntelligentSandbox code-signing
+# cert (CN=IntelligentSandbox, O=IntelligentSandbox,
+# E=warren.min.wang@gmail.com) from Cert:\CurrentUser\My, or the certificate
+# identified by $VOICETYPER_CODESIGN_THUMBPRINT when set. No RFC3161
+# timestamping: it is meaningless for a cert with no chain to verify.
+# ---------------------------------------------------------------------------
+
+CODESIGN_TOOL=""
+CODESIGN_THUMBPRINT=""
+
+find_signtool() {
+	local candidate found=""
+	if command -v signtool >/dev/null 2>&1; then
+		command -v signtool
+		return 0
+	fi
+	for candidate in \
+		"/c/Program Files (x86)/Windows Kits/10/bin/"*/x64/signtool.exe \
+		"/c/Program Files/Windows Kits/10/bin/"*/x64/signtool.exe; do
+		[ -f "$candidate" ] && found="$candidate"
+	done
+	[ -n "$found" ] || return 1
+	echo "$found"
+}
+
+resolve_codesign_thumbprint() {
+	if [ -n "${VOICETYPER_CODESIGN_THUMBPRINT:-}" ]; then
+		echo "${VOICETYPER_CODESIGN_THUMBPRINT}"
+		return 0
+	fi
+	powershell.exe -NoProfile -Command "(Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { \$_.Subject -like '*CN=IntelligentSandbox*' } | Sort-Object NotAfter -Descending | Select-Object -First 1).Thumbprint" | tr -d '[:space:]'
+}
+
+codesign_setup() {
+	[ -n "$CODESIGN_THUMBPRINT" ] && return 0
+	local tool
+	tool="$(find_signtool)" || {
+		echo "    (signtool not found - skipping code signing)"
+		return 1
+	}
+	CODESIGN_THUMBPRINT="$(resolve_codesign_thumbprint)"
+	[ -n "$CODESIGN_THUMBPRINT" ] || {
+		echo "    (no IntelligentSandbox code-signing cert in the user store - skipping code signing)"
+		return 1
+	}
+	CODESIGN_TOOL="$tool"
+	echo "    (code signing: thumbprint $CODESIGN_THUMBPRINT)"
+	return 0
+}
+
+codesign_file() {
+	local file="$1"
+	# Dash-prefixed flags (not /fd etc.): git bash's MSYS layer rewrites
+	# leading-slash args as POSIX paths and mangles them.
+	"$CODESIGN_TOOL" sign -fd SHA256 -sha1 "$CODESIGN_THUMBPRINT" \
+		-d "VoiceTyper" -du "https://github.com/IntelligentSandbox/VoiceTyper" "$file"
+}
+
 JOB_PIDS=()
 JOB_NAMES=()
 
@@ -380,6 +446,17 @@ windows_package() {
 	copy_build_output "$cpu_build" "$cpu_stage"
 	remove_model_files "$cpu_stage"
 
+	# Sign before any artifact is built: the zips embed the staged files and
+	# the MSIs harvest them, and the plugin stage below re-uses the signed
+	# ggml-cuda.dll. The NVIDIA cublas/cudart DLLs stay untouched (they carry
+	# NVIDIA's own signature).
+	if codesign_setup; then
+		echo "=== Signing staged binaries ($platform) ==="
+		codesign_file "$cpu_stage/VoiceTyper.exe"
+		codesign_file "$cuda_stage/VoiceTyper.exe"
+		codesign_file "$cuda_stage/ggml-cuda.dll"
+	fi
+
 	# Modular CUDA plugin: just the DLLs a CPU install needs for GPU inference.
 	# Extracted flat next to VoiceTyper.exe by the in-app downloader.
 	rm -rf "$cuda_plugin_stage"
@@ -400,6 +477,11 @@ windows_package() {
 	run_job "CPU MSI" build_msi "$cpu_stage" "$cpu_msi"
 	run_job "CUDA plugin zip" zip_dir "$cuda_plugin_stage" "$cuda_plugin_zip"
 	wait_for_jobs
+	if [ -n "$CODESIGN_TOOL" ]; then
+		echo "=== Signing MSIs ($platform) ==="
+		codesign_file "$cpu_msi"
+		codesign_file "$cuda_msi"
+	fi
 	echo "    Package artifacts took $((SECONDS - start))s"
 }
 
