@@ -272,7 +272,6 @@ update_status_button(GlobalState *AppState)
 	if (ImGui::InvisibleButton("##UpdateStatus", ImVec2(Diameter, Diameter)))
 	{
 		U->IsModalOpen = true;
-		start_update_check(AppState);
 	}
 
 	bool Hovered = ImGui::IsItemHovered();
