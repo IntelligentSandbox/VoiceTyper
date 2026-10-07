@@ -916,6 +916,10 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 				0, (UINT)LOWORD(LParam), (UINT)HIWORD(LParam), DXGI_FORMAT_UNKNOWN, 0);
 			create_render_target();
 			g_HasPresentedFrame = false;
+			if (g_ImGuiReady && !g_InSizeMove && g_RenderTargetView && !IsIconic(Hwnd))
+			{
+				render_frame();
+			}
 		}
 		return 0;
 
