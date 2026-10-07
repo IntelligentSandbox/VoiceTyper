@@ -25,14 +25,38 @@ Sources copied directly into the repo:
 - Originally used [Qt](https://www.qt.io/development/qt-framework) for the ui, but wanted something simpler that we could just embed into the project source.
 
 ## Getting Started
-Currently we only target Windows OS.
 Precompiled binary releases are available via GitHub Releases.
 
-To compile the project for yourself, you will need:
-- C++ compiler toolchain (e.g. Visual Studio 17 2022 MSVC)
-- `cmake` (e.g. 3.31.6)
+VoiceTyper is still beta software on Windows, which is the primary platform.
+Linux builds are even more experimental, and X11 is the display server the
+app is expected to actually work under (see the note at the end of this section).
+
+To compile the project for yourself on Windows, you will need:
+- C++ compiler toolchain (e.g. Visual Studio 2022 MSVC)
+- `cmake` >= 3.16 (e.g. 3.31.6)
+- Ninja build tool
 Optional
 - NVIDIA CUDA toolkit (e.g. v13.2)
+
+Always use the Ninja cmake generator; the `Visual Studio 17 2022` generator is
+many times slower. Ninja needs the MSVC environment, so configure and build
+from a shell that has run `vcvars64.bat`:
+
+```sh
+cmake -S . -B build/cpu -G Ninja
+cmake --build build/cpu
+```
+
+For a CUDA build, configure a separate build directory with
+`-DVOICETYPER_BUILD_CUDA_PLUGIN=ON` (e.g. `build/cuda-plugin`).
+
+### Linux: experimental, X11 only
+Linux is even more experimental than Windows. X11 is the target display server:
+text is inserted into other applications by synthesizing keystrokes through the
+X11 XTEST extension. On Wayland, the compositor's security model isolates
+applications from one another and deliberately prevents one app from injecting
+input into another, so dictation text cannot be inserted into native Wayland
+applications.
 
 To download ggml whisper models, get them from huggingface [here](https://huggingface.co/ggerganov/whisper.cpp/tree/main), or use the in-app **Download Models...** button (next to the STT model selector) to fetch them automatically. Released builds no longer bundle STT model weights.
 
@@ -44,9 +68,9 @@ The CUDA build ships kernels for the following NVIDIA GPU architectures:
 | Turing | 75 | RTX 20-series, GTX 16-series |
 | Ampere | 86 | RTX 30-series |
 | Ada Lovelace | 89 | RTX 40-series |
-| Blackwell | 120 | RTX 50-series |
+| Blackwell | 120, 121 | RTX 50-series (121 covers laptop GPUs) |
 
-Turing and Ampere are built as PTX (JIT-compiled on first run on any newer GPU), so the binary is forward-compatible with future architectures. Ada and Blackwell are built as pre-compiled SASS to avoid the JIT cost on the most common current cards.
+All architectures in the table are built as pre-compiled SASS to avoid the JIT cost. Additionally, sm_80 is built as PTX that JIT-compiles on first run on any newer GPU, so the binary is forward-compatible with future architectures.
 
 **Driver requirement**: CUDA 13.x requires an NVIDIA driver from the R575 branch or newer on Windows. Older drivers will fail at CUDA initialization with `cudaErrorInsufficientDriver`, regardless of GPU model.
 
