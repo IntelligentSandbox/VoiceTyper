@@ -1117,10 +1117,7 @@ render_settings_panel(GlobalState *AppState)
 {
 	SettingsWindowState *S = &AppState->Ui.SettingsState;
 
-	if (colored_button("Configure Keyboard Shortcuts", ImVec2(-1.0f, 30.0f), BUTTON_COLOR_GREY))
-	{
-		S->HotkeysModalOpen = true;
-	}
+	const float CheckboxTextIndent = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
 
 	if (ImGui::Checkbox("Show on-screen indicator while recording/streaming",
 		&AppState->ShowRecordIndicator))
@@ -1130,7 +1127,7 @@ render_settings_panel(GlobalState *AppState)
 
 	if (AppState->ShowRecordIndicator)
 	{
-		ImGui::Indent(20.0f);
+		ImGui::Indent(CheckboxTextIndent);
 
 		ImGui::TextUnformatted("Delay Before Showing (ms)");
 		ImGui::SameLine();
@@ -1142,7 +1139,7 @@ render_settings_panel(GlobalState *AppState)
 			save_int_setting("record_indicator_delay_ms", AppState->RecordIndicatorDelayMs);
 		}
 
-		ImGui::Unindent(20.0f);
+		ImGui::Unindent(CheckboxTextIndent);
 	}
 
 	if (ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
@@ -1151,17 +1148,9 @@ render_settings_panel(GlobalState *AppState)
 		save_bool_setting("play_record_sound", AppState->PlayRecordSound);
 	}
 
-	ImGui::SameLine();
-	float IconSize = ImGui::GetFontSize() * 1.35f;
-	float IconsWidth = IconSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - IconsWidth);
-	theme_toggle_button(AppState);
-	ImGui::SameLine();
-	update_status_button(AppState);
-
 	if (AppState->PlayRecordSound)
 	{
-		ImGui::Indent(20.0f);
+		ImGui::Indent(CheckboxTextIndent);
 
 		if (ImGui::BeginTable("##SoundSettings", 2,
 			ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
@@ -1224,7 +1213,7 @@ render_settings_panel(GlobalState *AppState)
 			ImGui::EndTable();
 		}
 
-		ImGui::Unindent(20.0f);
+		ImGui::Unindent(CheckboxTextIndent);
 	}
 
 	std::string CharByCharLabel = "Use character-by-character text injection instead of paste";
@@ -1247,7 +1236,7 @@ render_settings_panel(GlobalState *AppState)
 
 	if (AppState->PreserveClipboardOnPaste)
 	{
-		ImGui::Indent(20.0f);
+		ImGui::Indent(CheckboxTextIndent);
 		ImGui::TextUnformatted("Restore Delay (ms)");
 		ImGui::SameLine();
 		HelpMarkStyle RestoreDelayMarkStyle = help_mark_default_style();
@@ -1264,7 +1253,7 @@ render_settings_panel(GlobalState *AppState)
 			if (AppState->ClipboardRestoreDelayMs > 10000) AppState->ClipboardRestoreDelayMs = 10000;
 			save_int_setting("clipboard_restore_delay_ms", AppState->ClipboardRestoreDelayMs);
 		}
-		ImGui::Unindent(20.0f);
+		ImGui::Unindent(CheckboxTextIndent);
 	}
 
 	bool UseToggleMode = (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
@@ -1290,6 +1279,7 @@ render_settings_panel(GlobalState *AppState)
 
 	if (effective_stt_engine_kind(AppState) != ENGINE_PARAKEET)
 	{
+		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Initial Whisper Prompt");
 		ImGui::SameLine();
 		HelpMarkStyle InitialWhisperPromptMarkStyle = help_mark_default_style();
@@ -1298,6 +1288,7 @@ render_settings_panel(GlobalState *AppState)
 			"Guides the transcription model toward the vocabulary and style you use. "
 			"Applied from the next recording or streaming session onwards. (e.g. \"C++, ImGui, ggml, CUDA...\")",
 			InitialWhisperPromptMarkStyle);
+		ImGui::SameLine();
 		ImGui::SetNextItemWidth(-1.0f);
 		ImGui::InputTextWithHint("##WhisperInitialPrompt",
 			"Vocabulary/style hint",
@@ -1706,39 +1697,80 @@ render_left_panel(GlobalState *AppState)
 	bool Busy = AppState->IsRecording || AppState->IsStreaming ||
 		AppState->PipelineActive.load() || IsModelTransitioning;
 
-	// Record Button
+	const float SelectorLabelWidth = ImMax(ImMax(
+		ImGui::CalcTextSize("Audio Input Device").x,
+		ImGui::CalcTextSize("Inference Device").x),
+		ImGui::CalcTextSize("CPU Cores for Inference").x) + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+
+	// Record + Stream Buttons (side by side)
 	{
-		ImVec4 Color = BUTTON_COLOR_GREEN;
-		std::string Label = record_button_idle_label(AppState);
-		bool Enabled = !AppState->IsStreaming;
+		ImVec2 HalfButton = ImVec2(
+			(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f, 60.0f);
 
-		if (AppState->IsRecording)
+		// Record Button
 		{
-			Color = BUTTON_COLOR_RED;
-			if (AppState->RecordHotkey.is_valid())
+			ImVec4 Color = BUTTON_COLOR_GREEN;
+			std::string Label = record_button_idle_label(AppState);
+			bool Enabled = !AppState->IsStreaming;
+
+			if (AppState->IsRecording)
 			{
-				Label = "Stop (" + hotkey_to_label(AppState->RecordHotkey) + ")";
+				Color = BUTTON_COLOR_RED;
+				if (AppState->RecordHotkey.is_valid())
+				{
+					Label = "Stop (" + hotkey_to_label(AppState->RecordHotkey) + ")";
+				}
+				else
+				{
+					Label = "Stop";
+				}
 			}
-			else
+
+			if (AppState->PipelineActive.load() && !AppState->IsRecording)
 			{
-				Label = "Stop";
+				Color = BUTTON_COLOR_GREY;
+				Label = "Transcribing...";
+				Enabled = false;
 			}
+			else if (IsModelTransitioning)
+			{
+				Color = BUTTON_COLOR_GREY;
+				Label = "Loading model...";
+				Enabled = false;
+			}
+
+			if (colored_button(Label.c_str(), HalfButton, Color, Enabled)) toggle_recording(AppState);
 		}
 
-		if (AppState->PipelineActive.load() && !AppState->IsRecording)
-		{
-			Color = BUTTON_COLOR_GREY;
-			Label = "Transcribing...";
-			Enabled = false;
-		}
-		else if (IsModelTransitioning)
-		{
-			Color = BUTTON_COLOR_GREY;
-			Label = "Loading model...";
-			Enabled = false;
-		}
+		ImGui::SameLine();
 
-		if (colored_button(Label.c_str(), BigButton, Color, Enabled)) toggle_recording(AppState);
+		// Stream Button
+		{
+			ImVec4 Color = BUTTON_COLOR_GREEN;
+			std::string Label = stream_button_idle_label(AppState);
+			bool Enabled = AppState->IsStreaming ||
+				(!AppState->IsRecording && !AppState->PipelineActive.load());
+
+			if (AppState->IsStreaming)
+			{
+				Color = BUTTON_COLOR_RED;
+				if (AppState->StreamHotkey.is_valid())
+				{
+					Label = "Stop Streaming (" + hotkey_to_label(AppState->StreamHotkey) + ")";
+				}
+				else
+				{
+					Label = "Stop Streaming";
+				}
+			}
+			else if (IsModelTransitioning)
+			{
+				Color = BUTTON_COLOR_GREY;
+				Label = "Loading model...";
+			}
+
+			if (colored_button(Label.c_str(), HalfButton, Color, Enabled)) toggle_streaming(AppState);
+		}
 	}
 
 	// Cancel Record Button
@@ -1749,83 +1781,10 @@ render_left_panel(GlobalState *AppState)
 		if (colored_button(Label.c_str(), SmallButton, BUTTON_COLOR_GREY, Enabled)) cancel_recording(AppState);
 	}
 
-	// Stream Button
-	{
-		ImVec4 Color = BUTTON_COLOR_GREEN;
-		std::string Label = stream_button_idle_label(AppState);
-		bool Enabled = AppState->IsStreaming ||
-			(!AppState->IsRecording && !AppState->PipelineActive.load());
-
-		if (AppState->IsStreaming)
-		{
-			Color = BUTTON_COLOR_RED;
-			if (AppState->StreamHotkey.is_valid())
-			{
-				Label = "Stop Streaming (" + hotkey_to_label(AppState->StreamHotkey) + ")";
-			}
-			else
-			{
-				Label = "Stop Streaming";
-			}
-		}
-		else if (IsModelTransitioning)
-		{
-			Color = BUTTON_COLOR_GREY;
-			Label = "Loading model...";
-		}
-
-		if (colored_button(Label.c_str(), BigButton, Color, Enabled)) toggle_streaming(AppState);
-	}
-
 	ImGui::Separator();
 
-	// Audio Input
+	// Download Model Button
 	{
-		ImGui::Text("Audio Input Device");
-
-		if (AppState->AudioInputDeviceNames.empty())
-		{
-			static const std::vector<std::string> NoDevices = { "No Devices Found" };
-			int Dummy = 0;
-			ImGui::BeginDisabled();
-			ImGui::SetNextItemWidth(FullWidth.x);
-			string_combo("##AudioInput", &Dummy, NoDevices);
-			ImGui::EndDisabled();
-		}
-		else
-		{
-			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
-			if (Busy) ImGui::BeginDisabled();
-			ImGui::SetNextItemWidth(FullWidth.x);
-			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, AppState->AudioInputDeviceNames)) update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
-			if (Busy) ImGui::EndDisabled();
-		}
-	}
-
-	// STT Model
-	{
-		ImGui::Text("Model");
-		if (AppState->STTModelNames.empty())
-		{
-			std::vector<std::string> NoModels = { "No Models Found" };
-			int Dummy = 0;
-			ImGui::BeginDisabled();
-			ImGui::SetNextItemWidth(FullWidth.x);
-			string_combo("##STTModel", &Dummy, NoModels);
-			ImGui::EndDisabled();
-		}
-		else
-		{
-			if (Busy) ImGui::BeginDisabled();
-			ImGui::SetNextItemWidth(FullWidth.x);
-			if (string_combo("##STTModel", &AppState->CurrentSTTModelIndex,
-				AppState->STTModelNames))
-			{
-				update_stt_model_selection(AppState, AppState->CurrentSTTModelIndex);
-			}
-			if (Busy) ImGui::EndDisabled();
-		}
-
 		if (colored_button("Download Model", SmallButton, BUTTON_COLOR_GREY))
 		{
 			AppState->Ui.Download.IsModalOpen = true;
@@ -1860,6 +1819,66 @@ render_left_panel(GlobalState *AppState)
 		if (colored_button(Label.c_str(), BigButton, Color, Enabled)) toggle_stt_model_load(AppState);
 	}
 
+	// Configure Keyboard Shortcuts Button
+	{
+		if (colored_button("Configure Keyboard Shortcuts", ImVec2(-1.0f, 30.0f), BUTTON_COLOR_GREY))
+		{
+			AppState->Ui.SettingsState.HotkeysModalOpen = true;
+		}
+	}
+
+	// Audio Input
+	{
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Audio Input Device");
+		ImGui::SameLine(SelectorLabelWidth);
+
+		if (AppState->AudioInputDeviceNames.empty())
+		{
+			static const std::vector<std::string> NoDevices = { "No Devices Found" };
+			int Dummy = 0;
+			ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
+			string_combo("##AudioInput", &Dummy, NoDevices);
+			ImGui::EndDisabled();
+		}
+		else
+		{
+			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
+			if (Busy) ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
+			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, AppState->AudioInputDeviceNames)) update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
+			if (Busy) ImGui::EndDisabled();
+		}
+	}
+
+	// STT Model
+	{
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Model");
+		ImGui::SameLine(SelectorLabelWidth);
+		if (AppState->STTModelNames.empty())
+		{
+			std::vector<std::string> NoModels = { "No Models Found" };
+			int Dummy = 0;
+			ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
+			string_combo("##STTModel", &Dummy, NoModels);
+			ImGui::EndDisabled();
+		}
+		else
+		{
+			if (Busy) ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
+			if (string_combo("##STTModel", &AppState->CurrentSTTModelIndex,
+				AppState->STTModelNames))
+			{
+				update_stt_model_selection(AppState, AppState->CurrentSTTModelIndex);
+			}
+			if (Busy) ImGui::EndDisabled();
+		}
+	}
+
 	// Inference Device
 	{
 		// The probe that loads the CUDA plugin DLL (refresh_inference_devices,
@@ -1872,7 +1891,9 @@ render_left_panel(GlobalState *AppState)
 		// (multi-second on a cold boot).
 		bool DevicesLoaded = AppState->InferenceDevicesLoaded.load(std::memory_order_acquire);
 
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Inference Device");
+		ImGui::SameLine(SelectorLabelWidth);
 		int SelectedInferenceDeviceIndex = AppState->CurrentInferenceDeviceIndex;
 		if (Busy) ImGui::BeginDisabled();
 		ImGui::SetNextItemWidth(FullWidth.x);
@@ -1917,7 +1938,9 @@ render_left_panel(GlobalState *AppState)
 
 		if (AppState->CurrentInferenceDeviceIndex == 0)
 		{
+			ImGui::AlignTextToFramePadding();
 			ImGui::Text("CPU Cores for Inference");
+			ImGui::SameLine(SelectorLabelWidth);
 			ImGui::SetNextItemWidth(FullWidth.x);
 			int MaxCores = query_logical_processor_count();
 			if (ImGui::InputInt("##ThreadCount", &AppState->WhisperThreadCount, 1, 1))
@@ -2003,30 +2026,8 @@ transcribed_text_copy_all(GlobalState *AppState)
 }
 
 static void
-render_transcribed_text_box(GlobalState *AppState)
+render_transcribed_text_title(GlobalState *AppState, float RightReserve)
 {
-	UiRuntimeState *Ui = &AppState->Ui;
-
-	{
-		std::lock_guard<std::mutex> Lock(Ui->TranscribedTextMutex);
-		if (Ui->TranscribedTextSerial != Ui->TranscribedTextBoxSerial)
-		{
-			Ui->TranscribedTextBoxSerial = Ui->TranscribedTextSerial;
-			Ui->TranscribedTextBoxWords = Ui->TranscribedTextWords;
-
-			Ui->TranscribedTextBoxBuffer.clear();
-			for (const TranscribedWord &Word : Ui->TranscribedTextBoxWords)
-			{
-				Ui->TranscribedTextBoxBuffer.insert(
-					Ui->TranscribedTextBoxBuffer.end(),
-					Word.Text.begin(), Word.Text.end());
-			}
-			Ui->TranscribedTextBoxBuffer.push_back('\0');
-		}
-	}
-
-	if (Ui->TranscribedTextBoxBuffer.empty()) Ui->TranscribedTextBoxBuffer.push_back('\0');
-
 	ImGui::TextDisabled("Transcribed Text");
 	ImGui::SameLine();
 	HelpMarkStyle TimingsMarkStyle = help_mark_default_style();
@@ -2047,7 +2048,8 @@ render_transcribed_text_box(GlobalState *AppState)
 	{
 		float IndSize = ImGui::GetTextLineHeight() * 1.5f;
 		ImGui::SameLine();
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - IndSize);
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x -
+			IndSize - RightReserve);
 		if (colored_button("##UpdateIndicator", ImVec2(IndSize, IndSize), ImVec4(0.20f, 0.60f, 0.25f, 1.0f)))
 		{
 			Upd->IsModalOpen = true;
@@ -2073,6 +2075,34 @@ render_transcribed_text_box(GlobalState *AppState)
 			ImVec2(Center.x + Size * 0.15f, LineY - Size * 0.16f),
 			ImVec2(Center.x, LineY - Thick * 0.5f), Col);
 	}
+}
+
+static void
+render_transcribed_text_box(GlobalState *AppState, bool DrawTitle)
+{
+	UiRuntimeState *Ui = &AppState->Ui;
+
+	{
+		std::lock_guard<std::mutex> Lock(Ui->TranscribedTextMutex);
+		if (Ui->TranscribedTextSerial != Ui->TranscribedTextBoxSerial)
+		{
+			Ui->TranscribedTextBoxSerial = Ui->TranscribedTextSerial;
+			Ui->TranscribedTextBoxWords = Ui->TranscribedTextWords;
+
+			Ui->TranscribedTextBoxBuffer.clear();
+			for (const TranscribedWord &Word : Ui->TranscribedTextBoxWords)
+			{
+				Ui->TranscribedTextBoxBuffer.insert(
+					Ui->TranscribedTextBoxBuffer.end(),
+					Word.Text.begin(), Word.Text.end());
+			}
+			Ui->TranscribedTextBoxBuffer.push_back('\0');
+		}
+	}
+
+	if (Ui->TranscribedTextBoxBuffer.empty()) Ui->TranscribedTextBoxBuffer.push_back('\0');
+
+	if (DrawTitle) render_transcribed_text_title(AppState, 0.0f);
 
 	const float BoxHeight = ImGui::GetTextLineHeightWithSpacing() * 6.0f +
 		ImGui::GetStyle().FramePadding.y * 2.0f;
@@ -2445,6 +2475,18 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	render_left_panel(AppState);
 	ImGui::Separator();
 	render_settings_panel(AppState);
+
+	float IconSize = ImGui::GetFontSize() * 1.35f;
+	float IconsWidth = IconSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+	if (!TwoColumns)
+	{
+		render_transcribed_text_title(AppState, IconsWidth + ImGui::GetStyle().ItemSpacing.x);
+		ImGui::SameLine();
+	}
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - IconsWidth);
+	theme_toggle_button(AppState);
+	ImGui::SameLine();
+	update_status_button(AppState);
 	ImGui::EndChild();
 
 	if (TwoColumns)
@@ -2458,7 +2500,7 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	ImGui::BeginChild("##RightColumn", ImVec2(ColumnWidth, 0.0f),
 		ImGuiChildFlags_AutoResizeY,
 		ImGuiWindowFlags_NoScrollbar);
-	render_transcribed_text_box(AppState);
+	render_transcribed_text_box(AppState, TwoColumns);
 	ImGui::EndChild();
 
 	render_download_modal(AppState);
