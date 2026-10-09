@@ -400,10 +400,11 @@ cancel_record_button_idle_label(GlobalState *AppState)
 }
 
 static std::string
-stream_button_idle_label(GlobalState *AppState)
+stream_button_label(GlobalState *AppState)
 {
-	if (!AppState->StreamHotkey.is_valid()) return "Start Streaming";
-	return "Start Streaming (" + hotkey_to_label(AppState->StreamHotkey) + ")";
+	if (!AppState->StreamHotkey.is_valid()) return "Stream";
+	if (AppState->IsStreaming) return "Stop (" + hotkey_to_label(AppState->StreamHotkey) + ")";
+	return "Stream (" + hotkey_to_label(AppState->StreamHotkey) + ")";
 }
 
 static std::string
@@ -1287,6 +1288,7 @@ render_settings_panel(GlobalState *AppState)
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Initial Whisper Prompt");
 		ImGui::SameLine();
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
 		HelpMarkStyle InitialWhisperPromptMarkStyle = help_mark_default_style();
 		InitialWhisperPromptMarkStyle.DiameterScale = 0.75f;
 		hover_help_mark(
@@ -1695,8 +1697,6 @@ static void
 render_left_panel(GlobalState *AppState)
 {
 	ImVec2 FullWidth = ImVec2(-1, 0);
-	ImVec2 BigButton = ImVec2(-1, 60);
-	ImVec2 SmallButton = ImVec2(-1, 40);
 
 	bool IsModelTransitioning = AppState->IsModelTransitioning.load();
 	bool Busy = AppState->IsRecording || AppState->IsStreaming ||
@@ -1707,10 +1707,12 @@ render_left_panel(GlobalState *AppState)
 		ImGui::CalcTextSize("Inference Device").x),
 		ImGui::CalcTextSize("CPU Cores for Inference").x) + ImGui::GetStyle().ItemSpacing.x * 2.0f;
 
-	// Record + Stream Buttons (side by side)
+	const float ButtonGap = ImGui::GetStyle().ItemSpacing.y;
+
+	// Record + Load Model Buttons (side by side)
 	{
 		ImVec2 HalfButton = ImVec2(
-			(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f, 60.0f);
+			(ImGui::GetContentRegionAvail().x - ButtonGap) * 0.5f, 60.0f);
 
 		// Record Button
 		{
@@ -1747,26 +1749,52 @@ render_left_panel(GlobalState *AppState)
 			if (colored_button(Label.c_str(), HalfButton, Color, Enabled)) toggle_recording(AppState);
 		}
 
-		ImGui::SameLine();
+		ImGui::SameLine(0.0f, ButtonGap);
+
+		// Load Model Button
+		{
+			bool ModelLoaded = !IsModelTransitioning && is_stt_model_loaded(&AppState->WhisperState);
+			ImVec4 Color = BUTTON_COLOR_GREY;
+			std::string Label = load_model_button_idle_label(AppState);
+			bool Enabled = !AppState->STTModelNames.empty() && !Busy;
+
+			if (ModelLoaded)
+			{
+				Color = BUTTON_COLOR_BLUE;
+				if (AppState->LoadModelHotkey.is_valid())
+				{
+					Label = "Unload Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
+				}
+				else
+				{
+					Label = "Unload Model";
+				}
+			}
+			if (IsModelTransitioning)
+			{
+				Color = BUTTON_COLOR_GREY;
+				Label = "Transferring model...";
+			}
+
+			if (colored_button(Label.c_str(), HalfButton, Color, Enabled)) toggle_stt_model_load(AppState);
+		}
+	}
+
+	// Stream + Manage Local Models Buttons (side by side)
+	{
+		ImVec2 HalfButton = ImVec2(
+			(ImGui::GetContentRegionAvail().x - ButtonGap) * 0.5f, 60.0f);
 
 		// Stream Button
 		{
 			ImVec4 Color = BUTTON_COLOR_GREEN;
-			std::string Label = stream_button_idle_label(AppState);
+			std::string Label = stream_button_label(AppState);
 			bool Enabled = AppState->IsStreaming ||
 				(!AppState->IsRecording && !AppState->PipelineActive.load());
 
 			if (AppState->IsStreaming)
 			{
 				Color = BUTTON_COLOR_RED;
-				if (AppState->StreamHotkey.is_valid())
-				{
-					Label = "Stop Streaming (" + hotkey_to_label(AppState->StreamHotkey) + ")";
-				}
-				else
-				{
-					Label = "Stop Streaming";
-				}
 			}
 			else if (IsModelTransitioning)
 			{
@@ -1776,57 +1804,39 @@ render_left_panel(GlobalState *AppState)
 
 			if (colored_button(Label.c_str(), HalfButton, Color, Enabled)) toggle_streaming(AppState);
 		}
-	}
 
-	// Cancel Record Button
-	{
-		bool Enabled = AppState->IsRecording;
-		std::string Label = cancel_record_button_idle_label(AppState);
+		ImGui::SameLine(0.0f, ButtonGap);
 
-		if (colored_button(Label.c_str(), SmallButton, BUTTON_COLOR_GREY, Enabled)) cancel_recording(AppState);
-	}
-
-	// Download Model Button
-	{
-		if (colored_button("Download Model", SmallButton, BUTTON_COLOR_GREY))
+		// Manage Local Models Button
 		{
-			AppState->Ui.Download.IsModalOpen = true;
-		}
-	}
-
-	// Load Model Button
-	{
-		bool ModelLoaded = !IsModelTransitioning && is_stt_model_loaded(&AppState->WhisperState);
-		ImVec4 Color = BUTTON_COLOR_GREY;
-		std::string Label = load_model_button_idle_label(AppState);
-		bool Enabled = !AppState->STTModelNames.empty() && !Busy;
-
-		if (ModelLoaded)
-		{
-			Color = BUTTON_COLOR_BLUE;
-			if (AppState->LoadModelHotkey.is_valid())
+			if (colored_button("Manage Local Models", HalfButton, BUTTON_COLOR_GREY))
 			{
-				Label = "Unload Model (" + hotkey_to_label(AppState->LoadModelHotkey) + ")";
-			}
-			else
-			{
-				Label = "Unload Model";
+				AppState->Ui.Download.IsModalOpen = true;
 			}
 		}
-		if (IsModelTransitioning)
-		{
-			Color = BUTTON_COLOR_GREY;
-			Label = "Transferring model...";
-		}
-
-		if (colored_button(Label.c_str(), BigButton, Color, Enabled)) toggle_stt_model_load(AppState);
 	}
 
-	// Configure Keyboard Shortcuts Button
+	// Cancel Record + Configure Keyboard Shortcuts Buttons (side by side)
 	{
-		if (colored_button("Configure Keyboard Shortcuts", ImVec2(-1.0f, 30.0f), BUTTON_COLOR_GREY))
+		ImVec2 HalfButton = ImVec2(
+			(ImGui::GetContentRegionAvail().x - ButtonGap) * 0.5f, 40.0f);
+
+		// Cancel Record Button
 		{
-			AppState->Ui.SettingsState.HotkeysModalOpen = true;
+			bool Enabled = AppState->IsRecording;
+			std::string Label = cancel_record_button_idle_label(AppState);
+
+			if (colored_button(Label.c_str(), HalfButton, BUTTON_COLOR_GREY, Enabled)) cancel_recording(AppState);
+		}
+
+		ImGui::SameLine(0.0f, ButtonGap);
+
+		// Configure Keyboard Shortcuts Button
+		{
+			if (colored_button("Configure Keyboard Shortcuts", HalfButton, BUTTON_COLOR_GREY))
+			{
+				AppState->Ui.SettingsState.HotkeysModalOpen = true;
+			}
 		}
 	}
 
@@ -2085,10 +2095,12 @@ render_transcribed_text_box(GlobalState *AppState, bool DrawTitle)
 {
 	UiRuntimeState *Ui = &AppState->Ui;
 
+	bool ContentChanged = false;
 	{
 		std::lock_guard<std::mutex> Lock(Ui->TranscribedTextMutex);
 		if (Ui->TranscribedTextSerial != Ui->TranscribedTextBoxSerial)
 		{
+			ContentChanged = true;
 			Ui->TranscribedTextBoxSerial = Ui->TranscribedTextSerial;
 			Ui->TranscribedTextBoxWords = Ui->TranscribedTextWords;
 
@@ -2107,15 +2119,21 @@ render_transcribed_text_box(GlobalState *AppState, bool DrawTitle)
 
 	if (DrawTitle) render_transcribed_text_title(AppState, 0.0f);
 
-	const float BoxHeight = ImGui::GetTextLineHeightWithSpacing() * 6.0f +
-		ImGui::GetStyle().FramePadding.y * 2.0f;
-
 	std::vector<ImVec4> WordRects;
 	WordRects.reserve(Ui->TranscribedTextBoxWords.size());
 
-	if (ImGui::BeginChild("##TranscribedTextConfidence", ImVec2(-1.0f, BoxHeight),
-		ImGuiChildFlags_AlwaysUseWindowPadding))
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, ImGui::GetStyle().FramePadding.y));
+	const bool BoxOpen = ImGui::BeginChild("##TranscribedTextConfidence", ImVec2(-1.0f, 0.0f),
+		ImGuiChildFlags_AlwaysUseWindowPadding);
+	ImGui::PopStyleVar();
+
+	if (BoxOpen)
 	{
+		// Auto-follow: when new text arrives and the view is at the bottom,
+		// keep it pinned to the bottom (streaming keeps the latest words
+		// visible). A user that scrolled up is never yanked back down.
+		const bool FollowBottom =
+			ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - ImGui::GetTextLineHeightWithSpacing();
 		// AllowWhenBlockedByActiveItem keeps hover alive mid-drag (the reason
 		// raw mouse-rect math was used before), while IsWindowHovered() still
 		// reports false when a modal/popup is open or a higher window (e.g. a
@@ -2152,6 +2170,11 @@ render_transcribed_text_box(GlobalState *AppState, bool DrawTitle)
 			LineStarted = true;
 		}
 		ImGui::PopStyleVar();
+
+		if (ContentChanged && FollowBottom && ImGui::GetScrollMaxY() > 0.0f)
+		{
+			ImGui::SetScrollY(ImGui::GetScrollMaxY());
+		}
 
 		const bool MouseOverText = WindowHovered && WordCount > 0 &&
 			transcribed_text_pos_over_text(WordRects, Mouse);
@@ -2199,10 +2222,9 @@ render_download_modal(GlobalState *AppState)
 
 	if (!D->IsModalOpen) return;
 
-	if (!ImGui::IsPopupOpen("Download Model"))
+	if (!ImGui::IsPopupOpen("Manage Local Models"))
 	{
-		ImGui::OpenPopup("Download Model");
-		D->ModalWidth = 0.0f;
+		ImGui::OpenPopup("Manage Local Models");
 	}
 
 	float LongestNameW = 0.0f;
@@ -2237,7 +2259,7 @@ render_download_modal(GlobalState *AppState)
 	ImGui::SetNextWindowPos(ImVec2(Display.x * 0.5f, Display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
 	bool Open = true;
-	if (ImGui::BeginPopupModal("Download Model", &Open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	if (ImGui::BeginPopupModal("Manage Local Models", &Open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 	{
 		if (!ImGui::IsPopupOpen("Overwrite Model?"))
 			modal_close_on_click_outside(&D->IsModalOpen);
@@ -2476,7 +2498,6 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 			ImGuiWindowFlags_NoScrollbar);
 	}
 	render_left_panel(AppState);
-	ImGui::Separator();
 	render_settings_panel(AppState);
 
 	float IconSize = ImGui::GetFontSize() * 1.35f;
@@ -2492,17 +2513,18 @@ render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 	update_status_button(AppState);
 	ImGui::EndChild();
 
+	float RightColumnY = Padding;
 	if (TwoColumns)
 	{
 		ImGui::SetCursorPos(ImVec2(Padding * 2.0f + ColumnWidth, Padding));
 	}
 	else
 	{
-		ImGui::SetCursorPos(ImVec2(Padding, ImGui::GetCursorPosY() + Padding));
+		RightColumnY = ImGui::GetCursorPosY();
+		ImGui::SetCursorPos(ImVec2(Padding, RightColumnY));
 	}
-	ImGui::BeginChild("##RightColumn", ImVec2(ColumnWidth, 0.0f),
-		ImGuiChildFlags_AutoResizeY,
-		ImGuiWindowFlags_NoScrollbar);
+	ImGui::BeginChild("##RightColumn",
+		ImVec2(ColumnWidth, Io.DisplaySize.y - RightColumnY - Padding));
 	render_transcribed_text_box(AppState, TwoColumns);
 	ImGui::EndChild();
 

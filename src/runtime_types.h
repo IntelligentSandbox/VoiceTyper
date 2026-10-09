@@ -190,7 +190,7 @@ enum RecordingHotkeyMode
 inline RecordingHotkeyMode
 default_recording_hotkey_mode()
 {
-	return RECORDING_HOTKEY_HOLD;
+	return RECORDING_HOTKEY_TOGGLE;
 }
 
 inline bool
