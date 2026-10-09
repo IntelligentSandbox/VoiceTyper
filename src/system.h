@@ -124,12 +124,22 @@ query_audio_input_devices(GlobalState *AppState)
 	}
 }
 
+inline bool cuda_plugin_installed();
+
 inline void
 query_inference_devices(GlobalState *AppState)
 {
 	AppState->InferenceDevices.clear();
 	AppState->InferenceDevices.push_back("CPU");
 	AppState->CurrentInferenceDeviceIndex = 0;
+
+	// Whether the background GPU probe (refresh_inference_devices) is expected
+	// to end on a GPU selection: saved GPU preference, or CUDA plugin present
+	// with no explicit CPU preference (refresh auto-selects the first GPU).
+	// The UI uses this to keep the first visible frame's layout identical to
+	// the post-probe layout (e.g. hiding the CPU-cores row that only exists
+	// for a CPU selection).
+	AppState->InferenceDeviceGpuExpected = cuda_plugin_installed();
 
 	std::string SavedDevice;
 	if (load_string_setting("inference_device", &SavedDevice))
@@ -138,6 +148,7 @@ query_inference_devices(GlobalState *AppState)
 		{
 			AppState->CurrentInferenceDeviceIndex = 0;
 			AppState->InferenceDevicePrefersCpu = true;
+			AppState->InferenceDeviceGpuExpected = false;
 		}
 		else
 		{
@@ -289,8 +300,8 @@ query_hotkey_settings(GlobalState *AppState)
 	AppState->StreamHotkey       = default_stream_hotkey();
 	AppState->LoadModelHotkey    = default_load_model_hotkey();
 	AppState->PasteHotkey        = default_paste_hotkey();
-	AppState->FontSizeUpHotkey   = {};
-	AppState->FontSizeDownHotkey = {};
+	AppState->FontSizeUpHotkey   = default_font_size_up_hotkey();
+	AppState->FontSizeDownHotkey = default_font_size_down_hotkey();
 	AppState->RecordHotkeyMode   = default_recording_hotkey_mode();
 
 	int Modifiers = 0, Key = 0;
@@ -373,6 +384,10 @@ query_hotkey_settings(GlobalState *AppState)
 	bool PreserveClipboard = false;
 	if (load_bool_setting("preserve_clipboard_on_paste", &PreserveClipboard))
 		AppState->PreserveClipboardOnPaste = PreserveClipboard;
+
+	bool CheckForUpdates = false;
+	if (load_bool_setting("check_for_updates_on_start", &CheckForUpdates))
+		AppState->CheckForUpdatesOnStart = CheckForUpdates;
 
 	int ClipboardRestoreDelayMs = 0;
 	if (load_int_setting("clipboard_restore_delay_ms", &ClipboardRestoreDelayMs))

@@ -246,6 +246,7 @@ struct CoreRuntimeState
 	bool CopyToClipboardWhenNoTarget;
 	bool PreserveClipboardOnPaste;
 	int ClipboardRestoreDelayMs;
+	bool CheckForUpdatesOnStart;
 
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;
@@ -260,6 +261,7 @@ struct CoreRuntimeState
 	std::thread InferenceDevicesThread;
 	std::string PendingInferenceDeviceName;
 	bool InferenceDevicePrefersCpu;
+	bool InferenceDeviceGpuExpected;
 
 	// Whisper Wrapper
 	int CurrentSTTModelIndex;

@@ -327,7 +327,7 @@ main(int, char **)
 	// init work above.
 	refresh_inference_devices(AppState);
 
-	start_update_check(AppState);
+	if (AppState->CheckForUpdatesOnStart) start_update_check(AppState);
 
 	const Uint64 AppUpdateIntervalTicks = performance_interval_for_hz(APP_UPDATE_HZ);
 	g_RenderIdleIntervalTicks = performance_interval_for_hz(RENDER_IDLE_REFRESH_HZ);

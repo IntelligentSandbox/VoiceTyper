@@ -1142,6 +1142,41 @@ render_settings_panel(GlobalState *AppState)
 		ImGui::Unindent(CheckboxTextIndent);
 	}
 
+	if (ImGui::Checkbox("Preserve original system clipboard when using paste text injection",
+		&AppState->PreserveClipboardOnPaste))
+	{
+		save_bool_setting("preserve_clipboard_on_paste", AppState->PreserveClipboardOnPaste);
+	}
+
+	if (AppState->PreserveClipboardOnPaste)
+	{
+		ImGui::Indent(CheckboxTextIndent);
+		ImGui::TextUnformatted("Restore Delay (ms)");
+		ImGui::SameLine();
+		HelpMarkStyle RestoreDelayMarkStyle = help_mark_default_style();
+		RestoreDelayMarkStyle.DiameterScale = 0.75f;
+		hover_help_mark(
+			"How long to wait after pasting before restoring the previous clipboard contents, "
+			"so the target program has time to read the pasted text.",
+			RestoreDelayMarkStyle);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
+		if (ImGui::InputInt("##ClipboardRestoreDelayMs", &AppState->ClipboardRestoreDelayMs, 10, 100))
+		{
+			if (AppState->ClipboardRestoreDelayMs < 0) AppState->ClipboardRestoreDelayMs = 0;
+			if (AppState->ClipboardRestoreDelayMs > 10000) AppState->ClipboardRestoreDelayMs = 10000;
+			save_int_setting("clipboard_restore_delay_ms", AppState->ClipboardRestoreDelayMs);
+		}
+		ImGui::Unindent(CheckboxTextIndent);
+	}
+
+	bool UseToggleMode = (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
+	if (ImGui::Checkbox("Use toggle for audio input start/stop", &UseToggleMode))
+	{
+		AppState->RecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
+		save_int_setting("record_hotkey_mode", (int)AppState->RecordHotkeyMode);
+	}
+
 	if (ImGui::Checkbox("Play sound when starting/stopping/cancelling recording",
 		&AppState->PlayRecordSound))
 	{
@@ -1228,42 +1263,10 @@ render_settings_panel(GlobalState *AppState)
 		save_bool_setting("copy_to_clipboard_when_no_target", AppState->CopyToClipboardWhenNoTarget);
 	}
 
-	if (ImGui::Checkbox("Preserve original system clipboard when using paste text injection",
-		&AppState->PreserveClipboardOnPaste))
+	if (ImGui::Checkbox("Check for updates on app start", &AppState->CheckForUpdatesOnStart))
 	{
-		save_bool_setting("preserve_clipboard_on_paste", AppState->PreserveClipboardOnPaste);
+		save_bool_setting("check_for_updates_on_start", AppState->CheckForUpdatesOnStart);
 	}
-
-	if (AppState->PreserveClipboardOnPaste)
-	{
-		ImGui::Indent(CheckboxTextIndent);
-		ImGui::TextUnformatted("Restore Delay (ms)");
-		ImGui::SameLine();
-		HelpMarkStyle RestoreDelayMarkStyle = help_mark_default_style();
-		RestoreDelayMarkStyle.DiameterScale = 0.75f;
-		hover_help_mark(
-			"How long to wait after pasting before restoring the previous clipboard contents, "
-			"so the target program has time to read the pasted text.",
-			RestoreDelayMarkStyle);
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
-		if (ImGui::InputInt("##ClipboardRestoreDelayMs", &AppState->ClipboardRestoreDelayMs, 10, 100))
-		{
-			if (AppState->ClipboardRestoreDelayMs < 0) AppState->ClipboardRestoreDelayMs = 0;
-			if (AppState->ClipboardRestoreDelayMs > 10000) AppState->ClipboardRestoreDelayMs = 10000;
-			save_int_setting("clipboard_restore_delay_ms", AppState->ClipboardRestoreDelayMs);
-		}
-		ImGui::Unindent(CheckboxTextIndent);
-	}
-
-	bool UseToggleMode = (AppState->RecordHotkeyMode == RECORDING_HOTKEY_TOGGLE);
-	if (ImGui::Checkbox("Use toggle mode (press key to start/stop, instead of holding)", &UseToggleMode))
-	{
-		AppState->RecordHotkeyMode = UseToggleMode ? RECORDING_HOTKEY_TOGGLE : RECORDING_HOTKEY_HOLD;
-		save_int_setting("record_hotkey_mode", (int)AppState->RecordHotkeyMode);
-	}
-
-	render_font_name_input(AppState);
 
 	float NumInputWidth = ImGui::GetFontSize() * 5.5f;
 
@@ -1276,6 +1279,8 @@ render_settings_panel(GlobalState *AppState)
 		if (AppState->UiFontSize > 72) AppState->UiFontSize = 72;
 		save_int_setting("ui_font_size", AppState->UiFontSize);
 	}
+
+	render_font_name_input(AppState);
 
 	if (effective_stt_engine_kind(AppState) != ENGINE_PARAKEET)
 	{
@@ -1506,10 +1511,10 @@ render_hotkeys_modal(GlobalState *AppState)
 				bool Capturing = S->Capture.IsCapturing && S->SelectedAction == Action;
 				bool ShowClear = H && H->is_valid() && !Capturing;
 
-				float ClusterWidth = ShortcutWidth;
-				if (ShowClear) ClusterWidth += RowSpacing + ClearWidth;
-				float AvailX = ImGui::GetContentRegionAvail().x;
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + AvailX - ClusterWidth);
+			float ClusterWidth = ShortcutWidth + RowSpacing + ClearWidth;
+			float ButtonWidth = ShowClear ? ShortcutWidth : ClusterWidth;
+			float AvailX = ImGui::GetContentRegionAvail().x;
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + AvailX - ClusterWidth);
 
 				std::string ShortcutLabel = "(none)";
 				ImVec4 ShortcutColor = BUTTON_COLOR_GREY;
@@ -1524,8 +1529,8 @@ render_hotkeys_modal(GlobalState *AppState)
 					ShortcutLabel = hotkey_to_label(*H);
 				}
 
-				std::string ButtonLabel = ShortcutLabel + "##Rebind";
-				if (colored_button(ButtonLabel.c_str(), ImVec2(ShortcutWidth, 0.0f), ShortcutColor))
+			std::string ButtonLabel = ShortcutLabel + "##Rebind";
+			if (colored_button(ButtonLabel.c_str(), ImVec2(ButtonWidth, 0.0f), ShortcutColor))
 				{
 					if (Capturing)
 					{
@@ -1781,8 +1786,6 @@ render_left_panel(GlobalState *AppState)
 		if (colored_button(Label.c_str(), SmallButton, BUTTON_COLOR_GREY, Enabled)) cancel_recording(AppState);
 	}
 
-	ImGui::Separator();
-
 	// Download Model Button
 	{
 		if (colored_button("Download Model", SmallButton, BUTTON_COLOR_GREY))
@@ -1827,31 +1830,6 @@ render_left_panel(GlobalState *AppState)
 		}
 	}
 
-	// Audio Input
-	{
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Audio Input Device");
-		ImGui::SameLine(SelectorLabelWidth);
-
-		if (AppState->AudioInputDeviceNames.empty())
-		{
-			static const std::vector<std::string> NoDevices = { "No Devices Found" };
-			int Dummy = 0;
-			ImGui::BeginDisabled();
-			ImGui::SetNextItemWidth(FullWidth.x);
-			string_combo("##AudioInput", &Dummy, NoDevices);
-			ImGui::EndDisabled();
-		}
-		else
-		{
-			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
-			if (Busy) ImGui::BeginDisabled();
-			ImGui::SetNextItemWidth(FullWidth.x);
-			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, AppState->AudioInputDeviceNames)) update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
-			if (Busy) ImGui::EndDisabled();
-		}
-	}
-
 	// STT Model
 	{
 		ImGui::AlignTextToFramePadding();
@@ -1875,6 +1853,31 @@ render_left_panel(GlobalState *AppState)
 			{
 				update_stt_model_selection(AppState, AppState->CurrentSTTModelIndex);
 			}
+			if (Busy) ImGui::EndDisabled();
+		}
+	}
+
+	// Audio Input
+	{
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Audio Input Device");
+		ImGui::SameLine(SelectorLabelWidth);
+
+		if (AppState->AudioInputDeviceNames.empty())
+		{
+			static const std::vector<std::string> NoDevices = { "No Devices Found" };
+			int Dummy = 0;
+			ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
+			string_combo("##AudioInput", &Dummy, NoDevices);
+			ImGui::EndDisabled();
+		}
+		else
+		{
+			int SelectedAudioDeviceIndex = AppState->CurrentAudioDeviceIndex;
+			if (Busy) ImGui::BeginDisabled();
+			ImGui::SetNextItemWidth(FullWidth.x);
+			if (string_combo("##AudioInput", &SelectedAudioDeviceIndex, AppState->AudioInputDeviceNames)) update_audio_input_selection(AppState, SelectedAudioDeviceIndex);
 			if (Busy) ImGui::EndDisabled();
 		}
 	}
@@ -1912,11 +1915,6 @@ render_left_panel(GlobalState *AppState)
 			ImGui::Combo("##InferenceDevice", &LoadingIdx, LoadingItems, 1);
 		}
 		if (Busy) ImGui::EndDisabled();
-		if (!DevicesLoaded)
-		{
-			ImGui::SameLine();
-			ImGui::TextDisabled("(loading GPU devices...)");
-		}
 
 		// CPU-only install on a platform that ships the modular CUDA plugin:
 		// offer the in-place GPU upgrade download.
@@ -1936,7 +1934,12 @@ render_left_panel(GlobalState *AppState)
 			ImGui::TextDisabled("(NVIDIA, large download)");
 		}
 
-		if (AppState->CurrentInferenceDeviceIndex == 0)
+		// Hold the CPU-cores row back until the GPU probe resolves when a GPU
+		// selection is expected: the index is 0 while the probe runs, so
+		// rendering the row now would make it (and everything below) shift
+		// away the moment the saved/auto GPU selection is published.
+		if (AppState->CurrentInferenceDeviceIndex == 0 &&
+			(DevicesLoaded || !AppState->InferenceDeviceGpuExpected))
 		{
 			ImGui::AlignTextToFramePadding();
 			ImGui::Text("CPU Cores for Inference");
@@ -1978,7 +1981,7 @@ model_filename_installed(GlobalState *AppState, const std::string &Filename)
 static ImVec4
 transcribed_word_confidence_color(float Confidence)
 {
-	if (Confidence >= 0.85f) return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	if (Confidence >= 0.85f) return ImGui::GetStyleColorVec4(ImGuiCol_Text);
 	if (Confidence >= 0.60f) return ImVec4(0.92f, 0.78f, 0.30f, 1.0f);
 	return ImVec4(0.92f, 0.35f, 0.35f, 1.0f);
 }

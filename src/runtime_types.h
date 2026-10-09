@@ -157,6 +157,24 @@ default_paste_hotkey()
 	return H;
 }
 
+inline HotkeyConfig
+default_font_size_up_hotkey()
+{
+	HotkeyConfig H = {};
+	H.Modifiers = HOTKEY_MOD_CTRL;
+	H.VirtualKey = APP_KEY_EQUALS;
+	return H;
+}
+
+inline HotkeyConfig
+default_font_size_down_hotkey()
+{
+	HotkeyConfig H = {};
+	H.Modifiers = HOTKEY_MOD_CTRL;
+	H.VirtualKey = APP_KEY_MINUS;
+	return H;
+}
+
 struct PasteHotkeyOverride
 {
 	std::string ProcessName;

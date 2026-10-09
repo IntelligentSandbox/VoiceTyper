@@ -68,6 +68,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->Ui.CrashDialogOpened = false;
 	AppState->Ui.PendingCrashDumps.clear();
 	AppState->InferenceDevicePrefersCpu = false;
+	AppState->InferenceDeviceGpuExpected = false;
 	AppState->PlayRecordSound = false;
 	AppState->ShowRecordIndicator = true;
 	AppState->RecordIndicatorDelayMs = RECORD_INDICATOR_DEFAULT_DELAY_MS;
@@ -76,8 +77,9 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->CancelSoundFreq = SOUND_DEFAULT_CANCEL_FREQ;
 	AppState->UseCharByCharInjection = false;
 	AppState->CopyToClipboardWhenNoTarget = false;
-	AppState->PreserveClipboardOnPaste = false;
+	AppState->PreserveClipboardOnPaste = true;
 	AppState->ClipboardRestoreDelayMs = 200;
+	AppState->CheckForUpdatesOnStart = true;
 	AppState->UiFontSize = 18;
 	AppState->Ui.FontReloadRequested = false;
 	AppState->Ui.LightMode = false;
