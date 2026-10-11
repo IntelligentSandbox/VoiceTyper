@@ -458,13 +458,13 @@ struct IVirtualDesktopManagerIndicator : public IUnknown
 	virtual HRESULT STDMETHODCALLTYPE MoveWindowToDesktop(HWND TopLevelWindow, const GUID *DesktopId) = 0;
 };
 
-// A popup window belongs to the virtual desktop that was current when it was
-// created; if the user switches desktops mid-session the pill stays behind on
-// the old one while hotkeys, capture and paste keep working everywhere. The
-// shell's IVirtualDesktopManager is not in the public headers, so the vtable
-// is declared above. Returns true when the window was destroyed because it
-// sits on a different desktop than the active one — the caller re-creates it,
-// which lands it on the current desktop.
+// Belt-and-suspenders for the unowned indicator window below: an unassigned
+// popup is desktop-agnostic (observed: IsWindowOnCurrentVirtualDesktop stays
+// TRUE across switches), but should the shell ever pin it to a specific
+// desktop (Task View move, future builds), this detects it and the caller
+// rebuilds the window, which clears the assignment again. The shell's
+// IVirtualDesktopManager is not in the public headers, so the vtable is
+// declared above. Returns true when the window was destroyed.
 static bool
 record_indicator_recreate_for_current_desktop()
 {
@@ -515,10 +515,16 @@ record_indicator_create()
 	}
 	if (!ClassRegistered) return false;
 
+	// No owner: an owned popup inherits its owner's virtual desktop (the
+	// launch desktop) and stays invisible when the user dictates from another
+	// one. An unowned popup carries no desktop assignment and shows on every
+	// desktop, which is what a global recording indicator needs. The periodic
+	// desktop re-check below still heals the window should the shell ever
+	// pin it to a specific desktop (Task View move, future builds).
 	Ri->Hwnd = CreateWindowExW(
 		WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
 		L"VoiceTyperIndicatorClass", L"VoiceTyper Record Indicator", WS_POPUP,
-		0, 0, 1, 1, g_MainHwnd, nullptr, Instance, nullptr);
+		0, 0, 1, 1, nullptr, nullptr, Instance, nullptr);
 
 	return Ri->Hwnd != nullptr;
 }
