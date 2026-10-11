@@ -2,6 +2,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #include <dwmapi.h>
 #include <d3d11.h>
 #include <cstdio>
@@ -911,6 +912,131 @@ record_indicator_shutdown()
 }
 
 // ---------------------------------------------------------------------------
+// System Tray (close-to-tray)
+// ---------------------------------------------------------------------------
+// With the CloseToTray setting enabled, WM_CLOSE hides the window instead of
+// destroying it and parks a notification-area icon (added on hide, removed on
+// restore). App updates (hotkeys, capture, transcription) keep running in the
+// main loop while hidden, so dictation is unaffected. Left click restores the
+// window; right click opens a menu with Open/Exit, where Exit funnels through
+// DestroyWindow -> WM_DESTROY so the normal save-placement + quit path runs.
+// The icon is also removed after the main loop, so no exit path (including an
+// updater-triggered exit while hidden) leaves a ghost icon behind.
+// ---------------------------------------------------------------------------
+#define WM_APP_TRAYICON (WM_APP + 1)
+
+struct TrayIconState
+{
+	bool Added;
+	UINT TaskbarCreatedMsg;
+	bool NoticeShown;
+	bool NoticeLoaded;
+};
+
+static TrayIconState g_Tray = {};
+
+static void
+tray_icon_add(bool ShowBalloon)
+{
+	NOTIFYICONDATAW Nid = {};
+	Nid.cbSize = sizeof(Nid);
+	Nid.hWnd = g_MainHwnd;
+	Nid.uID = 1;
+	Nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+	Nid.uCallbackMessage = WM_APP_TRAYICON;
+	Nid.hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101));
+	lstrcpynW(Nid.szTip, L"VoiceTyper", (int)(sizeof(Nid.szTip) / sizeof(Nid.szTip[0])));
+	if (ShowBalloon)
+	{
+		Nid.uFlags |= NIF_INFO;
+		lstrcpynW(Nid.szInfoTitle, L"VoiceTyper", (int)(sizeof(Nid.szInfoTitle) / sizeof(Nid.szInfoTitle[0])));
+		lstrcpynW(Nid.szInfo,
+			L"VoiceTyper is still running in the background. Click the tray icon to reopen it.",
+			(int)(sizeof(Nid.szInfo) / sizeof(Nid.szInfo[0])));
+		Nid.dwInfoFlags = NIIF_INFO;
+	}
+	Shell_NotifyIconW(g_Tray.Added ? NIM_MODIFY : NIM_ADD, &Nid);
+	g_Tray.Added = true;
+}
+
+static void
+tray_icon_remove()
+{
+	if (!g_Tray.Added) return;
+
+	NOTIFYICONDATAW Nid = {};
+	Nid.cbSize = sizeof(Nid);
+	Nid.hWnd = g_MainHwnd;
+	Nid.uID = 1;
+	Shell_NotifyIconW(NIM_DELETE, &Nid);
+	g_Tray.Added = false;
+}
+
+static void
+tray_restore(HWND Hwnd)
+{
+	tray_icon_remove();
+	ShowWindow(Hwnd, IsIconic(Hwnd) ? SW_RESTORE : SW_SHOW);
+	SetForegroundWindow(Hwnd);
+	g_RenderDueNow = true;
+	g_HasPresentedFrame = false;
+	InvalidateRect(Hwnd, nullptr, FALSE);
+}
+
+static void
+tray_show_menu(HWND Hwnd)
+{
+	POINT Pos = {};
+	GetCursorPos(&Pos);
+
+	// Required before TrackPopupMenu so the menu dismisses when the user
+	// clicks elsewhere; without it the menu can stay open when unfocused.
+	SetForegroundWindow(Hwnd);
+
+	HMENU Menu = CreatePopupMenu();
+	AppendMenuW(Menu, MF_STRING, 1, L"Open VoiceTyper");
+	AppendMenuW(Menu, MF_SEPARATOR, 0, nullptr);
+	AppendMenuW(Menu, MF_STRING, 2, L"Exit");
+
+	int Cmd = (int)TrackPopupMenu(Menu,
+		TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
+		Pos.x, Pos.y, 0, Hwnd, nullptr);
+
+	DestroyMenu(Menu);
+
+	if (Cmd == 1)
+	{
+		tray_restore(Hwnd);
+	}
+	else if (Cmd == 2)
+	{
+		DestroyWindow(Hwnd);
+	}
+}
+
+static void
+tray_hide_to_tray(HWND Hwnd)
+{
+	if (!g_Tray.NoticeLoaded)
+	{
+		g_Tray.NoticeLoaded = true;
+		bool Shown = false;
+		if (load_bool_setting("tray_notice_shown", &Shown)) g_Tray.NoticeShown = Shown;
+	}
+
+	bool FirstHide = !g_Tray.NoticeShown;
+	if (FirstHide)
+	{
+		g_Tray.NoticeShown = true;
+		save_bool_setting("tray_notice_shown", true);
+	}
+
+	save_window_placement(Hwnd);
+	tray_icon_add(FirstHide);
+	ShowWindow(Hwnd, SW_HIDE);
+}
+
+// ---------------------------------------------------------------------------
 // Window Procedure
 // ---------------------------------------------------------------------------
 static bool
@@ -962,6 +1088,15 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 	}
 
 	if (ImGui_ImplWin32_WndProcHandler(Hwnd, Msg, WParam, LParam)) return 1;
+
+	// The shell broadcasts TaskbarCreated after explorer.exe restarts; any tray
+	// icon we owned died with it, so re-register while hidden-to-tray.
+	if (g_Tray.TaskbarCreatedMsg && Msg == g_Tray.TaskbarCreatedMsg && g_Tray.Added)
+	{
+		g_Tray.Added = false;
+		tray_icon_add(false);
+		return 0;
+	}
 
 	switch (Msg)
 	{
@@ -1022,7 +1157,27 @@ wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 		if ((WParam & 0xfff0) == SC_KEYMENU) return 0;
 		break;
 
+	case WM_CLOSE:
+		if (g_AppState && g_AppState->CloseToTray)
+		{
+			tray_hide_to_tray(Hwnd);
+			return 0;
+		}
+		break;
+
+	case WM_APP_TRAYICON:
+		if (LParam == WM_LBUTTONUP || LParam == WM_LBUTTONDBLCLK)
+		{
+			tray_restore(Hwnd);
+		}
+		else if (LParam == WM_RBUTTONUP || LParam == WM_CONTEXTMENU)
+		{
+			tray_show_menu(Hwnd);
+		}
+		return 0;
+
 	case WM_DESTROY:
+		tray_icon_remove();
 		save_window_placement(Hwnd);
 		PostQuitMessage(0);
 		return 0;
@@ -1186,6 +1341,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 
 	if (AppState->CheckForUpdatesOnStart) start_update_check(AppState);
 
+	g_Tray.TaskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
+
 	bool Running = true;
 	while (Running)
 	{
@@ -1281,6 +1438,8 @@ WinMain(HINSTANCE Instance, HINSTANCE /*PrevInstance*/, LPSTR /*CmdLine*/, int /
 	}
 
 	record_indicator_shutdown();
+
+	tray_icon_remove();
 
 	perf_event("shutdown_begin");
 	{
