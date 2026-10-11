@@ -451,6 +451,50 @@ record_indicator_wnd_proc(HWND Hwnd, UINT Msg, WPARAM WParam, LPARAM LParam)
 	return DefWindowProcW(Hwnd, Msg, WParam, LParam);
 }
 
+struct IVirtualDesktopManagerIndicator : public IUnknown
+{
+	virtual HRESULT STDMETHODCALLTYPE IsWindowOnCurrentVirtualDesktop(HWND TopLevelWindow, BOOL *OnCurrentDesktop) = 0;
+	virtual HRESULT STDMETHODCALLTYPE GetWindowDesktopId(HWND TopLevelWindow, GUID *DesktopId) = 0;
+	virtual HRESULT STDMETHODCALLTYPE MoveWindowToDesktop(HWND TopLevelWindow, const GUID *DesktopId) = 0;
+};
+
+// A popup window belongs to the virtual desktop that was current when it was
+// created; if the user switches desktops mid-session the pill stays behind on
+// the old one while hotkeys, capture and paste keep working everywhere. The
+// shell's IVirtualDesktopManager is not in the public headers, so the vtable
+// is declared above. Returns true when the window was destroyed because it
+// sits on a different desktop than the active one — the caller re-creates it,
+// which lands it on the current desktop.
+static bool
+record_indicator_recreate_for_current_desktop()
+{
+	RecordIndicatorState *Ri = &g_RecordIndicator;
+	if (!Ri->Hwnd) return false;
+
+	static IVirtualDesktopManagerIndicator *Manager = nullptr;
+	static bool ManagerTried = false;
+	if (!ManagerTried)
+	{
+		ManagerTried = true;
+
+		HRESULT Hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+		if (Hr == RPC_E_CHANGED_MODE) Hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+		if (FAILED(Hr)) return false;
+
+		const CLSID ClsidVdm = {0xaa509086, 0x5ca9, 0x4c25, {0x8f, 0x95, 0x58, 0x9d, 0x3c, 0x07, 0xb4, 0x8a}};
+		const IID IidVdm = {0xa5cd92ff, 0x29be, 0x454c, {0x8d, 0x04, 0xd8, 0x28, 0x79, 0xfb, 0x3f, 0x1b}};
+		CoCreateInstance(ClsidVdm, nullptr, CLSCTX_ALL, IidVdm, (void **)&Manager);
+	}
+	if (!Manager) return false;
+
+	BOOL OnCurrent = FALSE;
+	if (FAILED(Manager->IsWindowOnCurrentVirtualDesktop(Ri->Hwnd, &OnCurrent)) || OnCurrent) return false;
+
+	DestroyWindow(Ri->Hwnd);
+	Ri->Hwnd = nullptr;
+	return true;
+}
+
 static bool
 record_indicator_create()
 {
@@ -796,6 +840,16 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 	if (ContentChanged)
 	{
 		record_indicator_render_base(IsStreaming, Ri->CachedDpi, ElapsedSeconds);
+	}
+
+	// The desktop re-check piggybacks on the periodic refresh and on every
+	// first show, so the pill follows the user across virtual desktops at up
+	// to the 1Hz refresh cadence while a session runs. The window is rebuilt
+	// before the create below, so it reappears on the current desktop within
+	// the same tick.
+	if ((DoRefresh || !Ri->Visible) && record_indicator_recreate_for_current_desktop())
+	{
+		Ri->Visible = false;
 	}
 
 	if (!record_indicator_alloc_frame(Ri->Width, Ri->Height)) return Idle;
