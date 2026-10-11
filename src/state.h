@@ -247,6 +247,7 @@ struct CoreRuntimeState
 	bool PreserveClipboardOnPaste;
 	int ClipboardRestoreDelayMs;
 	bool CheckForUpdatesOnStart;
+	bool CloseToTray;
 
 	// Audio - platform-agnostic
 	int CurrentAudioDeviceIndex;

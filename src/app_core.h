@@ -80,6 +80,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->PreserveClipboardOnPaste = true;
 	AppState->ClipboardRestoreDelayMs = 200;
 	AppState->CheckForUpdatesOnStart = true;
+	AppState->CloseToTray = false;
 	AppState->UiFontSize = 18;
 	AppState->Ui.FontReloadRequested = false;
 	AppState->Ui.LightMode = false;

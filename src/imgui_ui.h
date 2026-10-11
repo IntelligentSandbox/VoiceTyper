@@ -1269,6 +1269,13 @@ render_settings_panel(GlobalState *AppState)
 		save_bool_setting("check_for_updates_on_start", AppState->CheckForUpdatesOnStart);
 	}
 
+#ifdef _WIN32
+	if (ImGui::Checkbox("Close to system tray instead of exiting", &AppState->CloseToTray))
+	{
+		save_bool_setting("close_to_tray", AppState->CloseToTray);
+	}
+#endif
+
 	float NumInputWidth = ImGui::GetFontSize() * 5.5f;
 
 	ImGui::TextUnformatted("Font Size");

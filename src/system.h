@@ -389,6 +389,9 @@ query_hotkey_settings(GlobalState *AppState)
 	if (load_bool_setting("check_for_updates_on_start", &CheckForUpdates))
 		AppState->CheckForUpdatesOnStart = CheckForUpdates;
 
+	bool CloseToTray = false;
+	if (load_bool_setting("close_to_tray", &CloseToTray)) AppState->CloseToTray = CloseToTray;
+
 	int ClipboardRestoreDelayMs = 0;
 	if (load_int_setting("clipboard_restore_delay_ms", &ClipboardRestoreDelayMs))
 	{
