@@ -320,7 +320,7 @@ runtime_toggle_streaming(GlobalState *AppState)
 	if (AppState->IsStreaming)
 	{
 		AppState->IsStreaming = false;
-		stop_streaming_pipeline(AppState);
+		stop_streaming_pipeline(AppState, true);
 		return;
 	}
 
