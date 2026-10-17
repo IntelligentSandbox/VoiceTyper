@@ -10,3 +10,4 @@ docs/
 compile_commands.json
 result*
 *.err
+*.obj
