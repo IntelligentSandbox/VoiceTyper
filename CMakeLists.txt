@@ -43,6 +43,7 @@ message(STATUS "VoiceTyper version: ${VOICETYPER_VERSION} (full: ${VOICETYPER_VE
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------------------------------------------------------------------------
 # Build options

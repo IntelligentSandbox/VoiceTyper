@@ -1,0 +1,8 @@
+CompileFlags:
+  CompilationDatabase: build/cpu
+
+---
+If:
+  PathMatch: src/external/
+Diagnostics:
+  Suppress: "*"
