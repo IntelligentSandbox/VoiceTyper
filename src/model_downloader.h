@@ -1,11 +1,12 @@
 #pragma once
 
+#include "base.h"
 #include "host_services.h"
 #include "state.h"
 
 inline bool
 start_model_download(GlobalState *AppState, const std::string &ModelName,
-	const std::string &Url, const std::string &DestPath, int64_t ExpectedSize)
+	const std::string &Url, const std::string &DestPath, i64 ExpectedSize)
 {
 	if (AppState->Ui.Download.IsRunning.load()) return false;
 	if (AppState->Ui.Download.Thread.joinable()) AppState->Ui.Download.Thread.join();

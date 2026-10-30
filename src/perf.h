@@ -26,8 +26,9 @@
 // samples[], peaks, cpu totals and tick stats. Intended to be read by humans
 // and agents alike.
 
+#include "base.h"
+
 #include <chrono>
-#include <cstdint>
 
 #ifdef _WIN32
 	#ifdef VOICETYPER_PERF
@@ -50,7 +51,7 @@ perf_clock_origin()
 	return Origin;
 }
 
-inline int64_t
+inline i64
 perf_now_ns()
 {
 	auto Now = std::chrono::steady_clock::now();
@@ -65,8 +66,8 @@ perf_now_ms()
 
 struct PerfMemorySnapshot
 {
-	uint64_t WorkingSetBytes;
-	uint64_t PrivateBytes;
+	u64 WorkingSetBytes;
+	u64 PrivateBytes;
 };
 
 struct PerfCpuSnapshot
@@ -79,7 +80,7 @@ struct PerfCpuSnapshot
 
 struct PerfTickStats
 {
-	int64_t Count;
+	i64 Count;
 	double LastMs;
 	double MinMs;
 	double MaxMs;
@@ -105,8 +106,8 @@ struct PerfEvent
 	double DurationMs;
 	double CpuTotalMs;
 	double CpuDeltaMs;
-	uint64_t WorkingSetBytes;
-	uint64_t PrivateBytes;
+	u64 WorkingSetBytes;
+	u64 PrivateBytes;
 };
 
 struct PerfSample
@@ -114,8 +115,8 @@ struct PerfSample
 	double TimeMs;
 	double CpuTotalMs;
 	float CpuPct;
-	uint64_t WorkingSetBytes;
-	uint64_t PrivateBytes;
+	u64 WorkingSetBytes;
+	u64 PrivateBytes;
 };
 
 inline constexpr int PERF_EVENT_CAPACITY   = 4096;
@@ -129,21 +130,21 @@ struct PerfState
 
 	PerfEvent Events[PERF_EVENT_CAPACITY];
 	int EventCount;
-	uint64_t EventsDropped;
+	u64 EventsDropped;
 
 	PerfSample Samples[PERF_SAMPLE_CAPACITY];
 	int SampleCount;
-	uint64_t SamplesDropped;
+	u64 SamplesDropped;
 
-	int64_t TickCount;
+	i64 TickCount;
 	double TickLastMs;
 	double TickMinMs;
 	double TickMaxMs;
 	double TickSumMs;
-	int64_t TickHistMs[PERF_TICK_HIST_BUCKETS];
+	i64 TickHistMs[PERF_TICK_HIST_BUCKETS];
 
-	uint64_t PeakWorkingSetBytes;
-	uint64_t PeakPrivateBytes;
+	u64 PeakWorkingSetBytes;
+	u64 PeakPrivateBytes;
 
 	double LastSampleCpuTotalMs;
 	bool HasLastSampleCpu;
@@ -185,8 +186,8 @@ perf_read_process_memory(PerfMemorySnapshot *Out)
 		return false;
 	}
 
-	Out->WorkingSetBytes = (uint64_t)Counters.WorkingSetSize;
-	Out->PrivateBytes = (uint64_t)Counters.PrivateUsage;
+	Out->WorkingSetBytes = (u64)Counters.WorkingSetSize;
+	Out->PrivateBytes = (u64)Counters.PrivateUsage;
 	return true;
 #else
 	Out->WorkingSetBytes = 0;
@@ -343,9 +344,9 @@ perf_tick_percentile_locked(const PerfState &State, double Percent)
 {
 	if (State.TickCount <= 0) return 0.0;
 
-	int64_t Rank = (int64_t)(State.TickCount * Percent / 100.0);
+	i64 Rank = (i64)(State.TickCount * Percent / 100.0);
 	if (Rank < 1) Rank = 1;
-	int64_t Seen = 0;
+	i64 Seen = 0;
 	for (int i = 0; i < PERF_TICK_HIST_BUCKETS; i++)
 	{
 		Seen += State.TickHistMs[i];
@@ -561,7 +562,7 @@ perf_finish()
 	perf_write_report();
 }
 
-inline uint64_t
+inline u64
 perf_peak_private_bytes()
 {
 	PerfState &State = perf_state();
@@ -569,7 +570,7 @@ perf_peak_private_bytes()
 	return State.PeakPrivateBytes;
 }
 
-inline uint64_t
+inline u64
 perf_peak_working_set_bytes()
 {
 	PerfState &State = perf_state();
@@ -631,13 +632,13 @@ perf_finish()
 {
 }
 
-inline uint64_t
+inline u64
 perf_peak_private_bytes()
 {
 	return 0;
 }
 
-inline uint64_t
+inline u64
 perf_peak_working_set_bytes()
 {
 	return 0;

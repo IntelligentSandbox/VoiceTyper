@@ -1,5 +1,6 @@
 #define NOMINMAX
 
+#include "base.h"
 #include "host_services.h"
 #include "perf.h"
 #include "state.h"
@@ -311,7 +312,7 @@ parse_options(int ArgCount, char **Args, BenchOptions *Options)
 }
 
 static bool
-read_file_bytes(const std::string &Path, std::vector<uint8_t> *OutBytes, std::string *Error)
+read_file_bytes(const std::string &Path, std::vector<u8> *OutBytes, std::string *Error)
 {
 	std::ifstream File(Path, std::ios::binary | std::ios::ate);
 	if (!File)
@@ -338,21 +339,21 @@ read_file_bytes(const std::string &Path, std::vector<uint8_t> *OutBytes, std::st
 	return true;
 }
 
-static uint16_t
-read_le_u16(const uint8_t *Data)
+static u16
+read_le_u16(const u8 *Data)
 {
-	return (uint16_t)(Data[0] | (Data[1] << 8));
+	return (u16)(Data[0] | (Data[1] << 8));
 }
 
-static uint32_t
-read_le_u32(const uint8_t *Data)
+static u32
+read_le_u32(const u8 *Data)
 {
-	return (uint32_t)Data[0] | ((uint32_t)Data[1] << 8) | ((uint32_t)Data[2] << 16) |
-		((uint32_t)Data[3] << 24);
+	return (u32)Data[0] | ((u32)Data[1] << 8) | ((u32)Data[2] << 16) |
+		((u32)Data[3] << 24);
 }
 
 static bool
-chunk_id_equals(const uint8_t *Data, const char *Id)
+chunk_id_equals(const u8 *Data, const char *Id)
 {
 	return std::memcmp(Data, Id, 4) == 0;
 }
@@ -360,7 +361,7 @@ chunk_id_equals(const uint8_t *Data, const char *Id)
 static bool
 load_wav_mono_16khz(const std::string &Path, std::vector<float> *OutSamples, std::string *Error)
 {
-	std::vector<uint8_t> Bytes;
+	std::vector<u8> Bytes;
 	if (!read_file_bytes(Path, &Bytes, Error)) return false;
 
 	if (Bytes.size() < 12 || !chunk_id_equals(Bytes.data(), "RIFF") || !chunk_id_equals(Bytes.data() + 8, "WAVE"))
@@ -371,19 +372,19 @@ load_wav_mono_16khz(const std::string &Path, std::vector<float> *OutSamples, std
 
 	bool FoundFmt = false;
 	bool FoundData = false;
-	uint16_t FormatTag = 0;
-	uint16_t ChannelCount = 0;
-	uint32_t SampleRate = 0;
-	uint16_t BitsPerSample = 0;
-	uint16_t BlockAlign = 0;
-	const uint8_t *DataBytes = nullptr;
-	uint32_t DataByteCount = 0;
+	u16 FormatTag = 0;
+	u16 ChannelCount = 0;
+	u32 SampleRate = 0;
+	u16 BitsPerSample = 0;
+	u16 BlockAlign = 0;
+	const u8 *DataBytes = nullptr;
+	u32 DataByteCount = 0;
 	size_t Offset = 12;
 
 	while (Offset + 8 <= Bytes.size())
 	{
-		const uint8_t *Chunk = Bytes.data() + Offset;
-		uint32_t ChunkSize = read_le_u32(Chunk + 4);
+		const u8 *Chunk = Bytes.data() + Offset;
+		u32 ChunkSize = read_le_u32(Chunk + 4);
 		size_t ChunkDataOffset = Offset + 8;
 		if (ChunkDataOffset + ChunkSize > Bytes.size())
 		{
@@ -399,7 +400,7 @@ load_wav_mono_16khz(const std::string &Path, std::vector<float> *OutSamples, std
 				return false;
 			}
 
-			const uint8_t *Fmt = Bytes.data() + ChunkDataOffset;
+			const u8 *Fmt = Bytes.data() + ChunkDataOffset;
 			FormatTag = read_le_u16(Fmt);
 			ChannelCount = read_le_u16(Fmt + 2);
 			SampleRate = read_le_u32(Fmt + 4);
@@ -440,7 +441,7 @@ load_wav_mono_16khz(const std::string &Path, std::vector<float> *OutSamples, std
 		OutSamples->resize(DataByteCount / 2);
 		for (size_t i = 0; i < OutSamples->size(); i++)
 		{
-			uint16_t Raw = read_le_u16(DataBytes + i * 2);
+			u16 Raw = read_le_u16(DataBytes + i * 2);
 			int Sample = Raw >= 32768 ? (int)Raw - 65536 : (int)Raw;
 			(*OutSamples)[i] = (float)Sample / 32768.0f;
 		}
@@ -453,7 +454,7 @@ load_wav_mono_16khz(const std::string &Path, std::vector<float> *OutSamples, std
 		OutSamples->resize(DataByteCount / 4);
 		for (size_t i = 0; i < OutSamples->size(); i++)
 		{
-			uint32_t Raw = read_le_u32(DataBytes + i * 4);
+			u32 Raw = read_le_u32(DataBytes + i * 4);
 			float Sample = 0.0f;
 			std::memcpy(&Sample, &Raw, sizeof(Sample));
 			(*OutSamples)[i] = Sample;
@@ -815,8 +816,8 @@ run_capture_latency_bench(const BenchOptions &Options)
 
 		std::thread CaptureThread(platform_audio_capture, &AppState.Platform, &AppState, DeviceIndex);
 
-		const int64_t FirstAudioTimeoutMs = 4000;
-		int64_t WaitedMs = 0;
+		const i64 FirstAudioTimeoutMs = 4000;
+		i64 WaitedMs = 0;
 		while (AppState.LastRecordFirstAudioMs.load() < 0.0 && WaitedMs < FirstAudioTimeoutMs)
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -826,7 +827,7 @@ run_capture_latency_bench(const BenchOptions &Options)
 		std::this_thread::sleep_for(std::chrono::milliseconds(150));
 
 		std::chrono::steady_clock::time_point StopStart = std::chrono::steady_clock::now();
-		int64_t StopRequestNs = perf_now_ns();
+		i64 StopRequestNs = perf_now_ns();
 		AppState.CaptureRunning.store(false);
 		CaptureThread.join();
 		double StopMs = elapsed_ms(StopStart, std::chrono::steady_clock::now());
@@ -897,8 +898,8 @@ extern void *bench_real_platform_get_foreground_window(PlatformRuntimeState *Pla
 static std::vector<float> g_SoakSamples;
 static std::atomic<bool> g_SoakSynthActive{false};
 static std::atomic<bool> g_SoakFast{false};
-static std::atomic<int64_t> g_SoakTakeSamples{0};
-static std::atomic<int64_t> g_SoakFedSamples{0};
+static std::atomic<i64> g_SoakTakeSamples{0};
+static std::atomic<i64> g_SoakFedSamples{0};
 
 static_assert(AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS / 1000 <= 2048,
 	"soak synthetic capture chunk buffer is too small");
@@ -910,19 +911,19 @@ bool platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppStat
 	float Chunk[2048];
 	const int ChunkSamples = AUDIO_CAPTURE_SAMPLE_RATE * AUDIO_CAPTURE_BUFFER_MS / 1000;
 	const size_t SourceLength = g_SoakSamples.size();
-	const int64_t Target = g_SoakTakeSamples.load();
+	const i64 Target = g_SoakTakeSamples.load();
 	g_SoakFedSamples.store(0);
 	bool First = true;
 
 	while (AppState->CaptureRunning.load())
 	{
-		int64_t Fed = g_SoakFedSamples.load();
+		i64 Fed = g_SoakFedSamples.load();
 		if (Fed >= Target) break;
 
 		int Count = ChunkSamples;
-		if ((int64_t)Count > Target - Fed) Count = (int)(Target - Fed);
+		if ((i64)Count > Target - Fed) Count = (int)(Target - Fed);
 
-		size_t Source = (size_t)(Fed % (int64_t)SourceLength);
+		size_t Source = (size_t)(Fed % (i64)SourceLength);
 		for (int i = 0; i < Count; i++)
 		{
 			Chunk[i] = g_SoakSamples[Source];
@@ -996,7 +997,7 @@ soak_sample_state(GlobalState *AppState, double *PrivateMb, double *WorkingMb, i
 static bool
 soak_wait_pipeline_idle(GlobalState *AppState, int TimeoutMs)
 {
-	int64_t WaitedMs = 0;
+	i64 WaitedMs = 0;
 	while (AppState->PipelineActive.load())
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -1042,8 +1043,8 @@ run_leak_soak_bench(const BenchOptions &Options, const std::vector<float> &Sampl
 		}
 	}
 
-	int64_t TakeSamples = (int64_t)Samples.size();
-	if (Options.HasTakeMs) TakeSamples = (int64_t)Options.SoakTakeMs * AUDIO_CAPTURE_SAMPLE_RATE / 1000;
+	i64 TakeSamples = (i64)Samples.size();
+	if (Options.HasTakeMs) TakeSamples = (i64)Options.SoakTakeMs * AUDIO_CAPTURE_SAMPLE_RATE / 1000;
 
 	g_SoakSamples = Samples;
 	g_SoakFast.store(Options.SoakFast);

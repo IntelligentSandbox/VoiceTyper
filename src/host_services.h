@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base.h"
 #include "runtime_types.h"
 
 #include <vector>
@@ -14,7 +15,7 @@ std::string platform_ggml_backend_library_path(const std::string &SearchDir, con
 void platform_init_crash_diagnostics();
 void platform_shutdown_crash_diagnostics();
 void platform_open_folder_selecting_file(const std::string &FilePath);
-void platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, int64_t ExpectedSize);
+void platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, i64 ExpectedSize);
 void platform_cancel_model_download(GlobalState *AppState);
 bool platform_http_get_string(const std::string &Url, std::string *OutBody,
 	const std::string *IfNoneMatch = nullptr, std::string *OutEtag = nullptr,

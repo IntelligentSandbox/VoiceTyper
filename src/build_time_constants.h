@@ -1,9 +1,9 @@
 #pragma once
 
+#include "base.h"
 #include "imgui.h"
 #include "runtime_types.h"
 
-#include <cstdint>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -179,13 +179,13 @@ inline constexpr const char *VAD_HF_BASE_URL =
 	"https://huggingface.co/ggml-org/whisper-vad/resolve/main";
 inline constexpr const char *VAD_MODEL_FILENAME     = "ggml-silero-v5.1.2.bin";
 inline constexpr const char *VAD_MODEL_DISPLAY_NAME = "Silero VAD v5.1.2";
-inline constexpr int64_t VAD_MODEL_SIZE_BYTES       = 885LL * 1024;
+inline constexpr i64 VAD_MODEL_SIZE_BYTES       = 885LL * 1024;
 
 struct CatalogModel
 {
 	const char *Name;
 	const char *Description;
-	int64_t     SizeBytes;
+	i64     SizeBytes;
 	bool        IsEnglishOnly;
 };
 

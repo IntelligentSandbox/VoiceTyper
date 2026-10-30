@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cstdint>
+#include "base.h"
+
 #include <string>
 
-using AppHotkeyModifiers = uint32_t;
-using AppKeyCode = uint32_t;
+using AppHotkeyModifiers = u32;
+using AppKeyCode = u32;
 using PlatformWindowHandle = void*;
 
 constexpr AppHotkeyModifiers HOTKEY_MOD_CTRL  = 0x01;
@@ -84,7 +85,7 @@ struct PlatformFontInfo
 struct PlatformFileInfo
 {
 	std::string Name;
-	int64_t SizeBytes;
+	i64 SizeBytes;
 };
 
 struct PlatformRuntimeState

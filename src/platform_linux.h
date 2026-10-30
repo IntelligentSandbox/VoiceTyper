@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app_icon.h"
+#include "base.h"
 #include "host_services.h"
 #include "state.h"
 
@@ -264,7 +265,7 @@ linux_app_key_to_keysym(AppKeyCode Key)
 }
 
 static KeySym
-linux_utf8_to_keysym(uint32_t Codepoint)
+linux_utf8_to_keysym(u32 Codepoint)
 {
 	if (Codepoint == '\n')
 	{
@@ -277,7 +278,7 @@ linux_utf8_to_keysym(uint32_t Codepoint)
 	return 0x01000000u | Codepoint;
 }
 
-static uint32_t
+static u32
 linux_utf8_next_codepoint(const char *&Text)
 {
 	unsigned char Lead = (unsigned char)*Text;
@@ -286,7 +287,7 @@ linux_utf8_next_codepoint(const char *&Text)
 		return 0;
 	}
 
-	uint32_t Codepoint = 0;
+	u32 Codepoint = 0;
 	int Extra = 0;
 	if (Lead < 0x80)
 	{
@@ -400,7 +401,7 @@ platform_inject_text(PlatformRuntimeState *Platform, void *Window, const char *U
 			const char *Cursor = Utf8;
 			for (;;)
 			{
-				uint32_t Codepoint = linux_utf8_next_codepoint(Cursor);
+				u32 Codepoint = linux_utf8_next_codepoint(Cursor);
 				if (Codepoint == 0)
 				{
 					break;
@@ -787,7 +788,7 @@ platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs)
 			return;
 		}
 
-		std::vector<int16_t> Buffer((size_t)NumSamples);
+		std::vector<i16> Buffer((size_t)NumSamples);
 
 		const float PeakAmplitude = (FixedVolume / 100.0f) * 32767.0f;
 		const float Pi2 = 6.2831853f;
@@ -821,11 +822,11 @@ platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs)
 			{
 				Sample = -32768.0f;
 			}
-			Buffer[(size_t)i] = (int16_t)Sample;
+			Buffer[(size_t)i] = (i16)Sample;
 		}
 
 		SDL_ClearQueuedAudio(Device);
-		SDL_QueueAudio(Device, Buffer.data(), (Uint32)(Buffer.size() * sizeof(int16_t)));
+		SDL_QueueAudio(Device, Buffer.data(), (Uint32)(Buffer.size() * sizeof(i16)));
 		SDL_PauseAudioDevice(Device, 0);
 
 		while (SDL_GetQueuedAudioSize(Device) > 0)
@@ -1040,8 +1041,8 @@ platform_sdl_capture_callback(void *UserData, Uint8 *Stream, int Len)
 	SdlCaptureContext *Context = (SdlCaptureContext *)UserData;
 	if (!Context || !Context->AppState || !Stream || Len <= 0) return;
 
-	int SampleCount = Len / (int)sizeof(int16_t);
-	const int16_t *Cursor = (const int16_t *)Stream;
+	int SampleCount = Len / (int)sizeof(i16);
+	const i16 *Cursor = (const i16 *)Stream;
 
 	float Converted[2048];
 	const int ConvertedCapacity = (int)(sizeof(Converted) / sizeof(Converted[0]));
@@ -1573,13 +1574,13 @@ platform_open_folder_selecting_file(const std::string &)
 // ---------------------------------------------------------------------------
 
 static void
-linux_terminate_child(int64_t Pid)
+linux_terminate_child(i64 Pid)
 {
 	if (Pid > 0) kill((pid_t)Pid, SIGTERM);
 }
 
 inline void
-platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, int64_t ExpectedSize)
+platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, i64 ExpectedSize)
 {
 	AppState->Ui.Download.DownloadedBytes.store(0);
 	AppState->Ui.Download.TotalBytes.store(ExpectedSize);
@@ -1600,7 +1601,7 @@ platform_download_file_thread(GlobalState *AppState, std::string Url, std::strin
 		_exit(127);
 	}
 
-	AppState->Ui.Download.ChildPid.store((int64_t)Pid);
+	AppState->Ui.Download.ChildPid.store((i64)Pid);
 
 	int ExitStatus = 0;
 	bool Canceled = false;
@@ -1778,7 +1779,7 @@ platform_update_download_thread(GlobalState *AppState, std::string Url, std::str
 		return;
 	}
 
-	U->ChildPid.store((int64_t)Pid);
+	U->ChildPid.store((i64)Pid);
 
 	int ExitStatus = 0;
 	bool Canceled = false;
@@ -1925,7 +1926,7 @@ platform_cuda_plugin_download_run(GlobalState *AppState, const std::string &Url,
 		return;
 	}
 
-	P->ChildPid.store((int64_t)Pid);
+	P->ChildPid.store((i64)Pid);
 
 	int ExitStatus = 0;
 	bool Canceled = false;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base.h"
 #include "host_services.h"
 #include "state.h"
 #include "perf.h"
@@ -586,7 +587,7 @@ platform_list_files(const std::string &Dir)
 struct WaveInBuffer
 {
 	WAVEHDR Header;
-	std::vector<int16_t> Data;
+	std::vector<i16> Data;
 };
 
 struct AudioPipelineContext
@@ -681,7 +682,7 @@ win32_open_warm_capture_locked(int DeviceIndex)
 		Buf.Data.resize(SamplesPerBuffer);
 		memset(&Buf.Header, 0, sizeof(WAVEHDR));
 		Buf.Header.lpData         = reinterpret_cast<LPSTR>(Buf.Data.data());
-		Buf.Header.dwBufferLength = (DWORD)(SamplesPerBuffer * sizeof(int16_t));
+		Buf.Header.dwBufferLength = (DWORD)(SamplesPerBuffer * sizeof(i16));
 
 		waveInPrepareHeader(g_WarmCapture.WaveInHandle, &Buf.Header, sizeof(WAVEHDR));
 	}
@@ -693,7 +694,7 @@ static void
 win32_harvest_wavein_buffers(
 	AudioPipelineContext *PipeCtx,
 	GlobalState *AppState,
-	int64_t RequestNs,
+	i64 RequestNs,
 	bool *GotFirstSamples,
 	bool Requeue)
 {
@@ -704,10 +705,10 @@ win32_harvest_wavein_buffers(
 		WAVEHDR &Hdr = (*PipeCtx->Buffers)[i].Header;
 		if (!(Hdr.dwFlags & WHDR_DONE)) continue;
 
-		int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(int16_t));
+		int SamplesGot = (int)(Hdr.dwBytesRecorded / sizeof(i16));
 		if (SamplesGot > 0)
 		{
-			const int16_t *Src = (*PipeCtx->Buffers)[i].Data.data();
+			const i16 *Src = (*PipeCtx->Buffers)[i].Data.data();
 			float Converted[SamplesPerBuffer];
 			for (int j = 0; j < SamplesGot; j++)
 			{
@@ -754,7 +755,7 @@ platform_audio_capture(PlatformRuntimeState *Platform, GlobalState *AppState, in
 {
 	(void)Platform;
 
-	const int64_t RequestNs = AppState->PipelineRequestNs.load();
+	const i64 RequestNs = AppState->PipelineRequestNs.load();
 	bool GotFirstSamples = false;
 
 	AudioPipelineContext PipeCtx = {};
@@ -1163,8 +1164,8 @@ win32_http_close(HINTERNET Request, HINTERNET Connect)
 
 static bool
 win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
-	std::atomic<int64_t> *Downloaded, std::atomic<int64_t> *Total, std::atomic<bool> *Cancel,
-	int64_t StartOffset = 0, const std::string *IfNoneMatch = nullptr,
+	std::atomic<i64> *Downloaded, std::atomic<i64> *Total, std::atomic<bool> *Cancel,
+	i64 StartOffset = 0, const std::string *IfNoneMatch = nullptr,
 	std::string *OutEtag = nullptr, bool *OutNotModified = nullptr)
 {
 	std::wstring WideUrl(Url.begin(), Url.end());
@@ -1264,7 +1265,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		return false;
 	}
 
-	int64_t Offset = StartOffset;
+	i64 Offset = StartOffset;
 	if (StartOffset > 0)
 	{
 		if (StatusCode == 206)
@@ -1290,7 +1291,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 		}
 	}
 
-	int64_t ContentLength = 0;
+	i64 ContentLength = 0;
 	wchar_t LengthBuf[32] = {};
 	DWORD LengthSize = sizeof(LengthBuf);
 	if (WinHttpQueryHeaders(Request,
@@ -1307,7 +1308,7 @@ win32_http_get(const std::string &Url, FILE *File, std::string *OutBody,
 
 	const DWORD BufSize = 256 * 1024;
 	std::vector<char> Buffer(BufSize);
-	int64_t TotalRead = 0;
+	i64 TotalRead = 0;
 
 	for (;;)
 	{
@@ -1361,7 +1362,7 @@ platform_http_get_string(const std::string &Url, std::string *OutBody,
 }
 
 inline void
-platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, int64_t ExpectedSize)
+platform_download_file_thread(GlobalState *AppState, std::string Url, std::string DestPath, i64 ExpectedSize)
 {
 	AppState->Ui.Download.DownloadedBytes.store(0);
 	AppState->Ui.Download.TotalBytes.store(ExpectedSize);
@@ -1388,7 +1389,7 @@ platform_download_file_thread(GlobalState *AppState, std::string Url, std::strin
 			if (AppState->Ui.Download.CancelRequested.load()) break;
 		}
 
-		int64_t BytesOnDisk = AppState->Ui.Download.DownloadedBytes.load();
+		i64 BytesOnDisk = AppState->Ui.Download.DownloadedBytes.load();
 
 		FILE *File = nullptr;
 		if (BytesOnDisk > 0) fopen_s(&File, PartPath.c_str(), "r+b");
@@ -1601,7 +1602,7 @@ platform_cuda_plugin_download_run(GlobalState *AppState, const std::string &Url,
 			if (P->CancelRequested.load()) break;
 		}
 
-		int64_t BytesOnDisk = P->DownloadedBytes.load();
+		i64 BytesOnDisk = P->DownloadedBytes.load();
 
 		FILE *File = nullptr;
 		if (BytesOnDisk > 0) fopen_s(&File, PartPath.c_str(), "r+b");

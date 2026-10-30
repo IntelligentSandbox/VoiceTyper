@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "base.h"
 #include "state.h"
 #include "input.h"
 #include "perf.h"
@@ -643,8 +644,8 @@ render_update_modal(GlobalState *AppState)
 
 		if (U->DownloadRunning.load())
 		{
-			int64_t Done = U->DownloadedBytes.load();
-			int64_t Total = U->TotalBytes.load();
+			i64 Done = U->DownloadedBytes.load();
+			i64 Total = U->TotalBytes.load();
 			float Fraction = Total > 0 ? (float)((double)Done / (double)Total) : 0.0f;
 			char Overlay[64];
 			snprintf(Overlay, sizeof(Overlay), "%.1f / %.1f MB",
@@ -804,8 +805,8 @@ render_cuda_plugin_modal(GlobalState *AppState)
 			}
 			else
 			{
-				int64_t Done = P->DownloadedBytes.load();
-				int64_t Total = P->TotalBytes.load();
+				i64 Done = P->DownloadedBytes.load();
+				i64 Total = P->TotalBytes.load();
 				float Fraction = Total > 0 ? (float)((double)Done / (double)Total) : 0.0f;
 				char Overlay[64];
 				snprintf(Overlay, sizeof(Overlay), "%.1f / %.1f MB",
@@ -1693,7 +1694,7 @@ format_timing_ms(double Ms)
 }
 
 static std::string
-format_memory_mb(uint64_t Bytes)
+format_memory_mb(u64 Bytes)
 {
 	char Buf[64];
 	snprintf(Buf, sizeof(Buf), "%.1f MB", (double)Bytes / (1024.0 * 1024.0));
@@ -1973,7 +1974,7 @@ render_left_panel(GlobalState *AppState)
 }
 
 static std::string
-format_bytes(int64_t Bytes)
+format_bytes(i64 Bytes)
 {
 	char Buf[32];
 	if (Bytes >= 1073741824) snprintf(Buf, sizeof(Buf), "%.2f GB", Bytes / 1073741824.0);
@@ -2276,8 +2277,8 @@ render_download_modal(GlobalState *AppState)
 		{
 			ImGui::Text("Downloading %s...", D->CurrentModelName.c_str());
 
-			int64_t Done = D->DownloadedBytes.load();
-			int64_t Total = D->TotalBytes.load();
+			i64 Done = D->DownloadedBytes.load();
+			i64 Total = D->TotalBytes.load();
 			float Frac = (Total > 0) ? (float)((double)Done / (double)Total) : 0.0f;
 			if (Frac > 1.0f) Frac = 1.0f;
 			ImGui::ProgressBar(Frac, ImVec2(-1.0f, 0.0f));
@@ -2452,7 +2453,7 @@ render_download_modal(GlobalState *AppState)
 				std::string Name = D->PendingModelName;
 				std::string Url = D->PendingUrl;
 				std::string Dest = D->PendingDestPath;
-				int64_t Size = D->PendingSize;
+				i64 Size = D->PendingSize;
 				ImGui::CloseCurrentPopup();
 				size_t Slash = Dest.find_last_of("\\/");
 				if (Slash != std::string::npos) platform_ensure_directory(Dest.substr(0, Slash));

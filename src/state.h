@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_pool.h"
+#include "base.h"
 #include "build_time_constants.h"
 #include "runtime_types.h"
 #include "whisper_wrapper.h"
@@ -45,12 +46,12 @@ struct ModelDownloadState
 	std::atomic<bool> CancelRequested;
 	std::atomic<bool> Succeeded;
 	std::atomic<bool> Failed;
-	std::atomic<int64_t> DownloadedBytes;
-	std::atomic<int64_t> TotalBytes;
+	std::atomic<i64> DownloadedBytes;
+	std::atomic<i64> TotalBytes;
 	// Nonzero while a platform layer has delegated the download to an external
 	// child process (e.g. curl under Linux); always 0 on platforms that
 	// download in-process.
-	std::atomic<int64_t> ChildPid;
+	std::atomic<i64> ChildPid;
 
 	std::string CurrentModelName;
 	bool JustFinished;
@@ -60,7 +61,7 @@ struct ModelDownloadState
 	std::string PendingModelName;
 	std::string PendingUrl;
 	std::string PendingDestPath;
-	int64_t PendingSize;
+	i64 PendingSize;
 
 	std::thread Thread;
 
@@ -98,12 +99,12 @@ struct CudaPluginState
 	std::atomic<bool> Succeeded;
 	std::atomic<bool> Failed;
 	std::atomic<int> Stage;
-	std::atomic<int64_t> DownloadedBytes;
-	std::atomic<int64_t> TotalBytes;
+	std::atomic<i64> DownloadedBytes;
+	std::atomic<i64> TotalBytes;
 	// Nonzero while a platform layer has delegated the download to an external
 	// child process (e.g. curl under Linux); always 0 on platforms that
 	// download in-process.
-	std::atomic<int64_t> ChildPid;
+	std::atomic<i64> ChildPid;
 
 	// Written by the worker thread before it clears IsRunning; only read by
 	// the UI thread afterwards (the thread join provides the ordering).
@@ -134,7 +135,7 @@ struct UpdateAssetInfo
 {
 	std::string Name;
 	std::string Url;
-	int64_t Size;
+	i64 Size;
 };
 
 struct UpdateChangelogEntry
@@ -152,12 +153,12 @@ struct UpdateState
 	std::atomic<bool> DownloadCancelRequested;
 	std::atomic<bool> DownloadSucceeded;
 	std::atomic<bool> DownloadFailed;
-	std::atomic<int64_t> DownloadedBytes;
-	std::atomic<int64_t> TotalBytes;
+	std::atomic<i64> DownloadedBytes;
+	std::atomic<i64> TotalBytes;
 	// Nonzero while a platform layer has delegated the download to an external
 	// child process (e.g. curl under Linux); always 0 on platforms that
 	// download in-process.
-	std::atomic<int64_t> ChildPid;
+	std::atomic<i64> ChildPid;
 
 	std::string LatestVersion;
 	std::string ReleaseUrl;
@@ -313,7 +314,7 @@ struct CoreRuntimeState
 	// the capture thread fills the Last* values (ms, -1.0 = no measurement yet)
 	// relative to it: device opened -> capture actually started -> first audio
 	// samples appended to the accumulator.
-	std::atomic<int64_t> PipelineRequestNs;
+	std::atomic<i64> PipelineRequestNs;
 	std::atomic<double> LastRecordDeviceOpenMs;
 	std::atomic<double> LastRecordCaptureStartMs;
 	std::atomic<double> LastRecordFirstAudioMs;

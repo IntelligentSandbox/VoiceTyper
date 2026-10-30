@@ -1,9 +1,9 @@
 #pragma once
 
+#include "base.h"
 #include "whisper.h"
 #include "parakeet.h"
 #include "ggml-backend.h"
-#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <string>
@@ -53,8 +53,8 @@ detect_stt_engine_kind(const char *Path)
 	FILE *File = std::fopen(Path, "rb");
 	if (File == nullptr) return ENGINE_UNKNOWN;
 
-	uint32_t Magic = 0;
-	int32_t Ints[15] = {};
+	u32 Magic = 0;
+	i32 Ints[15] = {};
 	bool Ok = std::fread(&Magic, sizeof(Magic), 1, File) == 1;
 	Ok = Ok && std::fread(Ints, sizeof(Ints), 1, File) == 1;
 	std::fclose(File);

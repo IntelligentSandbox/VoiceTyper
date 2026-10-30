@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base.h"
 #include "build_time_constants.h"
 #include "host_services.h"
 #include "state.h"
@@ -341,7 +342,7 @@ updater_parse_releases_json(const std::string &Body, std::vector<UpdateReleaseIn
 					AssetField = AssetPos;
 					if (updater_json_find_key(Body, &AssetField, AssetObjectEnd, "size"))
 					{
-						Asset.Size = (int64_t)strtoll(Body.c_str() + AssetField, nullptr, 10);
+						Asset.Size = (i64)strtoll(Body.c_str() + AssetField, nullptr, 10);
 					}
 
 					if (!Asset.Name.empty() && !Asset.Url.empty())
