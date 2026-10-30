@@ -4,7 +4,6 @@
 #include "runtime_types.h"
 
 #include <cstdint>
-#include <string>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -52,6 +51,10 @@ inline constexpr int RENDER_SLEEP_MAX_MS         = 16;
 inline constexpr int RENDER_IDLE_REFRESH_HZ      = 10;
 inline constexpr int RENDER_IDLE_DELAY_MS        = 1000;
 inline constexpr const char *APP_ICON_PATH = "media/voicetyper-icon.png";
+inline constexpr int RECORD_INDICATOR_REFRESH_MS     = 1000;
+inline constexpr int RECORD_INDICATOR_BOTTOM_GAP_PX  = 200;
+inline constexpr int RECORD_INDICATOR_SS             = 3;
+inline constexpr int RECORD_INDICATOR_MAX_ALPHA      = 255;
 
 // ---------------------------------------------------------------------------
 // Audio capture
@@ -209,9 +212,7 @@ inline const std::vector<CatalogModel> MODEL_CATALOG = {
 // Settings store / diagnostics
 // ---------------------------------------------------------------------------
 
-// Per-program paste hotkey overrides live as paste_hotkey_app_<process>_modifiers/_key
-// entries in settings.ini.
-inline constexpr const char *PASTE_HOTKEY_OVERRIDE_SETTING_PREFIX = "paste_hotkey_app_";
+inline constexpr const char *PROGRAM_PASTE_HOTKEY_SETTING_PREFIX = "paste_hotkey_app_";
 
 inline constexpr const char *CRASH_DUMP_PREFIX = "voicetyper-crash-";
 inline constexpr const char *CRASH_DUMP_SUFFIX = ".dmp";

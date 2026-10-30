@@ -6,7 +6,6 @@
 #include "ggml-backend.h"
 
 #include <algorithm>
-#include <chrono>
 #include <thread>
 #include <atomic>
 #include <cstdio>
@@ -290,7 +289,7 @@ query_font_names(GlobalState *AppState)
 	}
 }
 
-inline void query_paste_hotkey_overrides(GlobalState *AppState);
+inline void query_program_paste_hotkeys(GlobalState *AppState);
 
 inline void
 query_hotkey_settings(GlobalState *AppState)
@@ -412,15 +411,15 @@ query_hotkey_settings(GlobalState *AppState)
 		if (UiFontSize >= 6 && UiFontSize <= 200) AppState->UiFontSize = UiFontSize;
 	}
 
-	query_paste_hotkey_overrides(AppState);
+	query_program_paste_hotkeys(AppState);
 }
 
 inline void
-query_paste_hotkey_overrides(GlobalState *AppState)
+query_program_paste_hotkeys(GlobalState *AppState)
 {
-	AppState->PasteHotkeyOverrides.clear();
+	AppState->ProgramPasteHotkeys.clear();
 
-	const std::string Prefix = PASTE_HOTKEY_OVERRIDE_SETTING_PREFIX;
+	const std::string Prefix = PROGRAM_PASTE_HOTKEY_SETTING_PREFIX;
 	const std::string ModSuffix = "_modifiers";
 
 	auto Map = read_settings_map();
@@ -449,27 +448,27 @@ query_paste_hotkey_overrides(GlobalState *AppState)
 			continue;
 		}
 
-		PasteHotkeyOverride Override;
-		Override.ProcessName = ProcessName;
-		Override.Hotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
-		Override.Hotkey.VirtualKey = (AppKeyCode)Key;
-		if (!Override.Hotkey.is_valid()) continue;
+		ProgramPasteHotkey Entry;
+		Entry.ProcessName = ProcessName;
+		Entry.Hotkey.Modifiers = (AppHotkeyModifiers)Modifiers;
+		Entry.Hotkey.VirtualKey = (AppKeyCode)Key;
+		if (!Entry.Hotkey.is_valid()) continue;
 
-		AppState->PasteHotkeyOverrides.push_back(Override);
+		AppState->ProgramPasteHotkeys.push_back(Entry);
 	}
 }
 
 inline void
-upsert_paste_hotkey_override(GlobalState *AppState, const std::string &ProcessName, HotkeyConfig Hotkey)
+upsert_program_paste_hotkey(GlobalState *AppState, const std::string &ProcessName, HotkeyConfig Hotkey)
 {
 	bool Found = false;
 	{
-		std::lock_guard<std::mutex> Lock(AppState->PasteHotkeyOverridesMutex);
-		for (PasteHotkeyOverride &Override : AppState->PasteHotkeyOverrides)
+		std::lock_guard<std::mutex> Lock(AppState->ProgramPasteHotkeysMutex);
+		for (ProgramPasteHotkey &Entry : AppState->ProgramPasteHotkeys)
 		{
-			if (ascii_equals_ci(Override.ProcessName, ProcessName))
+			if (ascii_equals_ci(Entry.ProcessName, ProcessName))
 			{
-				Override.Hotkey = Hotkey;
+				Entry.Hotkey = Hotkey;
 				Found = true;
 				break;
 			}
@@ -477,30 +476,30 @@ upsert_paste_hotkey_override(GlobalState *AppState, const std::string &ProcessNa
 
 		if (!Found)
 		{
-			PasteHotkeyOverride Override;
-			Override.ProcessName = ProcessName;
-			Override.Hotkey = Hotkey;
-			AppState->PasteHotkeyOverrides.push_back(Override);
+			ProgramPasteHotkey Entry;
+			Entry.ProcessName = ProcessName;
+			Entry.Hotkey = Hotkey;
+			AppState->ProgramPasteHotkeys.push_back(Entry);
 		}
 	}
 
-	save_paste_hotkey_override_setting(ProcessName, Hotkey);
+	save_program_paste_hotkey_setting(ProcessName, Hotkey);
 }
 
 inline void
-remove_paste_hotkey_override(GlobalState *AppState, const std::string &ProcessName)
+remove_program_paste_hotkey(GlobalState *AppState, const std::string &ProcessName)
 {
 	{
-		std::lock_guard<std::mutex> Lock(AppState->PasteHotkeyOverridesMutex);
-		for (size_t i = 0; i < AppState->PasteHotkeyOverrides.size(); )
+		std::lock_guard<std::mutex> Lock(AppState->ProgramPasteHotkeysMutex);
+		for (size_t i = 0; i < AppState->ProgramPasteHotkeys.size(); )
 		{
-			if (ascii_equals_ci(AppState->PasteHotkeyOverrides[i].ProcessName, ProcessName))
-				AppState->PasteHotkeyOverrides.erase(AppState->PasteHotkeyOverrides.begin() + i);
+			if (ascii_equals_ci(AppState->ProgramPasteHotkeys[i].ProcessName, ProcessName))
+				AppState->ProgramPasteHotkeys.erase(AppState->ProgramPasteHotkeys.begin() + i);
 			else i++;
 		}
 	}
 
-	remove_paste_hotkey_override_setting(ProcessName);
+	remove_program_paste_hotkey_setting(ProcessName);
 }
 
 inline bool

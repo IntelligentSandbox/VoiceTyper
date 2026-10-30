@@ -81,7 +81,7 @@ create_device_d3d(HWND Hwnd)
 	Sd.BufferDesc.Width = 0;
 	Sd.BufferDesc.Height = 0;
 	Sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	Sd.BufferDesc.RefreshRate.Numerator = 60;
+	Sd.BufferDesc.RefreshRate.Numerator = 60; // TODO(warren): should detect the actual set refresh rate of the user's main monitor.
 	Sd.BufferDesc.RefreshRate.Denominator = 1;
 	Sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 	Sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -412,11 +412,8 @@ run_due_app_updates(LONGLONG Now)
 // a visible indicator is never redrawn needlessly; the 1Hz re-check only
 // pushes again if the window frame actually moved (taskbar/resolution change).
 // ---------------------------------------------------------------------------
-#define RECORD_INDICATOR_REFRESH_MS     1000
-#define RECORD_INDICATOR_BOTTOM_GAP_PX  200
-#define RECORD_INDICATOR_SS             3
-#define RECORD_INDICATOR_MAX_ALPHA      255
 
+// TODO(warren): why is this here and not in like our UI separated code? maybe bc we don't even have that as a code organization construct, cleanly organizing our UI specific code.
 struct RecordIndicatorState
 {
 	HWND Hwnd;
@@ -923,8 +920,9 @@ record_indicator_shutdown()
 // The icon is also removed after the main loop, so no exit path (including an
 // updater-triggered exit while hidden) leaves a ghost icon behind.
 // ---------------------------------------------------------------------------
-#define WM_APP_TRAYICON (WM_APP + 1)
+inline constexpr int WM_APP_TRAYICON = (WM_APP + 1);
 
+// TODO(warren): why is this here and not in like our UI separated code? maybe bc we don't even have that as a code organization construct, cleanly organizing our UI specific code.
 struct TrayIconState
 {
 	bool Added;

@@ -29,18 +29,18 @@ load_hotkey_setting(const char *Name, int *OutModifiers, int *OutKey)
 }
 
 inline void
-save_paste_hotkey_override_setting(const std::string &ProcessName, HotkeyConfig Hotkey)
+save_program_paste_hotkey_setting(const std::string &ProcessName, HotkeyConfig Hotkey)
 {
-	std::string Name = std::string(PASTE_HOTKEY_OVERRIDE_SETTING_PREFIX) + ProcessName;
+	std::string Name = std::string(PROGRAM_PASTE_HOTKEY_SETTING_PREFIX) + ProcessName;
 	save_hotkey_setting(Name.c_str(), (int)Hotkey.Modifiers, (int)Hotkey.VirtualKey);
 }
 
 inline void
-remove_paste_hotkey_override_setting(const std::string &ProcessName)
+remove_program_paste_hotkey_setting(const std::string &ProcessName)
 {
 	auto Map = read_settings_map();
-	Map.erase(std::string(PASTE_HOTKEY_OVERRIDE_SETTING_PREFIX) + ProcessName + "_modifiers");
-	Map.erase(std::string(PASTE_HOTKEY_OVERRIDE_SETTING_PREFIX) + ProcessName + "_key");
+	Map.erase(std::string(PROGRAM_PASTE_HOTKEY_SETTING_PREFIX) + ProcessName + "_modifiers");
+	Map.erase(std::string(PROGRAM_PASTE_HOTKEY_SETTING_PREFIX) + ProcessName + "_key");
 	write_settings_map(Map);
 }
 

@@ -48,7 +48,7 @@ compute_rms(const float *Samples, int Count)
 }
 
 static bool
-paste_override_name_matches(const std::string &A, const std::string &B)
+program_name_matches(const std::string &A, const std::string &B)
 {
 	if (A.size() != B.size()) return false;
 	for (size_t i = 0; i < A.size(); i++)
@@ -69,17 +69,17 @@ resolve_paste_hotkey(GlobalState *AppState, void *TargetWindow)
 	std::string ProcessName = platform_get_window_process_name(TargetWindow);
 	if (ProcessName.empty()) return PasteHotkey;
 
-	std::vector<PasteHotkeyOverride> Overrides;
+	std::vector<ProgramPasteHotkey> ProgramHotkeys;
 	{
-		std::lock_guard<std::mutex> Lock(AppState->PasteHotkeyOverridesMutex);
-		Overrides = AppState->PasteHotkeyOverrides;
+		std::lock_guard<std::mutex> Lock(AppState->ProgramPasteHotkeysMutex);
+		ProgramHotkeys = AppState->ProgramPasteHotkeys;
 	}
 
-	for (const PasteHotkeyOverride &Override : Overrides)
+	for (const ProgramPasteHotkey &Entry : ProgramHotkeys)
 	{
-		if (paste_override_name_matches(Override.ProcessName, ProcessName))
+		if (program_name_matches(Entry.ProcessName, ProcessName))
 		{
-			return Override.Hotkey;
+			return Entry.Hotkey;
 		}
 	}
 

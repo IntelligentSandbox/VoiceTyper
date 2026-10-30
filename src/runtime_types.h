@@ -175,7 +175,7 @@ default_font_size_down_hotkey()
 	return H;
 }
 
-struct PasteHotkeyOverride
+struct ProgramPasteHotkey
 {
 	std::string ProcessName;
 	HotkeyConfig Hotkey;

@@ -33,9 +33,9 @@ struct SettingsWindowState
 	int FontSuggestionMatchCount;
 	char WhisperPromptBuffer[512];
 	bool WhisperPromptBufferInitialized;
-	char NewPasteOverrideProcess[128];
-	HotkeyCaptureState PasteOverrideCapture;
-	std::string PasteOverrideCaptureProcess;
+	char NewProgramPasteProcess[128];
+	HotkeyCaptureState ProgramPasteCapture;
+	std::string ProgramPasteCaptureProcess;
 	bool HotkeysModalOpen;
 };
 
@@ -222,11 +222,11 @@ struct CoreRuntimeState
 	HotkeyConfig FontSizeDownHotkey;
 	RecordingHotkeyMode RecordHotkeyMode;
 
-	// Per-program paste hotkey overrides, matched against the target window's
-	// process (executable) name. Guarded by PasteHotkeyOverridesMutex: written
+	// Per-program paste hotkeys, matched against the target window's
+	// process (executable) name. Guarded by ProgramPasteHotkeysMutex: written
 	// by the UI thread, copied by pipeline threads at paste time.
-	std::vector<PasteHotkeyOverride> PasteHotkeyOverrides;
-	std::mutex PasteHotkeyOverridesMutex;
+	std::vector<ProgramPasteHotkey> ProgramPasteHotkeys;
+	std::mutex ProgramPasteHotkeysMutex;
 
 	// Logic
 	bool IsRecording;
