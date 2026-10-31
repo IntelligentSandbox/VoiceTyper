@@ -1533,7 +1533,7 @@ win32_apply_portable_zip(const std::string &ZipPath)
 	Bat += "ping -n 2 127.0.0.1 >nul\r\n";
 	Bat += "goto waitloop\r\n";
 	Bat += ")\r\n";
-	Bat += "%SystemRoot%\\System32\\tar.exe\" -xf \"" + Zip + "\" -C \"" + ExeDir + "\"\r\n";
+	Bat += "\"%SystemRoot%\\System32\\tar.exe\" -xf \"" + Zip + "\" -C \"" + ExeDir + "\"\r\n";
 	Bat += "if errorlevel 1 exit /b 1\r\n";
 	Bat += "del \"" + Zip + "\"\r\n";
 	Bat += "start \"\" \"" + ExeDir + "/VoiceTyper.exe\"\r\n";
