@@ -23,8 +23,26 @@ load_hotkey_setting(const char *Name, int *OutModifiers, int *OutKey)
 	auto ModIt = Map.find(ModKey);
 	auto KeyIt = Map.find(KeyKey);
 	if (ModIt == Map.end() || KeyIt == Map.end()) return false;
-	*OutModifiers = std::stoi(ModIt->second);
-	*OutKey = std::stoi(KeyIt->second);
+
+	int Modifiers = 0;
+	int Key = 0;
+	size_t ModEnd = 0;
+	size_t KeyEnd = 0;
+	try
+	{
+		Modifiers = std::stoi(ModIt->second, &ModEnd);
+		Key = std::stoi(KeyIt->second, &KeyEnd);
+	}
+	catch (...)
+	{
+		return false;
+	}
+
+	if (ModEnd != ModIt->second.size()) return false;
+	if (KeyEnd != KeyIt->second.size()) return false;
+
+	*OutModifiers = Modifiers;
+	*OutKey = Key;
 	return true;
 }
 
