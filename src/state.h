@@ -256,7 +256,7 @@ struct CoreRuntimeState
 	std::vector<std::string> AudioInputDeviceNames;
 
 	// Inference Device
-	int CurrentInferenceDeviceIndex;
+	std::atomic<int> CurrentInferenceDeviceIndex = 0;
 	std::vector<std::string> InferenceDevices;
 	std::atomic<bool> InferenceDevicesLoaded = false;
 	std::atomic<bool> InferenceDevicesLoading = false;
