@@ -408,9 +408,12 @@ run_due_app_updates(LONGLONG Now)
 // streaming label swap or the elapsed timer advancing once per second
 // (seconds only, then M:SS past a minute, H:MM:SS past an hour), so redraws
 // stay at 1Hz while a session runs. The window instantly pops out of view
-// when the session ends. The DWM keeps displaying the last pushed surface, so
-// a visible indicator is never redrawn needlessly; the 1Hz re-check only
-// pushes again if the window frame actually moved (taskbar/resolution change).
+// when the session ends. The pill anchors to the work area of the monitor
+// holding most of the foreground (dictation target) window, so it follows
+// the user across monitors at the 1Hz cadence. The DWM keeps displaying the
+// last pushed surface, so a visible indicator is never redrawn needlessly;
+// the 1Hz re-check only pushes again if the window frame actually moved
+// (focus moved to another monitor, taskbar/resolution change).
 // ---------------------------------------------------------------------------
 
 // TODO(warren): why is this here and not in like our UI separated code? maybe bc we don't even have that as a code organization construct, cleanly organizing our UI specific code.
@@ -735,13 +738,40 @@ record_indicator_render_base(bool IsStreaming, UINT Dpi, int ElapsedSeconds)
 	ReleaseDC(nullptr, ScreenDc);
 }
 
+// Resolve the monitor the user is dictating into: the foreground window is
+// the dictation target, and MonitorFromWindow's documented rule returns the
+// monitor with the largest area of intersection with it, so a window
+// straddling two monitors counts toward the one it covers the most. Work
+// area and DPI come back together because the pill is both placed and sized
+// for that monitor. Returns false when nothing is focused; callers fall back
+// to the primary monitor.
+static bool
+record_indicator_target_monitor(RECT *OutWork, UINT *OutDpi)
+{
+	HWND Foreground = GetForegroundWindow();
+	if (Foreground) Foreground = GetAncestor(Foreground, GA_ROOT);
+	if (!Foreground) return false;
+
+	HMONITOR Monitor = MonitorFromWindow(Foreground, MONITOR_DEFAULTTONEAREST);
+	MONITORINFO Info = {};
+	Info.cbSize = sizeof(Info);
+	if (!Monitor || !GetMonitorInfoW(Monitor, &Info)) return false;
+
+	if (OutWork) *OutWork = Info.rcWork;
+	if (OutDpi) *OutDpi = (UINT)(ImGui_ImplWin32_GetDpiScaleForMonitor((void *)Monitor) * 96.0f + 0.5f);
+	return true;
+}
+
 // Compute the on-screen frame for the indicator. Returns true when it differs
-// from the last pushed one (work area or size changed).
+// from the last pushed one (target monitor, work area, or size changed).
 static bool
 record_indicator_frame_changed(RecordIndicatorState *Ri, POINT *OutPos)
 {
 	RECT WorkArea = {};
-	SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0);
+	if (!record_indicator_target_monitor(&WorkArea, nullptr))
+	{
+		SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0);
+	}
 
 	OutPos->x = WorkArea.left + ((WorkArea.right - WorkArea.left) - Ri->Width) / 2;
 	OutPos->y = WorkArea.bottom - RECORD_INDICATOR_BOTTOM_GAP_PX - Ri->Height;
@@ -820,18 +850,22 @@ record_indicator_update(GlobalState *AppState, LONGLONG Now)
 		return Idle;
 	}
 
-	// The DPI query touches the window manager, so only run it once up front
-	// and on the periodic refresh tick.
+	// The DPI/monitor queries touch the window manager, so only run them once
+	// up front and on the periodic refresh tick.
 	bool DoRefresh = Ri->CachedDpi == 0 || Now >= Ri->NextRefreshTicks;
 	if (DoRefresh)
 	{
-		UINT Queried = 96;
-		HDC DpiDc = GetDC(g_MainHwnd);
-		if (DpiDc)
+		UINT Queried = 0;
+		if (!record_indicator_target_monitor(nullptr, &Queried))
 		{
-			int Caps = GetDeviceCaps(DpiDc, LOGPIXELSX);
-			ReleaseDC(g_MainHwnd, DpiDc);
-			if (Caps >= 96) Queried = (UINT)Caps;
+			Queried = 96;
+			HDC DpiDc = GetDC(g_MainHwnd);
+			if (DpiDc)
+			{
+				int Caps = GetDeviceCaps(DpiDc, LOGPIXELSX);
+				ReleaseDC(g_MainHwnd, DpiDc);
+				if (Caps >= 96) Queried = (UINT)Caps;
+			}
 		}
 		Ri->CachedDpi = Queried;
 		Ri->NextRefreshTicks = Now + Frequency * RECORD_INDICATOR_REFRESH_MS / 1000;
