@@ -855,7 +855,10 @@ platform_spawn_detached(const std::string &CommandLine, const std::string &Worki
 	STARTUPINFOW Si = {};
 	Si.cb = sizeof(Si);
 	PROCESS_INFORMATION Pi = {};
-	DWORD Flags = Hidden ? (DETACHED_PROCESS | CREATE_NO_WINDOW) : 0;
+	// CREATE_NO_WINDOW alone, never combined with DETACHED_PROCESS: a
+	// detached cmd.exe dies on the first pipeline (|) in a batch script,
+	// which is how the portable updater's wait-for-exit loop is written.
+	DWORD Flags = Hidden ? CREATE_NO_WINDOW : 0;
 
 	if (!CreateProcessW(nullptr, WideCommandLine.data(), nullptr, nullptr, FALSE,
 		Flags, nullptr, WorkingDir.empty() ? nullptr : WideWorkingDir.c_str(), &Si, &Pi))
