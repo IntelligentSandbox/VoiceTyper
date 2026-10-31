@@ -61,19 +61,27 @@ read_settings_map()
 	FILE *F = fopen(get_settings_file_path().c_str(), "r");
 	if (!F) return Map;
 
-	char Line[512];
-	while (fgets(Line, sizeof(Line), F))
+	char Chunk[2048];
+	std::string FullLine;
+	FullLine.reserve(sizeof(Chunk));
+	while (fgets(Chunk, sizeof(Chunk), F))
 	{
-		char *Eq = strchr(Line, '=');
-		if (!Eq) continue;
-		*Eq = '\0';
-		char *Val = Eq + 1;
-		size_t Len = strlen(Val);
-		while (Len > 0 && (Val[Len - 1] == '\n' || Val[Len - 1] == '\r'))
+		FullLine.clear();
+		do
 		{
-			Val[--Len] = '\0';
+			FullLine.append(Chunk);
+			if (strchr(Chunk, '\n')) break;
 		}
-		Map[Line] = Val;
+		while (fgets(Chunk, sizeof(Chunk), F));
+
+		size_t Eq = FullLine.find('=');
+		if (Eq == std::string::npos) continue;
+		std::string Val = FullLine.substr(Eq + 1);
+		while (!Val.empty() && (Val.back() == '\n' || Val.back() == '\r'))
+		{
+			Val.pop_back();
+		}
+		Map[FullLine.substr(0, Eq)] = Val;
 	}
 	fclose(F);
 	return Map;
