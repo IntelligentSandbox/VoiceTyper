@@ -1490,16 +1490,6 @@ win32_write_file_bytes(const std::string &Path, const std::string &Content)
 	return Ok;
 }
 
-static std::string
-win32_forward_slashes(std::string Path)
-{
-	for (char &Ch : Path)
-	{
-		if (Ch == '\\') Ch = '/';
-	}
-	return Path;
-}
-
 static bool
 win32_string_ends_with(const std::string &Text, const char *Suffix)
 {
@@ -1517,10 +1507,9 @@ win32_string_ends_with(const std::string &Text, const char *Suffix)
 static bool
 win32_apply_portable_zip(const std::string &ZipPath)
 {
-	std::string ExeDir = win32_forward_slashes(platform_get_data_dir());
-	std::string BatPath = win32_forward_slashes(
-		platform_join_path(platform_get_temp_dir(), "voicetyper-apply-update.bat"));
-	std::string Zip = win32_forward_slashes(ZipPath);
+	std::string ExeDir = platform_get_data_dir();
+	std::string BatPath = platform_join_path(platform_get_temp_dir(), "voicetyper-apply-update.bat");
+	std::string Zip = ZipPath;
 
 	char PidStr[32];
 	sprintf_s(PidStr, sizeof(PidStr), "%d", platform_get_process_id());
@@ -1536,7 +1525,7 @@ win32_apply_portable_zip(const std::string &ZipPath)
 	Bat += "\"%SystemRoot%\\System32\\tar.exe\" -xf \"" + Zip + "\" -C \"" + ExeDir + "\"\r\n";
 	Bat += "if errorlevel 1 exit /b 1\r\n";
 	Bat += "del \"" + Zip + "\"\r\n";
-	Bat += "start \"\" \"" + ExeDir + "/VoiceTyper.exe\"\r\n";
+	Bat += "start \"\" \"" + ExeDir + "\\VoiceTyper.exe\"\r\n";
 	Bat += "del \"%~f0\"\r\n";
 
 	if (!win32_write_file_bytes(BatPath, Bat))
