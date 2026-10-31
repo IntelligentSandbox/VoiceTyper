@@ -37,6 +37,7 @@ app_initialize_runtime(GlobalState *AppState, PlatformWindowHandle OwnWindow)
 	AppState->CaptureRunning = false;
 	AppState->PipelineActive = false;
 	AppState->StreamingFinalizeOnStop = false;
+	AppState->RecordDeviceFailed = false;
 	AppState->IsModelTransitioning.store(false);
 	AppState->ModelTransitionFailureCode.store((int)MODEL_TRANSITION_FAILURE_NONE);
 	AppState->ExitRequested.store(false);
@@ -159,6 +160,11 @@ app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool 
 {
 	AppFrameResult Result = {};
 	Result.ModelFailure = runtime_finish_model_transition(AppState);
+
+	if (AppState->RecordDeviceFailed.exchange(false))
+	{
+		show_toast(AppState, "Failed to open the audio input device");
+	}
 
 	bool FontSizeUpKeyIsDown   = is_hotkey_down(AppState->FontSizeUpHotkey);
 	bool FontSizeDownKeyIsDown = is_hotkey_down(AppState->FontSizeDownHotkey);

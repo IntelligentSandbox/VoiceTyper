@@ -327,8 +327,9 @@ streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 	StreamingChunkQueue ChunkQueue = {};
 	std::thread SegmentThread(stream_segment_thread, AppState, &ChunkQueue);
 	std::thread InferThread(stream_infer_thread, AppState, &ChunkQueue);
-	platform_audio_capture(&AppState->Platform, AppState, DeviceIndex);
+	bool CaptureOk = platform_audio_capture(&AppState->Platform, AppState, DeviceIndex);
 	AppState->CaptureRunning.store(false);
+	if (!CaptureOk) AppState->RecordDeviceFailed.store(true);
 	SegmentThread.join();
 	stream_close_completed_chunks(&ChunkQueue);
 	InferThread.join();
@@ -344,7 +345,9 @@ streaming_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 static void
 record_pipeline_thread(GlobalState *AppState, int DeviceIndex)
 {
-	platform_audio_capture(&AppState->Platform, AppState, DeviceIndex);
+	bool CaptureOk = platform_audio_capture(&AppState->Platform, AppState, DeviceIndex);
+	AppState->CaptureRunning.store(false);
+	if (!CaptureOk) AppState->RecordDeviceFailed.store(true);
 
 	bool Cancelled = AppState->CancelRequested.load();
 	AppState->CancelRequested.store(false);
