@@ -1517,10 +1517,17 @@ win32_apply_portable_zip(const std::string &ZipPath)
 	char PidStr[32];
 	sprintf_s(PidStr, sizeof(PidStr), "%d", platform_get_process_id());
 
+	// The image-name filter keeps the loop from latching onto an unrelated
+	// process that reused the app's pid after it exited.
+	std::string ExePath = platform_get_binary_path();
+	size_t Slash = ExePath.find_last_of("\\/");
+	std::string ExeName = (Slash == std::string::npos) ? ExePath : ExePath.substr(Slash + 1);
+
 	std::string Bat;
 	Bat += "@echo off\r\n";
 	Bat += ":waitloop\r\n";
-	Bat += std::string("tasklist /fi \"PID eq ") + PidStr + "\" 2>nul | find /i \"" + PidStr + "\" >nul\r\n";
+	Bat += std::string("tasklist /fi \"PID eq ") + PidStr + "\" /fi \"IMAGENAME eq " + ExeName +
+		"\" 2>nul | \"%SystemRoot%\\System32\\find.exe\" /i \"" + PidStr + "\" >nul\r\n";
 	Bat += "if not errorlevel 1 (\r\n";
 	Bat += "ping -n 2 127.0.0.1 >nul\r\n";
 	Bat += "goto waitloop\r\n";
