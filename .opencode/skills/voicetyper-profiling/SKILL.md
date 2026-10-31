@@ -14,7 +14,7 @@ portable but Linux implementations are deferred.
 ```
 tools/profile.sh                      # capture-latency bench + transcription bench
 tools/profile.sh --gui 30             # + run the GUI app 30s for an idle/startup profile
-tools/profile.sh --model stt_models/ggml-base.bin --audio bench/jfk.wav --bench-iters 5
+tools/profile.sh --model stt_models/ggml-base.bin --audio media/benchmark/jfk.wav --bench-iters 5
 ```
 
 The script builds the instrumented variant if needed (`build/cpu-perf`,
@@ -49,7 +49,7 @@ runs the benches, and writes everything to `build/profile-runs/<timestamp>/`:
 ```
 PATH="$PWD/build/perf/Release_cpu:$PATH" build/perf/Bench_cpu/VoiceTyperBench.exe \
     --mode capture-latency --iterations 10
-build/perf/Bench_cpu/VoiceTyperBench.exe --audio bench/jfk.wav \
+build/perf/Bench_cpu/VoiceTyperBench.exe --audio media/benchmark/jfk.wav \
     --model stt_models/ggml-base.bin --vad on --iterations 3
 VOICETYPER_PERF=1 VOICETYPER_PERF_HZ=10 build/perf/Release_cpu/VoiceTyper.exe &   # writes
     # build/perf/Release_cpu/voicetyper-perf-<pid>.json, rewritten every 5s

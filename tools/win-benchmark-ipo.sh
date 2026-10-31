@@ -19,7 +19,7 @@ case "$GENERATOR" in
 esac
 
 MODEL_PATH="${VOICETYPER_MODEL_PATH:-stt_models/ggml-base.bin}"
-AUDIO_PATH="${VOICETYPER_AUDIO_PATH:-bench/jfk.wav}"
+AUDIO_PATH="${VOICETYPER_AUDIO_PATH:-media/benchmark/jfk.wav}"
 THREADS="${VOICETYPER_BENCH_THREADS:-4}"
 
 now_s() { date +%s; }

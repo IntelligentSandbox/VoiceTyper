@@ -241,12 +241,12 @@ endif()
 
 if(VOICETYPER_BUILD_BENCH)
 	if(WIN32)
-		set(BENCH_PLATFORM_SOURCES src/bench_platform_win32.cpp)
+		set(BENCH_PLATFORM_SOURCES src/benchmark/bench_platform_win32.cpp)
 	else()
-		set(BENCH_PLATFORM_SOURCES src/bench_platform_linux.cpp)
+		set(BENCH_PLATFORM_SOURCES src/benchmark/bench_platform_linux.cpp)
 	endif()
 
-	add_executable(VoiceTyperBench src/benchmark_main.cpp ${BENCH_PLATFORM_SOURCES})
+	add_executable(VoiceTyperBench src/benchmark/benchmark_main.cpp ${BENCH_PLATFORM_SOURCES})
 	apply_voicetyper_output_dirs(VoiceTyperBench
 		RELEASE_DIR "${VOICETYPER_BENCH_OUTPUT_DIR}"
 		DEBUG_DIR "${VOICETYPER_DEBUG_OUTPUT_DIR}")

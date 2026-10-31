@@ -9,7 +9,7 @@
 #   tools/profile.sh                     latency bench + transcription bench
 #   tools/profile.sh --gui 30            also run the GUI app for 30s (idle profile)
 #   tools/profile.sh --model PATH        transcription model (default: first in stt_models/)
-#   tools/profile.sh --audio PATH        transcription wav, 16kHz mono (default bench/jfk.wav)
+#   tools/profile.sh --audio PATH        transcription wav, 16kHz mono (default media/benchmark/jfk.wav)
 #   tools/profile.sh --latency-iters N   capture-latency iterations (default 10)
 #   tools/profile.sh --bench-iters N     transcription iterations (default 3)
 #
@@ -28,7 +28,7 @@ GUI_SECONDS=0
 LATENCY_ITERS=10
 BENCH_ITERS=3
 MODEL=""
-AUDIO="bench/jfk.wav"
+AUDIO="media/benchmark/jfk.wav"
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
