@@ -119,7 +119,7 @@ inline constexpr int FONT_SUGGESTION_MAX_ROWS = 5;
 inline constexpr double TOAST_DURATION_SECONDS = 2.0;
 inline constexpr int RECORD_INDICATOR_DEFAULT_DELAY_MS = 50;
 // Font size adjustments per second while a font size hotkey is held down
-inline constexpr int FONT_SIZE_HOTKEY_REPEAT_HZ = 10;
+inline constexpr int FONT_SIZE_HOTKEY_REPEAT_HZ = 30;
 static_assert(FONT_SIZE_HOTKEY_REPEAT_HZ > 0, "FONT_SIZE_HOTKEY_REPEAT_HZ must be positive");
 static_assert(FONT_SIZE_HOTKEY_REPEAT_HZ <= APP_UPDATE_HZ,
 	"FONT_SIZE_HOTKEY_REPEAT_HZ must not exceed APP_UPDATE_HZ");
