@@ -8,6 +8,7 @@
 #include "perf.h"
 #include "settings.h"
 #include "control.h"
+#include "app_core.h"
 #include "cuda_plugin.h"
 #include "diagnostics.h"
 #include "model_catalog.h"
@@ -2478,6 +2479,23 @@ render_download_modal(GlobalState *AppState)
 inline void
 render_main_ui(GlobalState *AppState, ImGuiIO &Io)
 {
+	if (Io.KeyCtrl && Io.MouseWheel != 0.0f && platform_window_is_focused(AppState->Platform.OwnWindow))
+	{
+		int WheelSteps = 0;
+		AppState->Ui.FontWheelAccum += Io.MouseWheel;
+		while (AppState->Ui.FontWheelAccum >= 1.0f)
+		{
+			AppState->Ui.FontWheelAccum -= 1.0f;
+			WheelSteps++;
+		}
+		while (AppState->Ui.FontWheelAccum <= -1.0f)
+		{
+			AppState->Ui.FontWheelAccum += 1.0f;
+			WheelSteps--;
+		}
+		if (WheelSteps != 0) app_adjust_ui_font_size(AppState, WheelSteps);
+	}
+
 	ImGui::GetStyle()._NextFrameFontSizeBase = (float)AppState->UiFontSize;
 
 	ImGui::SetNextWindowPos(ImVec2(0, 0));

@@ -342,6 +342,9 @@ struct UiRuntimeState
 	int TranscribedTextBoxSerial;
 	bool FontReloadRequested;
 	bool LightMode;
+	// Accumulates fractional Ctrl+wheel deltas (high-resolution wheels and
+	// touchpads report < 1.0 per event); one full unit = one font size step.
+	float FontWheelAccum;
 };
 
 struct GlobalState : CoreRuntimeState

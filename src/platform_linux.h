@@ -938,6 +938,18 @@ platform_is_key_down(AppKeyCode Key)
 	return platform_is_sdl_scancode_down(Scan);
 }
 
+inline bool
+platform_window_is_focused(PlatformWindowHandle Window)
+{
+	if ((SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO) == 0) return false;
+
+	SDL_Window *Win = (SDL_Window *)Window;
+	if (!Win) return false;
+
+	Uint32 Flags = SDL_GetWindowFlags(Win);
+	return (Flags & SDL_WINDOW_SHOWN) != 0 && (Flags & SDL_WINDOW_INPUT_FOCUS) != 0;
+}
+
 inline std::string
 platform_get_binary_path()
 {

@@ -38,6 +38,7 @@ void platform_set_taskbar_icon(void *Window, const char *PngPath);
 void platform_apply_window_theme(void *Window, bool LightMode);
 void platform_play_sound(PlatformRuntimeState *Platform, int FreqHz, int DurationMs);
 bool platform_is_key_down(AppKeyCode Key);
+bool platform_window_is_focused(PlatformWindowHandle Window);
 std::string platform_get_binary_path();
 std::string platform_get_binary_dir();
 std::string platform_get_data_dir();

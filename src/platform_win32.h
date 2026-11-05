@@ -511,6 +511,14 @@ platform_is_key_down(AppKeyCode Key)
 	return (GetAsyncKeyState((int)Key) & 0x8000) != 0;
 }
 
+inline bool
+platform_window_is_focused(PlatformWindowHandle Window)
+{
+	HWND Hwnd = (HWND)Window;
+	if (!Hwnd || !IsWindowVisible(Hwnd)) return false;
+	return GetForegroundWindow() == Hwnd;
+}
+
 inline std::string
 platform_get_binary_path()
 {
