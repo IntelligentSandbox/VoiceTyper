@@ -19,6 +19,8 @@ struct AppFrameState
 	bool LoadModelKeyWasDown;
 	bool FontSizeUpKeyWasDown;
 	bool FontSizeDownKeyWasDown;
+	int FontSizeUpRepeatTicks;
+	int FontSizeDownRepeatTicks;
 };
 
 struct AppFrameResult
@@ -169,10 +171,43 @@ app_update_runtime_frame(GlobalState *AppState, AppFrameState *FrameState, bool 
 	bool FontSizeUpKeyIsDown   = is_hotkey_down(AppState->FontSizeUpHotkey);
 	bool FontSizeDownKeyIsDown = is_hotkey_down(AppState->FontSizeDownHotkey);
 
-	if (HotkeysEnabled)
+	if (HotkeysEnabled && platform_window_is_focused(AppState->Platform.OwnWindow))
 	{
-		if (FontSizeUpKeyIsDown && !FrameState->FontSizeUpKeyWasDown) app_adjust_ui_font_size(AppState, +1);
-		if (FontSizeDownKeyIsDown && !FrameState->FontSizeDownKeyWasDown) app_adjust_ui_font_size(AppState, -1);
+		if (FontSizeUpKeyIsDown)
+		{
+			if (!FrameState->FontSizeUpKeyWasDown)
+			{
+				app_adjust_ui_font_size(AppState, +1);
+				FrameState->FontSizeUpRepeatTicks = APP_UPDATE_HZ / FONT_SIZE_HOTKEY_REPEAT_HZ;
+			}
+			else if (FrameState->FontSizeUpRepeatTicks > 0)
+			{
+				FrameState->FontSizeUpRepeatTicks--;
+			}
+			else
+			{
+				app_adjust_ui_font_size(AppState, +1);
+				FrameState->FontSizeUpRepeatTicks = APP_UPDATE_HZ / FONT_SIZE_HOTKEY_REPEAT_HZ;
+			}
+		}
+
+		if (FontSizeDownKeyIsDown)
+		{
+			if (!FrameState->FontSizeDownKeyWasDown)
+			{
+				app_adjust_ui_font_size(AppState, -1);
+				FrameState->FontSizeDownRepeatTicks = APP_UPDATE_HZ / FONT_SIZE_HOTKEY_REPEAT_HZ;
+			}
+			else if (FrameState->FontSizeDownRepeatTicks > 0)
+			{
+				FrameState->FontSizeDownRepeatTicks--;
+			}
+			else
+			{
+				app_adjust_ui_font_size(AppState, -1);
+				FrameState->FontSizeDownRepeatTicks = APP_UPDATE_HZ / FONT_SIZE_HOTKEY_REPEAT_HZ;
+			}
+		}
 	}
 
 	FrameState->FontSizeUpKeyWasDown   = FontSizeUpKeyIsDown;
